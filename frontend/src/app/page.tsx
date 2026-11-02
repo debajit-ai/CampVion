@@ -1,14 +1,26 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { Header } from "../components/Header";
+import {
+  PanelRightClose,
+  PanelRightOpen,
+  RefreshCw,
+  Wrench,
+} from "lucide-react";
+
+import { Sidebar } from "../components/Sidebar";
+import { ConversationFeed } from "../components/ConversationFeed";
+import { AdvancedComposer } from "../components/AdvancedComposer";
+import { ToolsMenu } from "../components/ToolsMenu";
+import { ContextualInspector } from "../components/ContextualInspector";
+
 import { OverviewDashboard } from "../components/OverviewDashboard";
-import { NewRequestPanel } from "../components/NewRequestPanel";
 import { WorkflowStatus } from "../components/WorkflowStatus";
 import { HumanApprovalCenter } from "../components/HumanApprovalCenter";
 import { ExecutionTrace } from "../components/ExecutionTrace";
 import { EvaluationSection } from "../components/EvaluationSection";
 import { ToolRegistryPanel } from "../components/ToolRegistryPanel";
+
 import { apiClient } from "../lib/api";
 import {
   AgentResult,
@@ -23,6 +35,7 @@ import {
   WorkflowSessionSummary,
   WorkspaceSection,
 } from "../types/api";
+import { PRESET_GOALS } from "../components/NewRequestPanel";
 
 export default function Home() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -37,7 +50,18 @@ export default function Home() {
   >({});
   const [tools, setTools] = useState<ToolSchema[]>([]);
 
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>("unified");
+  // Workspace layout and view states
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("chat");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [inspectorOpen, setInspectorOpen] = useState<boolean>(true);
+  const [toolsMenuOpen, setToolsMenuOpen] = useState<boolean>(false);
+
+  // Workflow dispatch and execution states
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("S001");
+  const [goalText, setGoalText] = useState<string>(
+    "I want to apply for leave tomorrow because I have a family function."
+  );
+
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [recentRequestIds, setRecentRequestIds] = useState<number[]>([]);
   const [agentState, setAgentState] = useState<AgentState | null>(null);
@@ -161,7 +185,7 @@ export default function Home() {
     };
   }, []);
 
-  // Load state, plan, and traces for a specific request ID and synchronize result/summary
+  // Synchronize state, plan, and traces for a specific request ID
   const fetchWorkflowDetails = useCallback(
     async (requestId: number, latestResult?: AgentResult) => {
       const [stateData, planData, traceData] = await Promise.all([
@@ -176,6 +200,7 @@ export default function Home() {
 
       if (stateData) {
         setAgentState(stateData);
+        setSelectedStudentId(stateData.student_id);
       }
       setTasks(planData.length > 0 ? planData : stateData?.plan || []);
       setTraces(traceData);
@@ -249,15 +274,21 @@ export default function Home() {
     [resultsById]
   );
 
-  // Submit new goal
-  const handleLaunchAgent = async (studentId: string, goal: string) => {
+  // Submit new goal from composer
+  const handleLaunchAgent = async (studentId?: string, goal?: string) => {
+    const sId = studentId || selectedStudentId;
+    const gText = goal || goalText;
+
+    if (!sId.trim() || !gText.trim() || isLoading) return;
+
     setIsLoading(true);
     setError(null);
     try {
-      const result = await apiClient.runAgent({ student_id: studentId, goal });
+      const result = await apiClient.runAgent({ student_id: sId, goal: gText });
       setAgentResult(result);
       setActiveRequestId(result.request_id);
       await fetchWorkflowDetails(result.request_id, result);
+      setActiveSection("chat");
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to execute agent workflow";
@@ -267,7 +298,7 @@ export default function Home() {
     }
   };
 
-  // Switch request ID or load historical request ID
+  // Switch request ID or load historical workflow
   const handleSelectRequestId = async (requestId: number) => {
     setActiveRequestId(requestId);
     setIsLoading(true);
@@ -283,12 +314,6 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Refresh active workflow
-  const handleRefreshActiveRequest = async () => {
-    if (!activeRequestId) return;
-    await handleSelectRequestId(activeRequestId);
   };
 
   // Human approval handler
@@ -326,9 +351,7 @@ export default function Home() {
   // Contextual bridge: Inspect a specific tool's execution events in the Trace Log
   const handleInspectToolInTrace = (toolName: string) => {
     setTraceSearchQuery(toolName);
-    if (activeSection !== "unified" && activeSection !== "observability") {
-      setActiveSection("observability");
-    }
+    setActiveSection("observability");
     setTimeout(() => {
       traceSectionRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -337,17 +360,27 @@ export default function Home() {
     }, 50);
   };
 
-  // Focus the natural-language goal composer
-  const handleFocusComposer = () => {
-    if (activeSection !== "unified" && activeSection !== "workspace") {
-      setActiveSection("workspace");
-    }
+  // New conversation reset action
+  const handleNewRequest = () => {
+    setActiveRequestId(null);
+    setAgentState(null);
+    setAgentResult(null);
+    setTasks([]);
+    setTraces([]);
+    setError(null);
+    setActiveSection("chat");
+    setGoalText("I want to apply for leave tomorrow because I have a family function.");
     setTimeout(() => {
       composerTextareaRef.current?.focus();
-      composerTextareaRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+    }, 50);
+  };
+
+  // Apply a preset goal from the Tools menu or starter cards
+  const handleSelectPreset = (preset: (typeof PRESET_GOALS)[0]) => {
+    setSelectedStudentId(preset.studentId);
+    setGoalText(preset.goal);
+    setTimeout(() => {
+      composerTextareaRef.current?.focus();
     }, 50);
   };
 
@@ -359,96 +392,148 @@ export default function Home() {
     .map((id) => sessionSummaries[id])
     .filter((s): s is WorkflowSessionSummary => Boolean(s));
 
-  const showWorkspace =
-    activeSection === "unified" || activeSection === "workspace";
-  const showObservability =
-    activeSection === "unified" || activeSection === "observability";
-  const showEvaluation =
-    activeSection === "unified" || activeSection === "evaluation";
-  const showRegistry =
-    activeSection === "unified" || activeSection === "registry";
-
   return (
-    <div className="min-h-screen flex flex-col axora-bg-grid bg-transparent text-[#F1F4FA]">
-      {/* Global Shell & Navigation Header */}
-      <Header
+    <div className="h-screen w-full flex flex-row overflow-hidden bg-[#F5F2EB] text-[#26231F]">
+      {/* 1. Left Sidebar Navigation */}
+      <Sidebar
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        activeSection={activeSection}
+        onSelectSection={setActiveSection}
+        recentRequestIds={recentRequestIds}
+        activeRequestId={activeRequestId}
+        sessionSummaries={sessionSummaries}
+        onSelectRequestId={handleSelectRequestId}
+        onNewRequest={handleNewRequest}
         health={health}
         healthLoading={healthLoading}
         healthLatencyMs={healthLatencyMs}
         onRefreshHealth={loadInitialData}
         apiBaseUrl={apiClient.getBaseUrl()}
-        activeSection={activeSection}
-        onSelectSection={setActiveSection}
-        pendingApproval={pendingApproval}
-        traceCount={traces.length}
-        toolCount={tools.length}
-        activeRequestId={activeRequestId}
       />
 
-      {/* Main Operations Container */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Section 1: Operations Overview & Metrics (Always visible for persistent operational context) */}
-        <section aria-label="Overview Dashboard">
-          <OverviewDashboard
-            state={agentState}
-            result={agentResult}
-            tools={tools}
-            recentRequestIds={recentRequestIds}
-            activeRequestId={activeRequestId}
-            onSelectRequestId={handleSelectRequestId}
-            isLoading={isLoading}
-            sessionSummaries={sessionSummaries}
-            onRefreshActiveRequest={handleRefreshActiveRequest}
-            onNavigateToSection={setActiveSection}
-            onFocusComposer={handleFocusComposer}
-          />
-        </section>
-
-        {/* Focused View Return Banner when viewing a single domain */}
-        {activeSection !== "unified" && (
-          <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[#090B0E] border border-[#1E242C] text-xs font-mono">
-            <span className="text-[#F2F4F7]">
-              Focused Domain View:{" "}
-              <strong className="text-[#39FF14] uppercase">{activeSection}</strong>
+      {/* 2. Central Area */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
+        {/* Top Control Bar */}
+        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-[#E8E2D9] bg-[#FFFFFF]/90 backdrop-blur-md z-20 shrink-0">
+          <div className="flex items-center space-x-3 min-w-0">
+            <span className="text-sm font-semibold text-[#26231F] capitalize">
+              {activeSection === "chat" && "Conversational Assistant"}
+              {activeSection === "workspace" && "Workflow Pipeline (DAG)"}
+              {activeSection === "observability" && "Execution Traces & Logs"}
+              {activeSection === "evaluation" && "Evaluation & Reliability"}
+              {activeSection === "registry" && "Tool Registry & Schemas"}
+              {activeSection === "unified" && "Unified Operations Overview"}
             </span>
+
+            {activeRequestId && (
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#F0ECE5] border border-[#E8E2D9] text-[#C66A43] hidden sm:inline-flex items-center space-x-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#C66A43]" />
+                <span>Workflow #{activeRequestId}</span>
+              </span>
+            )}
+
+            {pendingApproval && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#FBF3E8] border border-[#F0D9BC] text-[#B77932] animate-pulse">
+                Action Requires Approval
+              </span>
+            )}
+          </div>
+
+          {/* Right Header Utilities */}
+          <div className="flex items-center space-x-2">
             <button
               type="button"
-              onClick={() => setActiveSection("unified")}
-              className="text-[#F2F4F7] hover:text-[#39FF14] font-semibold cursor-pointer"
+              onClick={() => setToolsMenuOpen(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#FFFFFF] hover:bg-[#F0ECE5] text-[#26231F] hover:text-[#C66A43] border border-[#E8E2D9] hover:border-[#C66A43]/40 transition cursor-pointer shadow-xs"
+              title="Open Agentic Tools Popover"
             >
-              Return to Unified Operations Overview &rarr;
+              <Wrench className="h-3.5 w-3.5 text-[#C66A43]" />
+              <span className="hidden sm:inline">Tools</span>
+            </button>
+
+            {activeRequestId && (
+              <button
+                type="button"
+                onClick={() => handleSelectRequestId(activeRequestId)}
+                disabled={isLoading}
+                aria-label="Refresh Active Workflow State"
+                className="p-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#F0ECE5] text-[#77716A] hover:text-[#26231F] border border-[#E8E2D9] transition cursor-pointer disabled:opacity-50"
+                title="Refresh Workflow State"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-[#C66A43]" : ""}`} />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setInspectorOpen((prev) => !prev)}
+              aria-label={inspectorOpen ? "Hide Inspector" : "Show Inspector"}
+              className={`p-1.5 rounded-lg border transition cursor-pointer hidden lg:inline-flex ${
+                inspectorOpen
+                  ? "bg-[#F5E7DE] text-[#C66A43] border-[#E8CFC1]"
+                  : "bg-[#FFFFFF] text-[#77716A] hover:text-[#26231F] border-[#E8E2D9]"
+              }`}
+              title={inspectorOpen ? "Hide Contextual Inspector" : "Show Contextual Inspector"}
+            >
+              {inspectorOpen ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRightOpen className="h-4 w-4" />
+              )}
             </button>
           </div>
-        )}
+        </header>
 
-        {/* Section 2: Human Approval Center (Guarded: Only renders when awaiting approval) */}
-        <section aria-label="Human Approval Center">
-          <HumanApprovalCenter
-            state={agentState}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            isLoading={isLoading}
-          />
-        </section>
-
-        {/* Section 3 & 4: Centerpiece Workflow Workspace (Goal Dispatch & Topological Execution Pipeline) */}
-        {showWorkspace && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Request Composer & Simulation Studio */}
-            <div className="lg:col-span-5">
-              <NewRequestPanel
-                students={students}
-                onSubmit={handleLaunchAgent}
+        {/* Dynamic Main Workspace Content */}
+        <main className="flex-1 flex flex-col min-h-0 overflow-y-auto relative">
+          {/* VIEW: Conversational Assistant (Chat-First Workspace) */}
+          {activeSection === "chat" && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <ConversationFeed
+                state={agentState}
+                result={agentResult}
+                tasks={tasks}
+                activeRequestId={activeRequestId}
                 isLoading={isLoading}
-                error={error}
-                attendanceByStudent={attendanceByStudent}
-                coursesByStudent={coursesByStudent}
-                textareaRef={composerTextareaRef}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onSelectPreset={handleSelectPreset}
+                onInspectToolInTrace={handleInspectToolInTrace}
               />
-            </div>
 
-            {/* Topological Plan & Task Execution Pipeline */}
-            <div className="lg:col-span-7">
+              {/* Floating Bottom Composer */}
+              <div className="sticky bottom-0 z-20 bg-gradient-to-t from-[#F5F2EB] via-[#F5F2EB]/95 to-transparent pt-4">
+                <AdvancedComposer
+                  students={students}
+                  selectedStudentId={selectedStudentId}
+                  onSelectStudentId={setSelectedStudentId}
+                  goalText={goalText}
+                  onGoalTextChange={setGoalText}
+                  onSubmit={() => handleLaunchAgent(selectedStudentId, goalText)}
+                  isLoading={isLoading}
+                  error={error}
+                  attendanceByStudent={attendanceByStudent}
+                  coursesByStudent={coursesByStudent}
+                  onOpenTools={() => setToolsMenuOpen(true)}
+                  textareaRef={composerTextareaRef}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: Workflow Pipeline (Dedicated Topological DAG) */}
+          {activeSection === "workspace" && (
+            <div className="p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+              {pendingApproval && (
+                <HumanApprovalCenter
+                  state={agentState}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  isLoading={isLoading}
+                />
+              )}
+
               <WorkflowStatus
                 state={agentState}
                 result={agentResult}
@@ -456,64 +541,118 @@ export default function Home() {
                 onInspectToolInTrace={handleInspectToolInTrace}
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Section 5: Execution & Observability (Decision Trace Audit Logs) */}
-        {showObservability && (
-          <section ref={traceSectionRef} aria-label="Execution Trace">
-            <ExecutionTrace
-              traces={traces}
-              requestId={activeRequestId}
-              searchQuery={traceSearchQuery}
-              onSearchQueryChange={setTraceSearchQuery}
-            />
-          </section>
-        )}
+          {/* VIEW: Execution & Observability (Decision Traces) */}
+          {activeSection === "observability" && (
+            <section ref={traceSectionRef} className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+              <ExecutionTrace
+                traces={traces}
+                requestId={activeRequestId}
+                searchQuery={traceSearchQuery}
+                onSearchQueryChange={setTraceSearchQuery}
+              />
+            </section>
+          )}
 
-        {/* Section 6: Evaluation & Reliability */}
-        {showEvaluation && (
-          <section aria-label="Operational Telemetry">
-            <EvaluationSection
-              state={agentState}
-              result={agentResult}
-              traces={traces}
-              sessionSummaries={orderedSessionSummaries}
-              activeRequestId={activeRequestId}
-              onSelectRequestId={handleSelectRequestId}
-              onRunScenario={handleLaunchAgent}
-              isLoading={isLoading}
-            />
-          </section>
-        )}
+          {/* VIEW: Evaluation & Reliability */}
+          {activeSection === "evaluation" && (
+            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+              <EvaluationSection
+                state={agentState}
+                result={agentResult}
+                traces={traces}
+                sessionSummaries={orderedSessionSummaries}
+                activeRequestId={activeRequestId}
+                onSelectRequestId={handleSelectRequestId}
+                onRunScenario={(sId, goal) => handleLaunchAgent(sId, goal)}
+                isLoading={isLoading}
+              />
+            </section>
+          )}
 
-        {/* Section 7: Tool Registry & System Diagnostics */}
-        {showRegistry && (
-          <section aria-label="Tool Registry and System Status">
-            <ToolRegistryPanel
-              tools={tools}
-              state={agentState}
-              traces={traces}
-              health={health}
-              healthLoading={healthLoading}
-              healthLatencyMs={healthLatencyMs}
-              apiBaseUrl={apiClient.getBaseUrl()}
-              onRefreshHealth={loadInitialData}
-              onInspectToolInTrace={handleInspectToolInTrace}
-            />
-          </section>
-        )}
-      </main>
+          {/* VIEW: Tool Registry & System Schemas */}
+          {activeSection === "registry" && (
+            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+              <ToolRegistryPanel
+                tools={tools}
+                state={agentState}
+                traces={traces}
+                health={health}
+                healthLoading={healthLoading}
+                healthLatencyMs={healthLatencyMs}
+                apiBaseUrl={apiClient.getBaseUrl()}
+                onRefreshHealth={loadInitialData}
+                onInspectToolInTrace={handleInspectToolInTrace}
+              />
+            </section>
+          )}
 
-      {/* Footer */}
-      <footer className="border-t border-[#1E242C] bg-[#000000]/95 py-4 text-center text-xs font-mono text-[#8A94A6]">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span className="text-[#F2F4F7]">CampVion &bull; Intelligent Campus Operations &bull; Project 55</span>
-          <span>
-            Deterministic &bull; Zero External API Costs &bull; Human-in-the-Loop Safeguarded
-          </span>
-        </div>
-      </footer>
+          {/* VIEW: Operations Overview (Unified Dashboard) */}
+          {activeSection === "unified" && (
+            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+              <OverviewDashboard
+                state={agentState}
+                result={agentResult}
+                tools={tools}
+                recentRequestIds={recentRequestIds}
+                activeRequestId={activeRequestId}
+                onSelectRequestId={handleSelectRequestId}
+                isLoading={isLoading}
+                sessionSummaries={sessionSummaries}
+                onRefreshActiveRequest={() => {
+                  if (activeRequestId) handleSelectRequestId(activeRequestId);
+                }}
+                onNavigateToSection={setActiveSection}
+                onFocusComposer={() => {
+                  setActiveSection("chat");
+                  setTimeout(() => composerTextareaRef.current?.focus(), 50);
+                }}
+              />
+
+              {pendingApproval && (
+                <HumanApprovalCenter
+                  state={agentState}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  isLoading={isLoading}
+                />
+              )}
+
+              <WorkflowStatus
+                state={agentState}
+                result={agentResult}
+                tasks={tasks}
+                onInspectToolInTrace={handleInspectToolInTrace}
+              />
+            </section>
+          )}
+        </main>
+      </div>
+
+      {/* 3. Contextual Right Inspector (Collapsible) */}
+      <ContextualInspector
+        isOpen={inspectorOpen}
+        onToggle={() => setInspectorOpen((prev) => !prev)}
+        state={agentState}
+        result={agentResult}
+        tasks={tasks}
+        tools={tools}
+        activeRequestId={activeRequestId}
+        onNavigateToSection={setActiveSection}
+        onInspectToolInTrace={handleInspectToolInTrace}
+      />
+
+      {/* 4. Integrated Agentic Tools Popover Dialog */}
+      <ToolsMenu
+        isOpen={toolsMenuOpen}
+        onClose={() => setToolsMenuOpen(false)}
+        tools={tools}
+        onSelectPreset={handleSelectPreset}
+        onNavigateToSection={setActiveSection}
+        onInspectTool={handleInspectToolInTrace}
+        pendingApproval={pendingApproval}
+      />
     </div>
   );
 }

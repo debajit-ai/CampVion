@@ -1,168 +1,117 @@
 @import "tailwindcss";
 
 :root {
-  /* CampVion Elite Pitch-Black & Neon-Green Enterprise Design Tokens */
-  --background: #000000;
-  --foreground: #F2F4F7;
+  /* CampVion Enterprise Design System — Warm Ivory × Graphite × Burnt Amber */
+  --background: #F5F2EB;
+  --foreground: #26231F;
 
-  /* Surface Elevation Hierarchy (Clean Charcoal on Pitch Black) */
-  --surface-obsidian: #000000;
-  --surface-primary: #090B0E;
-  --surface-elevated: #0E1217;
-  --surface-interactive: #141920;
+  /* Surfaces & Elevation */
+  --surface-canvas: #F5F2EB;
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #F0ECE5;
+  --surface-elevated: #FFFFFF;
+  --surface-subtle: #F5E7DE;
 
   /* Borders & Dividers */
-  --border-subtle: #1E242C;
-  --border-muted: rgba(30, 36, 44, 0.78);
-  --border-highlight: rgba(57, 255, 20, 0.35);
+  --border-subtle: #E8E2D9;
+  --border-muted: #E2DBD0;
+  --border-focus: #C66A43;
 
-  /* Brand & Semantic Accents */
-  --accent-neon-highlight: #39FF14;
-  --accent-neon-green: #00D957;
-  --accent-emerald-smoke: #008F45;
-  --accent-deep-green: #003B1F;
-  --accent-indigo: #685BFF;
-  --accent-blue: #64A7FF;
-  --status-emerald: #20C997;
-  --status-amber: #F2B84B;
-  --status-coral: #F16D78;
+  /* Brand Accents */
+  --accent-primary: #C66A43;
+  --accent-hover: #AD5735;
+  --accent-subtle: #F5E7DE;
+  --accent-graphite: #26231F;
 
-  /* Typography Hierarchy */
-  --text-primary: #F2F4F7;
-  --text-secondary: #D0D6E0;
-  --text-muted: #8A94A6;
+  /* Semantic Statuses */
+  --status-success: #287A53;
+  --status-success-bg: #EAF4EE;
+  --status-success-border: #C8E3D4;
+
+  --status-warning: #B77932;
+  --status-warning-bg: #FBF3E8;
+  --status-warning-border: #F0D9BC;
+
+  --status-error: #C44E45;
+  --status-error-bg: #FBEDED;
+  --status-error-border: #F3CBC7;
+
+  /* Typography */
+  --text-primary: #26231F;
+  --text-secondary: #77716A;
+  --text-muted: #9E978E;
 }
 
 html,
 body {
-  background-color: #000000;
+  background-color: var(--background);
   color: var(--foreground);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   overflow-x: hidden;
   min-height: 100vh;
 }
 
-/* Transparent workspace container over pitch-black background */
-.axora-bg-grid {
-  background-color: transparent;
-  background-image: none;
-}
-
-/* Restrained, localized corner & outer-edge atmospheric smoke wisps */
-.neon-smoke-layer {
-  position: absolute;
-  inset: -12%;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  will-change: transform, opacity;
-}
-
-.neon-smoke-layer-1 {
-  background:
-    radial-gradient(ellipse 22% 16% at 6% 18%, rgba(0, 143, 69, 0.08) 0%, rgba(0, 59, 31, 0.035) 48%, transparent 78%),
-    radial-gradient(ellipse 24% 18% at 94% 84%, rgba(0, 217, 87, 0.085) 0%, rgba(0, 59, 31, 0.035) 50%, transparent 78%);
-  filter: blur(68px);
-  animation: neonSmokeDrift1 46s ease-in-out infinite alternate;
-}
-
-.neon-smoke-layer-2 {
-  background:
-    radial-gradient(ellipse 20% 16% at 92% 22%, rgba(0, 143, 69, 0.07) 0%, rgba(0, 59, 31, 0.03) 48%, transparent 76%),
-    radial-gradient(ellipse 22% 16% at 8% 86%, rgba(0, 143, 69, 0.075) 0%, rgba(0, 59, 31, 0.03) 48%, transparent 76%);
-  filter: blur(74px);
-  animation: neonSmokeDrift2 56s ease-in-out infinite alternate;
-}
-
-@keyframes neonSmokeDrift1 {
-  0% {
-    transform: translate3d(-1.5%, -1%, 0) scale(1);
-    opacity: 0.72;
-  }
-  50% {
-    transform: translate3d(1.5%, 1%, 0) scale(1.03, 0.98);
-    opacity: 0.88;
-  }
-  100% {
-    transform: translate3d(2%, -1.5%, 0) scale(1.01, 1.02);
-    opacity: 0.76;
-  }
-}
-
-@keyframes neonSmokeDrift2 {
-  0% {
-    transform: translate3d(1.5%, 1.5%, 0) scale(1.02, 0.99);
-    opacity: 0.68;
-  }
-  100% {
-    transform: translate3d(-2%, 1%, 0) scale(1.03, 1.01);
-    opacity: 0.84;
-  }
-}
-
-/* Primary & Elevated Surfaces — Clean Enterprise Charcoal Panels on Pitch Black */
+/* Base Panel & Card Surfaces */
 .glass-panel,
 .axora-panel {
-  background: rgba(9, 11, 14, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid #1E242C;
+  background-color: #FFFFFF;
+  border: 1px solid #E8E2D9;
   box-shadow:
-    0 8px 28px -4px rgba(0, 0, 0, 0.92),
-    inset 0 1px 0 0 rgba(242, 244, 247, 0.04);
+    0 1px 3px 0 rgba(38, 35, 31, 0.03),
+    0 4px 16px -2px rgba(38, 35, 31, 0.05);
 }
 
 .axora-panel-elevated {
-  background: #0E1217;
-  border: 1px solid #1E242C;
+  background-color: #FFFFFF;
+  border: 1px solid #E8E2D9;
+  box-shadow:
+    0 4px 12px 0 rgba(38, 35, 31, 0.04),
+    0 12px 28px -4px rgba(38, 35, 31, 0.06);
 }
 
 .glass-panel-hover {
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(57, 255, 20, 0.35);
-  box-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.9);
+  border-color: #C66A43;
+  box-shadow:
+    0 2px 6px 0 rgba(198, 106, 67, 0.08),
+    0 8px 24px -4px rgba(38, 35, 31, 0.08);
 }
 
-/* Accessible keyboard focus states */
+/* Accessible focus visible states with Burnt Amber */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [role="button"]:focus-visible {
-  outline: 2px solid #39FF14;
+  outline: 2px solid #C66A43;
   outline-offset: 2px;
 }
 
-/* Custom precision scrollbar */
+/* Clean, unobtrusive scrollbar in warm neutral tones */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #000000;
+  background: #F5F2EB;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1E242C;
-  border-radius: 3px;
+  background: #DCD5CA;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #39FF14;
+  background: #C66A43;
 }
 
-/* Respect reduced motion preferences with a clean static fallback */
+/* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  .neon-smoke-layer-1,
-  .neon-smoke-layer-2 {
-    animation: none !important;
-    transform: none !important;
-  }
-
   *,
   ::before,
   ::after {

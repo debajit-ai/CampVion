@@ -65,48 +65,48 @@ export function OverviewDashboard({
     switch (status) {
       case "WAITING_FOR_HUMAN":
         return {
-          bg: "bg-[#F2B84B]/12 border-[#F2B84B]/40 text-[#F2B84B]",
-          icon: <ShieldAlert className="h-4 w-4 text-[#F2B84B] animate-pulse" />,
+          bg: "bg-[#B77932]/10 border-[#B77932]/30 text-[#B77932]",
+          icon: <ShieldAlert className="h-4 w-4 text-[#B77932] animate-pulse" />,
           label: "Waiting For Human Approval",
-          dot: "bg-[#F2B84B]",
+          dot: "bg-[#B77932]",
         };
       case "EXECUTING":
       case "UNDERSTANDING":
       case "PLANNING":
       case "OBSERVING":
         return {
-          bg: "bg-[#64A7FF]/12 border-[#64A7FF]/40 text-[#64A7FF]",
-          icon: <Activity className="h-4 w-4 text-[#64A7FF] animate-spin" />,
+          bg: "bg-[#C66A43]/10 border-[#C66A43]/30 text-[#C66A43]",
+          icon: <Activity className="h-4 w-4 text-[#C66A43] animate-spin" />,
           label: status === "EXECUTING" ? "Autonomous Execution" : status,
-          dot: "bg-[#64A7FF]",
+          dot: "bg-[#C66A43]",
         };
       case "COMPLETED":
         return {
-          bg: "bg-[#20C997]/12 border-[#20C997]/40 text-[#20C997]",
-          icon: <CheckCircle2 className="h-4 w-4 text-[#20C997]" />,
+          bg: "bg-[#287A53]/10 border-[#287A53]/30 text-[#287A53]",
+          icon: <CheckCircle2 className="h-4 w-4 text-[#287A53]" />,
           label: "Goal Achieved Successfully",
-          dot: "bg-[#20C997]",
+          dot: "bg-[#287A53]",
         };
       case "FAILED":
         return {
-          bg: "bg-[#F16D78]/12 border-[#F16D78]/40 text-[#F16D78]",
-          icon: <AlertTriangle className="h-4 w-4 text-[#F16D78]" />,
+          bg: "bg-[#C44E45]/10 border-[#C44E45]/30 text-[#C44E45]",
+          icon: <AlertTriangle className="h-4 w-4 text-[#C44E45]" />,
           label: "Workflow Terminated / Failed",
-          dot: "bg-[#F16D78]",
+          dot: "bg-[#C44E45]",
         };
       case "REPLANNING":
         return {
-          bg: "bg-[#685BFF]/15 border-[#685BFF]/45 text-[#64A7FF]",
-          icon: <RotateCcw className="h-4 w-4 text-[#685BFF] animate-spin" />,
+          bg: "bg-[#C66A43]/15 border-[#C66A43]/40 text-[#C66A43]",
+          icon: <RotateCcw className="h-4 w-4 text-[#C66A43] animate-spin" />,
           label: "Dynamic Replanning Active",
-          dot: "bg-[#685BFF]",
+          dot: "bg-[#C66A43]",
         };
       default:
         return {
-          bg: "bg-[#0E1217] border-[#1E242C] text-[#F2F4F7]",
-          icon: <Clock className="h-4 w-4 text-[#F2F4F7]" />,
+          bg: "bg-[#F0ECE5] border-[#E8E2D9] text-[#77716A]",
+          icon: <Clock className="h-4 w-4 text-[#77716A]" />,
           label: status,
-          dot: "bg-[#8A94A6]",
+          dot: "bg-[#A0988F]",
         };
     }
   };
@@ -123,40 +123,40 @@ export function OverviewDashboard({
   };
 
   const getSummaryDotColor = (status?: WorkflowStatus) => {
-    if (status === "COMPLETED") return "bg-[#20C997]";
-    if (status === "WAITING_FOR_HUMAN") return "bg-[#F2B84B]";
-    if (status === "FAILED") return "bg-[#F16D78]";
-    return "bg-[#64A7FF]";
+    if (status === "COMPLETED") return "bg-[#287A53]";
+    if (status === "WAITING_FOR_HUMAN") return "bg-[#B77932]";
+    if (status === "FAILED") return "bg-[#C44E45]";
+    return "bg-[#C66A43]";
   };
 
   return (
     <div className="space-y-4">
       {/* Top Context & Quick Command Strip */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-3 rounded-xl glass-panel">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-4 py-3 rounded-xl bg-[#FFFFFF] border border-[#E8E2D9] shadow-xs">
         <div className="flex items-center space-x-3 min-w-0">
           <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusBadge.dot}`} />
           <div className="min-w-0">
             <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-              <span className="text-xs font-mono uppercase tracking-wider font-semibold text-[#F2F4F7]">
-                OPERATIONS <span className="text-[#39FF14]">COMMAND</span>
+              <span className="text-xs font-mono uppercase tracking-wider font-semibold text-[#26231F]">
+                OPERATIONS <span className="text-[#C66A43]">COMMAND</span>
               </span>
-              <span className="text-[#1E242C]">&bull;</span>
-              <span className="text-xs font-mono font-semibold text-[#F2F4F7]">
+              <span className="text-[#DFD7CB]">&bull;</span>
+              <span className="text-xs font-mono font-semibold text-[#26231F]">
                 {activeRequestId ? `Active Request #REQ-${activeRequestId}` : "System Standby — Ready for Goal Dispatch"}
               </span>
               {state?.student_id && (
-                <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-[#0E1217] border border-[#1E242C] text-[#64A7FF]">
+                <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#77716A]">
                   Student: {state.student_id}
                 </span>
               )}
               {state?.normalized_goal?.goal_type && (
-                <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-[#685BFF]/15 border border-[#685BFF]/30 text-[#F2F4F7]">
+                <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-[#F5E7DE] border border-[#E8E2D9] text-[#C66A43]">
                   {state.normalized_goal.goal_type}
                 </span>
               )}
             </div>
             {state?.original_goal && (
-              <p className="text-xs text-[#F2F4F7]/90 truncate mt-0.5 font-mono">
+              <p className="text-xs text-[#77716A] truncate mt-0.5 font-mono">
                 Goal: &ldquo;{state.original_goal}&rdquo;
               </p>
             )}
@@ -167,7 +167,7 @@ export function OverviewDashboard({
         <div className="flex items-center flex-wrap gap-2 shrink-0">
           <form onSubmit={handleLookupSubmit} className="flex items-center">
             <div className="relative flex items-center">
-              <Search className="h-3 w-3 text-[#8A94A6] absolute left-2.5 pointer-events-none" />
+              <Search className="h-3 w-3 text-[#A0988F] absolute left-2.5 pointer-events-none" />
               <input
                 type="number"
                 min={1}
@@ -175,12 +175,12 @@ export function OverviewDashboard({
                 onChange={(e) => setLookupIdInput(e.target.value)}
                 placeholder="Load Req #"
                 aria-label="Load workflow by request ID"
-                className="w-28 pl-7 pr-2 py-1 rounded-l-md bg-[#000000] border border-[#1E242C] text-xs font-mono text-[#F2F4F7] placeholder-[#8A94A6] focus:outline-none focus:border-[#39FF14]/60"
+                className="w-28 pl-7 pr-2 py-1 rounded-l-md bg-[#FAF7F2] border border-[#E8E2D9] text-xs font-mono text-[#26231F] placeholder-[#A0988F] focus:outline-none focus:border-[#C66A43]"
               />
               <button
                 type="submit"
                 disabled={isLoading || !lookupIdInput.trim()}
-                className="px-2.5 py-1 rounded-r-md bg-[#0E1217] border border-l-0 border-[#1E242C] hover:border-[#39FF14]/50 text-xs font-mono text-[#F2F4F7] transition disabled:opacity-40 cursor-pointer"
+                className="px-2.5 py-1 rounded-r-md bg-[#F0ECE5] border border-l-0 border-[#E8E2D9] hover:border-[#C66A43] text-xs font-mono text-[#26231F] transition disabled:opacity-40 cursor-pointer"
               >
                 Load
               </button>
@@ -193,9 +193,9 @@ export function OverviewDashboard({
               onClick={onRefreshActiveRequest}
               disabled={isLoading}
               title="Refresh active workflow state and trace"
-              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#0E1217] border border-[#1E242C] hover:border-[#39FF14]/40 text-xs font-mono text-[#F2F4F7] transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#FAF7F2] border border-[#E8E2D9] hover:border-[#C66A43] text-xs font-mono text-[#26231F] transition cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin text-[#64A7FF]" : ""}`} />
+              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin text-[#C66A43]" : ""}`} />
               <span>Sync</span>
             </button>
           )}
@@ -204,9 +204,9 @@ export function OverviewDashboard({
             <button
               type="button"
               onClick={onFocusComposer}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-[#685BFF]/15 border border-[#685BFF]/40 hover:bg-[#685BFF]/25 text-xs font-medium text-[#F2F4F7] transition cursor-pointer"
+              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-[#C66A43] hover:bg-[#AD5735] text-xs font-medium text-white shadow-xs transition cursor-pointer"
             >
-              <PlusCircle className="h-3.5 w-3.5 text-[#39FF14]" />
+              <PlusCircle className="h-3.5 w-3.5" />
               <span>New Dispatch</span>
             </button>
           )}
@@ -216,12 +216,12 @@ export function OverviewDashboard({
       {/* 4 Core Operational Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Current Status */}
-        <div className="glass-panel rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#F2F4F7] mb-2.5">
+        <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-4 relative overflow-hidden shadow-xs">
+          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#26231F] mb-2.5">
             <span>
-              WORKFLOW <span className="text-[#39FF14]">STATE</span>
+              WORKFLOW <span className="text-[#C66A43]">STATE</span>
             </span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#F2F4F7] font-normal">
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[#77716A] font-normal">
               {activeRequestId ? `#REQ-${activeRequestId}` : "IDLE"}
             </span>
           </div>
@@ -233,17 +233,17 @@ export function OverviewDashboard({
               <span>{statusBadge.label}</span>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-[#1E242C] flex items-center justify-between text-[11px] font-mono text-[#F2F4F7]/90">
+          <div className="mt-3 pt-2.5 border-t border-[#E8E2D9] flex items-center justify-between text-[11px] font-mono text-[#77716A]">
             <span>GOVERNANCE GATE:</span>
             <span
               className={
                 state?.human_approval_status === "APPROVED"
-                  ? "text-[#20C997] font-semibold"
+                  ? "text-[#287A53] font-semibold"
                   : state?.human_approval_status === "PENDING"
-                  ? "text-[#F2B84B] font-semibold"
+                  ? "text-[#B77932] font-semibold"
                   : state?.human_approval_status === "REJECTED"
-                  ? "text-[#F16D78] font-semibold"
-                  : "text-[#8A94A6]"
+                  ? "text-[#C44E45] font-semibold"
+                  : "text-[#A0988F]"
               }
             >
               {state?.human_approval_status || "NONE"}
@@ -252,57 +252,57 @@ export function OverviewDashboard({
         </div>
 
         {/* Metric 2: Completed Tasks */}
-        <div className="glass-panel rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#F2F4F7] mb-2">
+        <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-4 relative overflow-hidden shadow-xs">
+          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#26231F] mb-2">
             <span>
-              TASK <span className="text-[#39FF14]">PROGRESSION</span>
+              TASK <span className="text-[#C66A43]">PROGRESSION</span>
             </span>
-            <Zap className="h-3.5 w-3.5 text-[#39FF14]" />
+            <Zap className="h-3.5 w-3.5 text-[#C66A43]" />
           </div>
           <div className="flex items-baseline justify-between">
             <div className="flex items-baseline space-x-2">
-              <span className="text-2xl font-bold font-mono text-[#F2F4F7]">{completedCount}</span>
-              <span className="text-xs text-[#F2F4F7]/85 font-mono">/ {totalTasks} tasks</span>
+              <span className="text-2xl font-bold font-mono text-[#26231F]">{completedCount}</span>
+              <span className="text-xs text-[#77716A] font-mono">/ {totalTasks} tasks</span>
             </div>
             {failedCount > 0 && (
-              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#F16D78]/15 border border-[#F16D78]/30 text-[#F16D78]">
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#C44E45]/10 border border-[#C44E45]/30 text-[#C44E45]">
                 {failedCount} failed
               </span>
             )}
           </div>
-          <div className="w-full bg-[#0E1217] rounded-full h-1.5 mt-3 overflow-hidden border border-[#1E242C]">
+          <div className="w-full bg-[#F0ECE5] rounded-full h-1.5 mt-3 overflow-hidden border border-[#E8E2D9]">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
                 currentStatus === "FAILED"
-                  ? "bg-gradient-to-r from-[#685BFF] to-[#F16D78]"
+                  ? "bg-gradient-to-r from-[#C66A43] to-[#C44E45]"
                   : currentStatus === "COMPLETED"
-                  ? "bg-gradient-to-r from-[#008F45] to-[#39FF14]"
-                  : "bg-gradient-to-r from-[#685BFF] to-[#64A7FF]"
+                  ? "bg-gradient-to-r from-[#287A53] to-[#34A870]"
+                  : "bg-gradient-to-r from-[#C66A43] to-[#E0855C]"
               }`}
               style={{
                 width: `${totalTasks > 0 ? (completedCount / totalTasks) * 100 : 0}%`,
               }}
             />
           </div>
-          <div className="mt-2.5 flex items-center justify-between text-[11px] font-mono text-[#F2F4F7]/90">
+          <div className="mt-2.5 flex items-center justify-between text-[11px] font-mono text-[#77716A]">
             <span>{completedCount} completed</span>
             <span>{state?.pending_tasks.length ?? 0} pending</span>
           </div>
         </div>
 
         {/* Metric 3: Replanning & Retries */}
-        <div className="glass-panel rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#F2F4F7] mb-2">
+        <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-4 relative overflow-hidden shadow-xs">
+          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#26231F] mb-2">
             <span>
-              REPLANNING <span className="text-[#39FF14]">EVENTS</span>
+              REPLANNING <span className="text-[#C66A43]">EVENTS</span>
             </span>
-            <RotateCcw className="h-3.5 w-3.5 text-[#685BFF]" />
+            <RotateCcw className="h-3.5 w-3.5 text-[#C66A43]" />
           </div>
           <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold font-mono text-[#F2F4F7]">{replanCount}</span>
-            <span className="text-xs text-[#F2F4F7]/85 font-mono">/ 3 max allowed</span>
+            <span className="text-2xl font-bold font-mono text-[#26231F]">{replanCount}</span>
+            <span className="text-xs text-[#77716A] font-mono">/ 3 max allowed</span>
           </div>
-          <p className="text-[11px] text-[#F2F4F7]/90 mt-2.5 pt-2 border-t border-[#1E242C]">
+          <p className="text-[11px] text-[#77716A] mt-2.5 pt-2 border-t border-[#E8E2D9]">
             {replanCount === 0
               ? "Nominal path (0 recoveries needed)"
               : currentStatus === "FAILED" && replanCount >= 3
@@ -312,37 +312,37 @@ export function OverviewDashboard({
         </div>
 
         {/* Metric 4: Registered Tools & Latency */}
-        <div className="glass-panel rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#F2F4F7] mb-2">
+        <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-4 relative overflow-hidden shadow-xs">
+          <div className="flex items-center justify-between text-xs font-mono font-semibold text-[#26231F] mb-2">
             <span>
-              TOOL REGISTRY &amp; <span className="text-[#39FF14]">LATENCY</span>
+              TOOL REGISTRY &amp; <span className="text-[#C66A43]">LATENCY</span>
             </span>
-            <Wrench className="h-3.5 w-3.5 text-[#39FF14]" />
+            <Wrench className="h-3.5 w-3.5 text-[#C66A43]" />
           </div>
           <div className="flex items-baseline space-x-3">
             <div>
-              <span className="text-2xl font-bold font-mono text-[#F2F4F7]">{tools.length}</span>
-              <span className="text-xs text-[#F2F4F7]/85 font-mono ml-1">tools</span>
+              <span className="text-2xl font-bold font-mono text-[#26231F]">{tools.length}</span>
+              <span className="text-xs text-[#77716A] font-mono ml-1">tools</span>
             </div>
             {invokedToolsCount > 0 && (
-              <div className="border-l border-[#1E242C] pl-3">
-                <span className="text-sm font-mono text-[#20C997] font-semibold">
+              <div className="border-l border-[#E8E2D9] pl-3">
+                <span className="text-sm font-mono text-[#287A53] font-semibold">
                   {invokedToolsCount}
                 </span>
-                <span className="text-[10px] text-[#8A94A6] block font-mono">invoked</span>
+                <span className="text-[10px] text-[#A0988F] block font-mono">invoked</span>
               </div>
             )}
             {executionTime > 0 && (
-              <div className="border-l border-[#1E242C] pl-3">
-                <span className="text-sm font-mono text-[#64A7FF] font-semibold">
+              <div className="border-l border-[#E8E2D9] pl-3">
+                <span className="text-sm font-mono text-[#C66A43] font-semibold">
                   {executionTime}s
                 </span>
-                <span className="text-[10px] text-[#8A94A6] block font-mono">runtime</span>
+                <span className="text-[10px] text-[#A0988F] block font-mono">runtime</span>
               </div>
             )}
           </div>
-          <div className="mt-2.5 pt-2 border-t border-[#1E242C] flex items-center justify-between gap-2">
-            <p className="text-[11px] text-[#F2F4F7]/90 truncate font-mono">
+          <div className="mt-2.5 pt-2 border-t border-[#E8E2D9] flex items-center justify-between gap-2">
+            <p className="text-[11px] text-[#77716A] truncate font-mono">
               {tools.length > 0
                 ? `${tools.map((t) => t.name).slice(0, 2).join(", ")} +${Math.max(0, tools.length - 2)} more`
                 : "No tools loaded"}
@@ -351,7 +351,7 @@ export function OverviewDashboard({
               <button
                 type="button"
                 onClick={() => onNavigateToSection("registry")}
-                className="inline-flex items-center space-x-0.5 text-[11px] font-mono text-[#39FF14] hover:text-[#F2F4F7] shrink-0 cursor-pointer"
+                className="inline-flex items-center space-x-0.5 text-[11px] font-mono text-[#C66A43] hover:text-[#AD5735] shrink-0 cursor-pointer"
               >
                 <span>Inspect</span>
                 <ArrowUpRight className="h-3 w-3" />
@@ -363,10 +363,10 @@ export function OverviewDashboard({
 
       {/* Recent requests quick selector */}
       {recentRequestIds.length > 0 && (
-        <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg glass-panel text-xs font-mono overflow-x-auto">
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] text-xs font-mono overflow-x-auto shadow-xs">
           <div className="flex items-center space-x-2 min-w-0">
-            <span className="text-[#F2F4F7] font-semibold shrink-0">
-              SESSION <span className="text-[#39FF14]">WORKFLOWS</span>:
+            <span className="text-[#26231F] font-semibold shrink-0">
+              SESSION <span className="text-[#C66A43]">WORKFLOWS</span>:
             </span>
             <div className="flex items-center space-x-1.5">
               {recentRequestIds.map((id) => {
@@ -380,8 +380,8 @@ export function OverviewDashboard({
                     disabled={isLoading}
                     className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs transition border cursor-pointer ${
                       isSelected
-                        ? "bg-[#0E1217] border-[#39FF14]/55 text-[#F2F4F7] font-semibold"
-                        : "bg-[#0E1217] border-[#1E242C] text-[#F2F4F7]/85 hover:text-[#F2F4F7] hover:border-[#39FF14]/40"
+                        ? "bg-[#F5E7DE] border-[#C66A43] text-[#C66A43] font-semibold"
+                        : "bg-[#FAF7F2] border-[#E8E2D9] text-[#77716A] hover:text-[#26231F] hover:border-[#C66A43]/50"
                     }`}
                   >
                     {summary && (
@@ -391,14 +391,14 @@ export function OverviewDashboard({
                     )}
                     <span>Req #{id}</span>
                     {summary?.student_id && (
-                      <span className="text-[10px] text-[#8A94A6]">({summary.student_id})</span>
+                      <span className="text-[10px] text-[#A0988F]">({summary.student_id})</span>
                     )}
                   </button>
                 );
               })}
             </div>
           </div>
-          <span className="text-[11px] text-[#8A94A6] hidden sm:inline shrink-0">
+          <span className="text-[11px] text-[#A0988F] hidden sm:inline shrink-0">
             Select a record to synchronize plan, governance &amp; trace
           </span>
         </div>

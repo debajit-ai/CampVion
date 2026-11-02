@@ -91,28 +91,27 @@ export function Header({
   ];
 
   return (
-    <header className="border-b border-[#1E242C] bg-[#000000]/95 backdrop-blur-md sticky top-0 z-50">
+    <header className="border-b border-[#E8E2D9] bg-[#FFFFFF]/95 backdrop-blur-md sticky top-0 z-50">
       {/* Top Primary Bar */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand Identity */}
         <div className="flex items-center space-x-3.5 min-w-0">
-          <div className="relative h-9 w-9 rounded-lg bg-[#0E1217] flex items-center justify-center border border-[#685BFF]/50 shadow-[0_0_20px_-4px_rgba(104,91,255,0.35)] shrink-0">
-            <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#685BFF]/20 via-transparent to-[#64A7FF]/10 pointer-events-none" />
-            <Cpu className="h-4.5 w-4.5 text-[#685BFF]" />
+          <div className="relative h-9 w-9 rounded-lg bg-[#F5E7DE] flex items-center justify-center border border-[#E8E2D9] shrink-0 text-[#C66A43]">
+            <Cpu className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-base tracking-tight text-[#F2F4F7]">
+              <span className="font-bold text-base tracking-tight text-[#26231F]">
                 CampVion
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-[#685BFF]/15 border border-[#685BFF]/35 text-[#64A7FF] font-medium">
+              <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-[#F5E7DE] border border-[#E8E2D9] text-[#C66A43] font-medium">
                 Ops Console
               </span>
-              <span className="text-[11px] font-mono text-[#8A94A6] hidden sm:inline">
+              <span className="text-[11px] font-mono text-[#A0988F] hidden sm:inline">
                 {versionText}
               </span>
             </div>
-            <p className="text-[11px] text-[#F2F4F7]/85 truncate hidden md:block">
+            <p className="text-[11px] text-[#77716A] truncate hidden md:block">
               Intelligent Campus Operations &bull; Agentic AI Assistant for Multi-Step Campus Service Workflows
             </p>
           </div>
@@ -125,7 +124,7 @@ export function Header({
             <button
               type="button"
               onClick={() => onSelectSection?.("workspace")}
-              className="hidden lg: inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono bg-[#F2B84B]/15 border border-[#F2B84B]/40 text-[#F2B84B] hover:bg-[#F2B84B]/20 transition cursor-pointer"
+              className="hidden lg:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono bg-[#B77932]/10 border border-[#B77932]/30 text-[#B77932] hover:bg-[#B77932]/15 transition cursor-pointer"
             >
               <ShieldAlert className="h-3.5 w-3.5 animate-pulse" />
               <span>Approval Gate Active</span>
@@ -136,26 +135,26 @@ export function Header({
           <div
             className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-mono border transition-all ${
               isOnline
-                ? "bg-[#20C997]/10 border-[#20C997]/30 text-[#20C997]"
-                : "bg-[#F16D78]/10 border-[#F16D78]/35 text-[#F16D78]"
+                ? "bg-[#287A53]/10 border-[#287A53]/30 text-[#287A53]"
+                : "bg-[#C44E45]/10 border-[#C44E45]/30 text-[#C44E45]"
             }`}
           >
             {isOnline ? (
               <>
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#20C997] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#20C997]" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#287A53] opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#287A53]" />
                 </span>
                 <span className="font-medium">Backend Online</span>
                 {typeof healthLatencyMs === "number" && healthLatencyMs >= 0 && (
-                  <span className="text-[10px] text-[#98A3B6] border-l border-[#252D3A] pl-2 hidden sm:inline">
+                  <span className="text-[10px] text-[#77716A] border-l border-[#E8E2D9] pl-2 hidden sm:inline">
                     {healthLatencyMs}ms
                   </span>
                 )}
               </>
             ) : (
               <>
-                <WifiOff className="h-3.5 w-3.5 text-[#F16D78]" />
+                <WifiOff className="h-3.5 w-3.5 text-[#C44E45]" />
                 <span className="font-medium">Backend Offline</span>
               </>
             )}
@@ -165,9 +164,9 @@ export function Header({
               disabled={healthLoading}
               title="Ping backend health endpoint"
               aria-label="Ping backend health endpoint"
-              className="ml-1 p-0.5 text-[#98A3B6] hover:text-[#F1F4FA] rounded transition cursor-pointer disabled:opacity-50"
+              className="ml-1 p-0.5 text-[#A0988F] hover:text-[#26231F] rounded transition cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`h-3 w-3 ${healthLoading ? "animate-spin text-[#64A7FF]" : ""}`} />
+              <RefreshCw className={`h-3 w-3 ${healthLoading ? "animate-spin text-[#C66A43]" : ""}`} />
             </button>
           </div>
 
@@ -176,9 +175,9 @@ export function Header({
             href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#0E1217] border border-[#1E242C] hover:border-[#39FF14]/45 text-[#F2F4F7] hover:bg-[#141920] transition"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#FAF7F2] border border-[#E8E2D9] hover:border-[#C66A43]/45 text-[#26231F] hover:bg-[#F0ECE5] transition"
           >
-            <BookOpen className="h-3.5 w-3.5 text-[#64A7FF]" />
+            <BookOpen className="h-3.5 w-3.5 text-[#C66A43]" />
             <span className="hidden sm:inline">API Docs</span>
           </a>
         </div>
@@ -186,7 +185,7 @@ export function Header({
 
       {/* Secondary Navigation Bar */}
       {onSelectSection && (
-        <div className="border-t border-[#1E242C] bg-[#000000]/95 backdrop-blur-md">
+        <div className="border-t border-[#E8E2D9] bg-[#FAF7F2]/95 backdrop-blur-md">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 overflow-x-auto">
             <nav aria-label="Workspace Navigation" className="flex items-center space-x-1 py-1.5">
               {navItems.map((item) => {
@@ -199,26 +198,26 @@ export function Header({
                     aria-current={isActive ? "page" : undefined}
                     className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                       isActive
-                        ? "bg-[#0E1217] text-[#F2F4F7] border border-[#39FF14]/45 shadow-xs"
-                        : "text-[#F2F4F7]/85 hover:text-[#F2F4F7] hover:bg-[#0E1217] border border-transparent"
+                        ? "bg-[#F5E7DE] text-[#C66A43] border border-[#E8E2D9] font-semibold shadow-xs"
+                        : "text-[#77716A] hover:text-[#26231F] hover:bg-[#F0ECE5] border border-transparent"
                     }`}
                   >
-                    <span className={isActive ? "text-[#39FF14]" : "text-[#F2F4F7]/75"}>
+                    <span className={isActive ? "text-[#C66A43]" : "text-[#A0988F]"}>
                       {item.icon}
                     </span>
                     <span className="hidden md:inline">{item.label}</span>
                     <span className="md:hidden">{item.shortLabel}</span>
 
                     {item.alert && (
-                      <span className="h-2 w-2 rounded-full bg-[#F2B84B] animate-pulse" />
+                      <span className="h-2 w-2 rounded-full bg-[#B77932] animate-pulse" />
                     )}
 
                     {item.badge !== undefined && item.badge !== null && (
                       <span
                         className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
                           isActive
-                            ? "bg-[#39FF14]/15 text-[#39FF14] border border-[#39FF14]/35"
-                            : "bg-[#090B0E] text-[#F2F4F7] border border-[#1E242C]"
+                            ? "bg-[#C66A43] text-white"
+                            : "bg-[#FFFFFF] text-[#77716A] border border-[#E8E2D9]"
                         }`}
                       >
                         {item.badge}
@@ -230,14 +229,14 @@ export function Header({
             </nav>
 
             {/* Operational Engine Mode Indicator */}
-            <div className="hidden xl:flex items-center space-x-3 text-[11px] font-mono text-[#8A94A6] shrink-0">
-              <span className="flex items-center space-x-1.5 text-[#F2F4F7]">
-                <Activity className="h-3 w-3 text-[#39FF14]" />
+            <div className="hidden xl:flex items-center space-x-3 text-[11px] font-mono text-[#77716A] shrink-0">
+              <span className="flex items-center space-x-1.5 text-[#26231F]">
+                <Activity className="h-3 w-3 text-[#C66A43]" />
                 <span>ENGINE: DETERMINISTIC DAG</span>
               </span>
-              <span className="text-[#1E242C]">|</span>
+              <span className="text-[#DFD7CB]">|</span>
               <span>MAX REPLANS: 3</span>
-              <span className="text-[#1E242C]">|</span>
+              <span className="text-[#DFD7CB]">|</span>
               <span>SQLITE AUDIT TRACE</span>
             </div>
           </div>

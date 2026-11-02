@@ -12,6 +12,7 @@ export type WorkflowStatus =
 export type HumanApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
 
 export type WorkspaceSection =
+  | "chat"
   | "unified"
   | "workspace"
   | "observability"

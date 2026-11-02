@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { NeonSmokeBackground } from "../components/NeonSmokeBackground";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,11 +26,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="min-h-screen bg-[#000000] text-[#F1F4FA] flex flex-col selection:bg-[#00FF66]/25 selection:text-[#F1F4FA] relative">
-        <NeonSmokeBackground />
-        <div className="relative z-10 flex-1 flex flex-col">{children}</div>
+      <body className="min-h-screen bg-[#F5F2EB] text-[#26231F] flex flex-col selection:bg-[#F5E7DE] selection:text-[#C66A43]">
+        <div className="flex-1 flex flex-col">{children}</div>
       </body>
     </html>
   );

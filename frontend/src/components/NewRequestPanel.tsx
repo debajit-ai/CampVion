@@ -110,23 +110,23 @@ export function NewRequestPanel({
   const isSimulationDirective = goalText.toUpperCase().includes("FAILURE_MODE=");
 
   return (
-    <div className="glass-panel rounded-xl p-5 relative">
+    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-5 relative shadow-xs">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-[#1E242C]">
+      <div className="flex items-center justify-between pb-4 border-b border-[#E8E2D9]">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-lg bg-[#0E1217] border border-[#39FF14]/35 text-[#39FF14]">
+          <div className="p-2 rounded-lg bg-[#F5E7DE] border border-[#E8E2D9] text-[#C66A43]">
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold tracking-wide text-[#F2F4F7] uppercase">
-              Dispatch Campus <span className="text-[#39FF14]">Service Goal</span>
+            <h2 className="text-sm font-semibold tracking-wide text-[#26231F] uppercase">
+              Dispatch Campus <span className="text-[#C66A43]">Service Goal</span>
             </h2>
-            <p className="text-xs text-[#F2F4F7]/85">
+            <p className="text-xs text-[#77716A]">
               Submit student intent or fault-injection directive to the autonomous orchestrator
             </p>
           </div>
         </div>
-        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-[#0E1217] border border-[#1E242C] text-[#8A94A6]">
+        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-[#FAF7F2] border border-[#E8E2D9] text-[#77716A]">
           ₹0-cost deterministic
         </span>
       </div>
@@ -135,10 +135,10 @@ export function NewRequestPanel({
         {/* Step 1: Student Context Selector */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs font-mono font-medium text-[#F2F4F7]">
+            <label className="block text-xs font-mono font-medium text-[#26231F]">
               1. SELECT DEMO STUDENT CONTEXT
             </label>
-            <span className="text-[10px] font-mono text-[#8A94A6]">
+            <span className="text-[10px] font-mono text-[#A0988F]">
               Threshold: &ge;75% Attendance
             </span>
           </div>
@@ -167,15 +167,15 @@ export function NewRequestPanel({
                     aria-pressed={isSelected}
                     className={`flex items-start space-x-3 p-3.5 rounded-lg border text-left transition cursor-pointer ${
                       isSelected
-                        ? "bg-[#0E1217] border-[#39FF14]/60 shadow-[0_0_18px_-6px_rgba(57,255,20,0.25)]"
-                        : "bg-[#090B0E] border-[#1E242C] hover:bg-[#0E1217] hover:border-[#39FF14]/35"
+                        ? "bg-[#F5E7DE]/50 border-[#C66A43] shadow-xs"
+                        : "bg-[#FAF7F2] border-[#E8E2D9] hover:bg-[#F0ECE5] hover:border-[#C66A43]/40"
                     }`}
                   >
                     <div
                       className={`p-1.5 rounded-md mt-0.5 border shrink-0 ${
                         isEligible
-                          ? "bg-[#20C997]/12 border-[#20C997]/30 text-[#20C997]"
-                          : "bg-[#F2B84B]/12 border-[#F2B84B]/30 text-[#F2B84B]"
+                          ? "bg-[#287A53]/10 border-[#287A53]/30 text-[#287A53]"
+                          : "bg-[#B77932]/10 border-[#B77932]/30 text-[#B77932]"
                       }`}
                     >
                       {isEligible ? (
@@ -186,31 +186,31 @@ export function NewRequestPanel({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-[#F2F4F7] truncate">
+                        <span className="text-xs font-semibold text-[#26231F] truncate">
                           {student.name}
                         </span>
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                             isSelected
-                              ? "bg-[#39FF14]/15 border-[#39FF14]/45 text-[#39FF14]"
-                              : "bg-[#000000] border-[#1E242C] text-[#8A94A6]"
+                              ? "bg-[#C66A43] border-[#C66A43] text-white"
+                              : "bg-[#FFFFFF] border-[#E8E2D9] text-[#77716A]"
                           }`}
                         >
                           {student.student_id}
                         </span>
                       </div>
 
-                      <div className="flex items-center space-x-1.5 mt-1 text-[11px] text-[#F2F4F7]/85">
-                        <GraduationCap className="h-3 w-3 shrink-0 text-[#64A7FF]" />
+                      <div className="flex items-center space-x-1.5 mt-1 text-[11px] text-[#77716A]">
+                        <GraduationCap className="h-3 w-3 shrink-0 text-[#C66A43]" />
                         <span className="truncate">
                           {student.program} &bull; Sem {student.semester}
                         </span>
                       </div>
 
-                      <div className="mt-2 pt-1.5 border-t border-[#1E242C] flex items-center justify-between gap-1">
+                      <div className="mt-2 pt-1.5 border-t border-[#E8E2D9] flex items-center justify-between gap-1">
                         <span
                           className={`text-[10px] font-mono font-medium ${
-                            isEligible ? "text-[#20C997]" : "text-[#F2B84B]"
+                            isEligible ? "text-[#287A53]" : "text-[#B77932]"
                           }`}
                         >
                           {isEligible
@@ -218,14 +218,14 @@ export function NewRequestPanel({
                             : `Attendance: ${computedPct}% (Ineligible)`}
                         </span>
                         {totalClasses > 0 && (
-                          <span className="text-[10px] font-mono text-[#F2F4F7]/85">
+                          <span className="text-[10px] font-mono text-[#77716A]">
                             {totalAttended}/{totalClasses}
                           </span>
                         )}
                       </div>
 
                       {courses.length > 0 && (
-                        <div className="mt-1 flex items-center space-x-1 text-[10px] font-mono text-[#8A94A6] truncate">
+                        <div className="mt-1 flex items-center space-x-1 text-[10px] font-mono text-[#A0988F] truncate">
                           <BookOpen className="h-2.5 w-2.5 shrink-0" />
                           <span className="truncate">
                             {courses.map((c) => c.course_code).join(", ")}
@@ -244,7 +244,7 @@ export function NewRequestPanel({
                   onChange={(e) => setSelectedStudentId(e.target.value)}
                   placeholder="Enter Student ID (e.g. S001)"
                   aria-label="Student ID"
-                  className="w-full bg-[#000000] border border-[#1E242C] rounded-lg px-3 py-2 text-xs text-[#F2F4F7] focus:outline-none focus:border-[#39FF14]/60 font-mono"
+                  className="w-full bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg px-3 py-2 text-xs text-[#26231F] placeholder-[#A0988F] focus:outline-none focus:border-[#C66A43] font-mono"
                 />
               </div>
             )}
@@ -256,12 +256,12 @@ export function NewRequestPanel({
           <div className="flex items-center justify-between mb-1.5">
             <label
               htmlFor="axora-goal-input"
-              className="block text-xs font-mono font-medium text-[#F2F4F7]"
+              className="block text-xs font-mono font-medium text-[#26231F]"
             >
               2. STUDENT GOAL IN NATURAL LANGUAGE OR SIMULATION DIRECTIVE
             </label>
             {isSimulationDirective && (
-              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#F2B84B]/15 border border-[#F2B84B]/35 text-[#F2B84B]">
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#B77932]/10 border border-[#B77932]/30 text-[#B77932]">
                 <Terminal className="h-2.5 w-2.5" />
                 <span>FAULT INJECTION ACTIVE</span>
               </span>
@@ -276,7 +276,7 @@ export function NewRequestPanel({
               onChange={(e) => setGoalText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Describe what the student wants the campus assistant to accomplish..."
-              className="w-full bg-[#000000] border border-[#1E242C] rounded-lg p-3.5 text-xs text-[#F2F4F7] placeholder-[#8A94A6]/70 focus:outline-none focus:border-[#39FF14]/60 font-mono transition resize-none leading-relaxed"
+              className="w-full bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg p-3.5 text-xs text-[#26231F] placeholder-[#A0988F] focus:outline-none focus:border-[#C66A43] font-mono transition resize-none leading-relaxed"
             />
           </div>
         </div>
@@ -284,10 +284,10 @@ export function NewRequestPanel({
         {/* Step 3: Testing Presets & Failure Simulations */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-[11px] font-mono font-medium text-[#F2F4F7]">
+            <span className="block text-[11px] font-mono font-medium text-[#26231F]">
               TESTING PRESETS &amp; SIMULATIONS:
             </span>
-            <span className="text-[10px] font-mono text-[#8A94A6]">
+            <span className="text-[10px] font-mono text-[#A0988F]">
               {PRESET_GOALS.length} verified scenarios
             </span>
           </div>
@@ -302,30 +302,30 @@ export function NewRequestPanel({
                   onClick={() => handleApplyPreset(preset)}
                   className={`p-2.5 rounded-lg text-left text-[11px] border transition group cursor-pointer ${
                     isPresetActive
-                      ? "bg-[#0E1217] border-[#39FF14]/55 text-[#F2F4F7]"
-                      : "bg-[#090B0E] hover:bg-[#0E1217] border-[#1E242C] hover:border-[#39FF14]/35"
+                      ? "bg-[#F5E7DE] border-[#C66A43] text-[#26231F] shadow-xs"
+                      : "bg-[#FAF7F2] hover:bg-[#F0ECE5] border-[#E8E2D9] hover:border-[#C66A43]/40"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center space-x-1.5 font-medium text-[#F2F4F7] min-w-0">
+                    <div className="flex items-center space-x-1.5 font-medium text-[#26231F] min-w-0">
                       <span
                         className={`h-2 w-2 rounded-full shrink-0 ${
                           preset.type === "nominal"
-                            ? "bg-[#20C997]"
+                            ? "bg-[#287A53]"
                             : preset.type === "recoverable"
-                            ? "bg-[#685BFF]"
+                            ? "bg-[#C66A43]"
                             : preset.type === "ineligible"
-                            ? "bg-[#F2B84B]"
-                            : "bg-[#F16D78]"
+                            ? "bg-[#B77932]"
+                            : "bg-[#C44E45]"
                         }`}
                       />
                       <span className="truncate">{preset.label}</span>
                     </div>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#000000] border border-[#1E242C] text-[#8A94A6] shrink-0">
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] shrink-0">
                       {preset.studentId}
                     </span>
                   </div>
-                  <p className="text-[10px] text-[#F2F4F7]/80 mt-1 line-clamp-1">
+                  <p className="text-[10px] text-[#77716A] mt-1 line-clamp-1">
                     {preset.description}
                   </p>
                 </button>
@@ -338,7 +338,7 @@ export function NewRequestPanel({
         {error && (
           <div
             role="alert"
-            className="flex items-start space-x-2.5 p-3 rounded-lg bg-[#F16D78]/12 border border-[#F16D78]/40 text-[#F16D78] text-xs"
+            className="flex items-start space-x-2.5 p-3 rounded-lg bg-[#C44E45]/10 border border-[#C44E45]/30 text-[#C44E45] text-xs"
           >
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -351,10 +351,10 @@ export function NewRequestPanel({
         )}
 
         {/* Submit Bar */}
-        <div className="pt-2 border-t border-[#1E242C] flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[11px] text-[#F2F4F7]/85 font-mono">
+        <div className="pt-2 border-t border-[#E8E2D9] flex flex-wrap items-center justify-between gap-3">
+          <span className="text-[11px] text-[#77716A] font-mono">
             Press{" "}
-            <kbd className="px-1.5 py-0.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#F2F4F7]">
+            <kbd className="px-1.5 py-0.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[#26231F]">
               Ctrl+Enter
             </kbd>{" "}
             to launch
@@ -362,7 +362,7 @@ export function NewRequestPanel({
           <button
             type="submit"
             disabled={isLoading || !goalText.trim() || !selectedStudentId.trim()}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold bg-[#685BFF] hover:bg-[#5849FF] text-[#F2F4F7] shadow-[0_4px_20px_-2px_rgba(104,91,255,0.45)] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold bg-[#C66A43] hover:bg-[#AD5735] text-white shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {isLoading ? (
               <>

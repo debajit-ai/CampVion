@@ -34,21 +34,21 @@ export function WorkflowStatus({
 
   if (!state && !result && tasks.length === 0) {
     return (
-      <div className="glass-panel rounded-xl p-8 text-center h-full flex flex-col items-center justify-center">
-        <div className="p-3.5 w-14 h-14 rounded-xl bg-[#0E1217] border border-[#1E242C] text-[#39FF14] mx-auto mb-4 flex items-center justify-center shadow-inner">
+      <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-2xl p-8 text-center h-full flex flex-col items-center justify-center shadow-xs">
+        <div className="p-3.5 w-14 h-14 rounded-2xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43] mx-auto mb-4 flex items-center justify-center shadow-xs">
           <Layers className="h-6 w-6" />
         </div>
-        <h3 className="text-sm font-semibold text-[#F2F4F7] tracking-wide uppercase">
-          No Active <span className="text-[#39FF14]">Workflow</span>
+        <h3 className="text-sm font-semibold text-[#26231F] tracking-tight">
+          No Active <span className="text-[#C66A43]">Workflow</span>
         </h3>
-        <p className="text-xs text-[#F2F4F7]/85 mt-1.5 max-w-md mx-auto leading-relaxed">
+        <p className="text-xs text-[#77716A] mt-1.5 max-w-md mx-auto leading-relaxed">
           Dispatch a campus service goal from the composer to observe deterministic goal normalization, topological dependency planning, autonomous tool orchestration, and human governance gates.
         </p>
 
         {/* Architecture Preview Pipeline */}
-        <div className="mt-6 pt-5 border-t border-[#1E242C] w-full max-w-lg">
-          <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-[#F2F4F7] block mb-2.5">
-            AUTONOMOUS EXECUTION <span className="text-[#39FF14]">ARCHITECTURE</span>
+        <div className="mt-6 pt-5 border-t border-[#E8E2D9] w-full max-w-lg">
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-[#77716A] block mb-2.5">
+            Autonomous Execution Architecture
           </span>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-[10px] font-mono">
             {[
@@ -61,7 +61,7 @@ export function WorkflowStatus({
             ].map((step) => (
               <div
                 key={step}
-                className="px-2 py-1.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#F2F4F7] truncate"
+                className="px-2 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#E8E2D9] text-[#77716A] truncate"
               >
                 {step}
               </div>
@@ -107,23 +107,23 @@ export function WorkflowStatus({
   };
 
   return (
-    <div className="glass-panel rounded-xl p-5">
+    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-2xl p-5 shadow-xs select-none">
       {/* Workflow Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#1E242C]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#E8E2D9]">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-lg bg-[#0E1217] border border-[#39FF14]/35 text-[#39FF14]">
+          <div className="p-2 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43]">
             <Layers className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-sm font-semibold tracking-wide text-[#F2F4F7] uppercase">
-                Plan <span className="text-[#39FF14]">Execution</span> Pipeline
+              <h2 className="text-sm font-semibold tracking-tight text-[#26231F]">
+                Plan Execution <span className="text-[#C66A43]">Pipeline</span>
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#F2F4F7]">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F0ECE5] text-[#77716A]">
                 Topologically Sorted
               </span>
             </div>
-            <p className="text-xs text-[#F2F4F7]/85">
+            <p className="text-xs text-[#77716A] mt-0.5">
               Autonomous execution loop respecting task dependency graph
             </p>
           </div>
@@ -132,17 +132,17 @@ export function WorkflowStatus({
         {/* Normalized Goal Info */}
         {state?.normalized_goal && (
           <div className="flex items-center flex-wrap gap-1.5 text-xs font-mono">
-            <span className="text-[#8A94A6] text-[11px]">GOAL TYPE:</span>
-            <span className="px-2 py-0.5 rounded bg-[#685BFF]/15 border border-[#685BFF]/40 text-[#F2F4F7] font-semibold">
+            <span className="text-[#77716A] text-[11px]">GOAL TYPE:</span>
+            <span className="px-2 py-0.5 rounded bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43] font-semibold">
               {state.normalized_goal.goal_type}
             </span>
             {Boolean(state.normalized_goal.parameters?.days) && (
-              <span className="px-2 py-0.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#64A7FF]">
+              <span className="px-2 py-0.5 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#26231F]">
                 {String(state.normalized_goal.parameters.days)} day(s)
               </span>
             )}
             {Boolean(state.normalized_goal.parameters?.reason) && (
-              <span className="px-2 py-0.5 rounded bg-[#0E1217] border border-[#1E242C] text-[#F2F4F7] max-w-[180px] truncate">
+              <span className="px-2 py-0.5 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#26231F] max-w-[180px] truncate">
                 {String(state.normalized_goal.parameters.reason)}
               </span>
             )}
@@ -153,32 +153,32 @@ export function WorkflowStatus({
       {/* Final message alert if completed, waiting, or failed */}
       {finalMessage && (
         <div
-          className={`mt-4 p-3.5 rounded-lg text-xs font-mono border flex items-start justify-between gap-3 ${
+          className={`mt-4 p-3.5 rounded-xl text-xs border flex items-start justify-between gap-3 ${
             workflowStatus === "COMPLETED"
-              ? "bg-[#20C997]/10 border-[#20C997]/35 text-[#20C997]"
+              ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
               : workflowStatus === "FAILED"
-              ? "bg-[#F16D78]/10 border-[#F16D78]/35 text-[#F16D78]"
-              : "bg-[#F2B84B]/10 border-[#F2B84B]/35 text-[#F2B84B]"
+              ? "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
+              : "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932]"
           }`}
         >
           <div className="flex items-start space-x-2.5 min-w-0">
             {workflowStatus === "COMPLETED" ? (
-              <CheckCircle2 className="h-4 w-4 text-[#20C997] shrink-0 mt-0.5" />
+              <CheckCircle2 className="h-4 w-4 text-[#287A53] shrink-0 mt-0.5" />
             ) : workflowStatus === "FAILED" ? (
-              <XCircle className="h-4 w-4 text-[#F16D78] shrink-0 mt-0.5" />
+              <XCircle className="h-4 w-4 text-[#C44E45] shrink-0 mt-0.5" />
             ) : (
-              <ShieldAlert className="h-4 w-4 text-[#F2B84B] shrink-0 mt-0.5" />
+              <ShieldAlert className="h-4 w-4 text-[#B77932] shrink-0 mt-0.5" />
             )}
             <div className="min-w-0">
               <span className="font-semibold block uppercase tracking-wider text-[10px]">
                 Final Status Message
               </span>
-              <p className="mt-0.5 text-xs text-[#F1F4FA] break-words">{finalMessage}</p>
+              <p className="mt-0.5 text-xs text-[#26231F] break-words">{finalMessage}</p>
             </div>
           </div>
 
           {result?.execution_time !== undefined && result.execution_time > 0 && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#000000]/70 border border-[#1E2E24] text-[#98A3B6] shrink-0">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] shrink-0">
               {result.execution_time}s
             </span>
           )}
@@ -202,16 +202,16 @@ export function WorkflowStatus({
           return (
             <div
               key={task.task_id}
-              className={`rounded-lg border transition-all ${
+              className={`rounded-xl border transition-all ${
                 visualState === "COMPLETED"
-                  ? "bg-[#20C997]/[0.05] border-[#20C997]/30"
+                  ? "bg-[#EAF4EE]/30 border-[#C8E3D4]"
                   : visualState === "EXECUTING"
-                  ? "bg-[#64A7FF]/[0.08] border-[#64A7FF]/60 shadow-[0_0_20px_-6px_rgba(100,167,255,0.25)]"
+                  ? "bg-[#F5E7DE]/40 border-[#C66A43]/50 shadow-xs"
                   : visualState === "WAITING_FOR_HUMAN"
-                  ? "bg-[#F2B84B]/[0.08] border-[#F2B84B]/60 shadow-[0_0_20px_-6px_rgba(242,184,75,0.25)]"
+                  ? "bg-[#FBF3E8]/40 border-[#F0D9BC] shadow-xs"
                   : visualState === "FAILED"
-                  ? "bg-[#F16D78]/[0.07] border-[#F16D78]/45"
-                  : "bg-[#090B0E] border-[#1E242C]"
+                  ? "bg-[#FBEDED]/40 border-[#F3CBC7]"
+                  : "bg-[#FAF7F2] border-[#E8E2D9]"
               }`}
             >
               <div
@@ -229,42 +229,42 @@ export function WorkflowStatus({
               >
                 {/* Left: Index, Icon, Description & Metadata */}
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="flex items-center justify-center h-6 w-6 rounded bg-[#000000] border border-[#1E242C] text-[11px] font-mono text-[#F2F4F7] font-semibold shrink-0">
+                  <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] text-[11px] font-mono text-[#26231F] font-semibold shrink-0">
                     {idx + 1}
                   </div>
 
                   {visualState === "COMPLETED" && (
-                    <CheckCircle2 className="h-4 w-4 text-[#20C997] shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-[#287A53] shrink-0" />
                   )}
                   {visualState === "EXECUTING" && (
-                    <div className="h-4 w-4 rounded-full border-2 border-[#64A7FF] border-t-transparent animate-spin shrink-0" />
+                    <div className="h-4 w-4 rounded-full border-2 border-[#C66A43] border-t-transparent animate-spin shrink-0" />
                   )}
                   {visualState === "WAITING_FOR_HUMAN" && (
-                    <ShieldAlert className="h-4 w-4 text-[#F2B84B] animate-pulse shrink-0" />
+                    <ShieldAlert className="h-4 w-4 text-[#B77932] animate-pulse shrink-0" />
                   )}
                   {visualState === "FAILED" && (
-                    <XCircle className="h-4 w-4 text-[#F16D78] shrink-0" />
+                    <XCircle className="h-4 w-4 text-[#C44E45] shrink-0" />
                   )}
                   {visualState === "PENDING" && (
-                    <Clock className="h-4 w-4 text-[#8A94A6] shrink-0" />
+                    <Clock className="h-4 w-4 text-[#9E978E] shrink-0" />
                   )}
 
                   <div className="min-w-0">
                     <div className="flex items-center flex-wrap gap-2">
-                      <span className="font-mono text-xs font-semibold text-[#F2F4F7] px-1.5 py-0.2 rounded bg-[#000000] border border-[#1E242C]">
+                      <span className="font-mono text-xs font-semibold text-[#26231F] px-1.5 py-0.2 rounded bg-[#FFFFFF] border border-[#E8E2D9]">
                         {task.task_id}
                       </span>
-                      <span className="text-xs font-medium text-[#F2F4F7] truncate">
+                      <span className="text-xs font-medium text-[#26231F] truncate">
                         {task.description}
                       </span>
                       {hadRecoverableFailure && visualState === "COMPLETED" && (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#685BFF]/20 border border-[#685BFF]/45 text-[#64A7FF]">
+                        <span className="inline-flex items-center space-x-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#EAF4EE] border border-[#C8E3D4] text-[#287A53]">
                           <RotateCcw className="h-2.5 w-2.5" />
                           <span>Self-Healed</span>
                         </span>
                       )}
                       {hadRecoverableFailure && visualState === "FAILED" && (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F16D78]/15 border border-[#F16D78]/35 text-[#F16D78]">
+                        <span className="inline-flex items-center space-x-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#FBEDED] border border-[#F3CBC7] text-[#C44E45]">
                           <AlertTriangle className="h-2.5 w-2.5" />
                           <span>Retries Exhausted ({taskObservations.length} attempts)</span>
                         </span>
@@ -272,23 +272,23 @@ export function WorkflowStatus({
                     </div>
 
                     {/* Metadata tags */}
-                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[10px] font-mono text-[#98A3B6]">
+                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[10px] font-mono text-[#77716A]">
                       {assignedTool && (
-                        <span className="flex items-center space-x-1 text-[#64A7FF]">
+                        <span className="flex items-center space-x-1 text-[#C66A43]">
                           <Wrench className="h-3 w-3" />
                           <span>{assignedTool}</span>
                         </span>
                       )}
                       {task.dependencies.length > 0 ? (
-                        <span className="flex items-center space-x-1 text-[#98A3B6]">
+                        <span className="flex items-center space-x-1 text-[#77716A]">
                           <GitBranch className="h-3 w-3" />
                           <span>deps: [{task.dependencies.join(", ")}]</span>
                         </span>
                       ) : (
-                        <span className="text-[#98A3B6]/70">root node</span>
+                        <span className="text-[#9E978E]">root node</span>
                       )}
                       {task.requires_human_approval && (
-                        <span className="text-[#F2B84B] font-semibold">
+                        <span className="text-[#B77932] font-semibold">
                           Requires Approval
                         </span>
                       )}
@@ -296,40 +296,40 @@ export function WorkflowStatus({
                   </div>
                 </div>
 
-                {/* Right: Status Pill & Expand Caret */}
+                {/* Right: Status Pill & Caret */}
                 <div className="flex items-center space-x-2 shrink-0">
                   {isBlockedByUpstreamFailure && (
-                    <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#000000] border border-[#1E2E24] text-[#98A3B6]">
+                    <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#77716A]">
                       HALTED UPSTREAM
                     </span>
                   )}
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium border ${
+                    className={`text-[10px] font-medium px-2 py-0.5 rounded border uppercase ${
                       visualState === "COMPLETED"
-                        ? "bg-[#20C997]/15 border-[#20C997]/35 text-[#20C997]"
+                        ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
                         : visualState === "EXECUTING"
-                        ? "bg-[#64A7FF]/15 border-[#64A7FF]/40 text-[#64A7FF] animate-pulse"
+                        ? "bg-[#F5E7DE] border-[#C66A43]/40 text-[#C66A43] animate-pulse"
                         : visualState === "WAITING_FOR_HUMAN"
-                        ? "bg-[#F2B84B]/15 border-[#F2B84B]/40 text-[#F2B84B] font-semibold"
+                        ? "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932] font-semibold"
                         : visualState === "FAILED"
-                        ? "bg-[#F16D78]/15 border-[#F16D78]/40 text-[#F16D78]"
-                        : "bg-[#000000] border-[#1E2E24] text-[#98A3B6]"
+                        ? "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
+                        : "bg-[#FFFFFF] border-[#E8E2D9] text-[#77716A]"
                     }`}
                   >
                     {visualState}
                   </span>
                   {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-[#98A3B6]" />
+                    <ChevronDown className="h-4 w-4 text-[#77716A]" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-[#98A3B6]" />
+                    <ChevronRight className="h-4 w-4 text-[#77716A]" />
                   )}
                 </div>
               </div>
 
               {/* Collapsible details / tool result payload */}
               {isExpanded && (
-                <div className="px-4 pb-3.5 pt-2.5 border-t border-[#1E2E24] text-xs font-mono space-y-2.5 bg-[#000000]/80 rounded-b-lg">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[#98A3B6] text-[11px]">
+                <div className="px-4 pb-3.5 pt-2.5 border-t border-[#E8E2D9] text-xs font-mono space-y-2.5 bg-[#FFFFFF] rounded-b-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[#77716A] text-[11px]">
                     <span>CANDIDATE TOOLS: {task.candidate_tools.join(", ")}</span>
                     <div className="flex items-center space-x-3">
                       <span>
@@ -342,7 +342,7 @@ export function WorkflowStatus({
                             e.stopPropagation();
                             onInspectToolInTrace(assignedTool);
                           }}
-                          className="inline-flex items-center space-x-1 text-[#64A7FF] hover:text-[#F1F4FA] transition cursor-pointer"
+                          className="inline-flex items-center space-x-1 text-[#C66A43] hover:underline transition cursor-pointer"
                         >
                           <span>Inspect in Trace</span>
                           <ExternalLink className="h-3 w-3" />
@@ -354,7 +354,7 @@ export function WorkflowStatus({
                   {/* Observation History for this task */}
                   {taskObservations.length > 0 && (
                     <div className="flex items-center flex-wrap gap-1.5 pt-1">
-                      <span className="text-[10px] text-[#98A3B6] uppercase">
+                      <span className="text-[10px] text-[#77716A] uppercase">
                         OBSERVER OUTCOMES:
                       </span>
                       {taskObservations.map((obs, oIdx) => (
@@ -362,10 +362,10 @@ export function WorkflowStatus({
                           key={oIdx}
                           className={`text-[10px] px-1.5 py-0.5 rounded border ${
                             obs.observation === "SUCCESS"
-                              ? "bg-[#20C997]/12 border-[#20C997]/30 text-[#20C997]"
+                              ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
                               : obs.observation === "RECOVERABLE_FAILURE"
-                              ? "bg-[#685BFF]/15 border-[#685BFF]/40 text-[#64A7FF]"
-                              : "bg-[#F16D78]/12 border-[#F16D78]/35 text-[#F16D78]"
+                              ? "bg-[#F5E7DE] border-[#E8CFC1] text-[#C66A43]"
+                              : "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
                           }`}
                         >
                           Attempt #{oIdx + 1}: {obs.observation}
@@ -376,15 +376,15 @@ export function WorkflowStatus({
 
                   {taskResult ? (
                     <div>
-                      <span className="text-[#98A3B6] text-[10px] uppercase block mb-1">
+                      <span className="text-[#77716A] text-[10px] uppercase block mb-1">
                         Execution Result Payload:
                       </span>
-                      <pre className="p-2.5 rounded bg-[#000000] border border-[#1E2E24] text-[11px] text-[#20C997] overflow-x-auto">
+                      <pre className="p-2.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[11px] text-[#26231F] overflow-x-auto">
                         {JSON.stringify(taskResult, null, 2)}
                       </pre>
                     </div>
                   ) : (
-                    <p className="text-[11px] text-[#98A3B6] italic">
+                    <p className="text-[11px] text-[#77716A] italic">
                       {isBlockedByUpstreamFailure
                         ? "Execution skipped — workflow terminated due to an upstream failure or rejection."
                         : visualState === "PENDING"
