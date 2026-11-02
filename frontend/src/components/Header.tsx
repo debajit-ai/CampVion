@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import {
   Activity,
   BarChart3,
   BookOpen,
-  Cpu,
   Layers,
   LayoutGrid,
   RefreshCw,
@@ -96,8 +96,14 @@ export function Header({
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand Identity */}
         <div className="flex items-center space-x-3.5 min-w-0">
-          <div className="relative h-9 w-9 rounded-lg bg-[#F5E7DE] flex items-center justify-center border border-[#E8E2D9] shrink-0 text-[#C66A43]">
-            <Cpu className="h-4.5 w-4.5" />
+          <div className="relative h-9 w-9 rounded-lg campvion-emblem-surface p-1 flex items-center justify-center shrink-0">
+            <Image
+              src="/brand/campvion-symbol.png"
+              alt="CampVion Emblem"
+              width={26}
+              height={26}
+              className="h-full w-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2">

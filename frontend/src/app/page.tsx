@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -20,6 +21,7 @@ import { HumanApprovalCenter } from "../components/HumanApprovalCenter";
 import { ExecutionTrace } from "../components/ExecutionTrace";
 import { EvaluationSection } from "../components/EvaluationSection";
 import { ToolRegistryPanel } from "../components/ToolRegistryPanel";
+import { SettingsView } from "../components/SettingsView";
 
 import { apiClient } from "../lib/api";
 import {
@@ -417,14 +419,36 @@ export default function Home() {
         {/* Top Control Bar */}
         <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-[#E8E2D9] bg-[#FFFFFF]/90 backdrop-blur-md z-20 shrink-0">
           <div className="flex items-center space-x-3 min-w-0">
-            <span className="text-sm font-semibold text-[#26231F] capitalize">
-              {activeSection === "chat" && "Conversational Assistant"}
-              {activeSection === "workspace" && "Workflow Pipeline (DAG)"}
-              {activeSection === "observability" && "Execution Traces & Logs"}
-              {activeSection === "evaluation" && "Evaluation & Reliability"}
-              {activeSection === "registry" && "Tool Registry & Schemas"}
-              {activeSection === "unified" && "Unified Operations Overview"}
-            </span>
+            {/* Official CampVion Brand Lockup: Emblem + Wordmark */}
+            <div className="flex items-center space-x-2.5 shrink-0 select-none">
+              <div className="relative h-8 w-8 rounded-lg campvion-emblem-surface p-1 flex items-center justify-center shrink-0">
+                <Image
+                  src="/brand/campvion-symbol.png"
+                  alt="CampVion Emblem"
+                  width={24}
+                  height={24}
+                  priority
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <span className="text-base font-bold tracking-tight text-[#26231F] font-sans">
+                Camp<span className="text-[#C66A43]">Vion</span>
+              </span>
+            </div>
+
+            {/* Contextual Workspace Label (shown when viewing dedicated workspaces) */}
+            {activeSection !== "chat" && (
+              <div className="hidden md:flex items-center space-x-2 pl-3 border-l border-[#E8E2D9] text-xs text-[#77716A]">
+                <span className="font-medium">
+                  {activeSection === "workspace" && "Workflow Pipeline (DAG)"}
+                  {activeSection === "observability" && "Execution Traces & Logs"}
+                  {activeSection === "evaluation" && "Evaluation & Reliability"}
+                  {activeSection === "registry" && "Tool Registry & Schemas"}
+                  {activeSection === "unified" && "Unified Operations Overview"}
+                  {activeSection === "settings" && "Settings & Preferences"}
+                </span>
+              </div>
+            )}
 
             {activeRequestId && (
               <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#F0ECE5] border border-[#E8E2D9] text-[#C66A43] hidden sm:inline-flex items-center space-x-1.5">
@@ -624,6 +648,20 @@ export default function Home() {
                 result={agentResult}
                 tasks={tasks}
                 onInspectToolInTrace={handleInspectToolInTrace}
+              />
+            </section>
+          )}
+
+          {/* VIEW: Settings & Appearance Center */}
+          {activeSection === "settings" && (
+            <section className="p-4 sm:p-6 max-w-5xl mx-auto w-full">
+              <SettingsView
+                health={health}
+                selectedStudentId={selectedStudentId}
+                onSelectStudentId={setSelectedStudentId}
+                inspectorOpen={inspectorOpen}
+                onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+                apiBaseUrl={apiClient.getBaseUrl()}
               />
             </section>
           )}

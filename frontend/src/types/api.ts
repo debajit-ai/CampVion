@@ -17,7 +17,8 @@ export type WorkspaceSection =
   | "workspace"
   | "observability"
   | "evaluation"
-  | "registry";
+  | "registry"
+  | "settings";
 
 export interface HealthResponse {
   status: string;

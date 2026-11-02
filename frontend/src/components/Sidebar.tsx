@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import {
   BarChart3,
-  Bot,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
+  Settings,
   Terminal,
   Wrench,
 } from "lucide-react";
@@ -98,8 +99,14 @@ export function Sidebar({
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-3.5 border-b border-[#E8E2D9]">
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="relative h-9 w-9 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] flex items-center justify-center shrink-0">
-            <Bot className="h-5 w-5 text-[#C66A43]" />
+          <div className="relative h-9 w-9 rounded-xl campvion-emblem-surface p-1 flex items-center justify-center shrink-0 shadow-2xs">
+            <Image
+              src="/brand/campvion-symbol.png"
+              alt="CampVion Emblem"
+              width={26}
+              height={26}
+              className="h-full w-full object-contain"
+            />
             <span
               className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ${
                 isOnline ? "bg-[#287A53]" : "bg-[#C44E45]"
@@ -302,6 +309,40 @@ export function Sidebar({
             })}
           </div>
         )}
+      </div>
+
+      {/* Bottom Utility Navigation: Settings & API Docs */}
+      <div className="p-2 border-t border-[#E8E2D9] space-y-1">
+        <button
+          type="button"
+          onClick={() => onSelectSection("settings")}
+          title="Settings & Appearance"
+          aria-label="Settings"
+          aria-current={activeSection === "settings" ? "page" : undefined}
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center px-2" : "space-x-3 px-3"
+          } py-2 rounded-lg text-xs font-medium transition cursor-pointer ${
+            activeSection === "settings"
+              ? "bg-[#F5E7DE] text-[#C66A43] border border-[#E8CFC1] font-semibold"
+              : "text-[#77716A] hover:text-[#26231F] hover:bg-[#F0ECE5] border border-transparent"
+          }`}
+        >
+          <Settings className="h-4 w-4 shrink-0 text-[#C66A43]" />
+          {!isCollapsed && <span>Settings</span>}
+        </button>
+
+        <a
+          href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="API Documentation (Swagger UI)"
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center px-2" : "space-x-3 px-3"
+          } py-1.5 rounded-lg text-xs text-[#77716A] hover:text-[#26231F] hover:bg-[#F0ECE5] transition`}
+        >
+          <ExternalLink className="h-4 w-4 shrink-0" />
+          {!isCollapsed && <span>API Docs</span>}
+        </a>
       </div>
 
       {/* Sidebar Footer: System Status */}
