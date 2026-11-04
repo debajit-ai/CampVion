@@ -1,104 +1,191 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   CampVion Visual Identity — Design Tokens
+   DARK MODE  : Pitch Black × Neon Yellow
+   LIGHT MODE : Pure White  × Neon Yellow
+
+   Single source of truth. Components consume these tokens through the
+   Tailwind utilities registered in `@theme inline` below
+   (e.g. bg-cv-surface, text-cv-fg-2, border-cv-line, bg-cv-accent).
+   Theme switching is driven by the existing ThemeProvider, which toggles
+   the `.dark` class / `data-theme` attribute on <html>.
+   ========================================================================== */
+
 :root {
-  /* CampVion Enterprise Design System — Light Mode (Warm Ivory × Graphite × Burnt Amber) */
-  --background: #F5F2EB;
-  --foreground: #26231F;
+  color-scheme: light;
 
-  /* Surfaces & Elevation */
-  --surface-canvas: #F5F2EB;
-  --surface-primary: #FFFFFF;
-  --surface-secondary: #F0ECE5;
-  --surface-card: #FAF7F2;
-  --surface-elevated: #FFFFFF;
-  --surface-subtle: #F5E7DE;
-  --surface-hover: #ECE7DE;
+  /* Base */
+  --background: #FFFFFF;
+  --foreground: #111111;
 
-  /* Borders & Dividers */
-  --border-subtle: #E8E2D9;
-  --border-muted: #DFD7CB;
-  --border-accent: #E8CFC1;
-  --border-focus: #C66A43;
+  /* Surfaces & elevation */
+  --cv-canvas: #FFFFFF;          /* Primary background */
+  --cv-sidebar: #FFFFFF;         /* Sidebar */
+  --cv-surface: #FFFFFF;         /* Cards & panels */
+  --cv-inset: #FAFAFA;           /* Secondary background / inset wells */
+  --cv-raised: #F5F5F0;          /* Elevated surface, chips, hover fills */
+  --cv-hover: #EFEFEA;
 
-  /* Brand Accents */
-  --accent-primary: #C66A43;
-  --accent-hover: #AD5735;
-  --accent-subtle: #F5E7DE;
-  --accent-graphite: #26231F;
-
-  /* Semantic Statuses */
-  --status-success: #287A53;
-  --status-success-bg: rgba(40, 122, 83, 0.1);
-  --status-success-border: rgba(40, 122, 83, 0.3);
-
-  --status-warning: #B77932;
-  --status-warning-bg: rgba(183, 121, 50, 0.1);
-  --status-warning-border: rgba(183, 121, 50, 0.3);
-
-  --status-error: #C44E45;
-  --status-error-bg: rgba(196, 78, 69, 0.1);
-  --status-error-border: rgba(196, 78, 69, 0.3);
+  /* Borders */
+  --cv-line: #E5E5E5;            /* Subtle border */
+  --cv-line-strong: #D4D4D4;
 
   /* Typography */
-  --text-primary: #26231F;
-  --text-secondary: #77716A;
-  --text-muted: #A0988F;
+  --cv-fg: #111111;              /* Primary text */
+  --cv-fg-2: #666666;            /* Secondary text */
+  --cv-fg-3: #858585;            /* Muted text */
 
-  /* Scrollbars */
-  --scrollbar-track: #F5F2EB;
-  --scrollbar-thumb: #DCD5CA;
-  --scrollbar-thumb-hover: #C66A43;
+  /* Brand accent — Neon Yellow */
+  --cv-accent: #EFFF00;          /* Fills: primary buttons, indicators, progress */
+  --cv-accent-hover: #D7E600;
+  --cv-on-accent: #080808;       /* Text on neon surfaces (never white) */
+  --cv-accent-ink: #5C6300;      /* Accent-toned text/icons readable on white (6.5:1) */
+  --cv-accent-ink-hover: #3D4200;
+  --cv-accent-line: #8A9300;     /* Accent borders / focus rings on white (≥3:1) */
+  --cv-accent-soft: #FAFFD6;     /* Selected / active tint */
+  --cv-accent-soft-line: #DDE77A;
+  --cv-accent-glow: rgba(215, 230, 0, 0.28);
+
+  /* Semantic status */
+  --cv-success: #15803D;
+  --cv-success-solid: #15803D;
+  --cv-success-solid-hover: #166534;
+  --cv-success-soft: #F0FDF4;
+  --cv-success-line: #BBF7D0;
+
+  --cv-warning: #B45309;
+  --cv-warning-solid: #D97706;
+  --cv-warning-soft: #FFF7ED;
+  --cv-warning-line: #FCD9A8;
+
+  --cv-error: #DC2626;
+  --cv-error-solid: #DC2626;
+  --cv-error-soft: #FEF2F2;
+  --cv-error-line: #FECACA;
+
+  /* Overlays */
+  --cv-overlay: #111111;
+
+  /* Focus & scrollbars */
+  --cv-focus: #8A9300;
+  --cv-scrollbar-track: transparent;
+  --cv-scrollbar-thumb: #D4D4D4;
+  --cv-scrollbar-thumb-hover: #8A9300;
+
+  /* Elevation */
+  --cv-shadow-panel: 0 1px 2px 0 rgba(17, 17, 17, 0.04), 0 4px 16px -4px rgba(17, 17, 17, 0.06);
+  --cv-shadow-elevated: 0 4px 12px 0 rgba(17, 17, 17, 0.05), 0 12px 28px -6px rgba(17, 17, 17, 0.10);
 }
 
 [data-theme="dark"],
 .dark {
-  /* CampVion Enterprise Design System — Dark Mode (Warm Charcoal × Soft Ivory × Burnt Amber) */
-  --background: #141413;
-  --foreground: #F2F0EA;
+  color-scheme: dark;
 
-  /* Surfaces & Elevation */
-  --surface-canvas: #141413;
-  --surface-primary: #1D1C1A;
-  --surface-secondary: #252421;
-  --surface-card: #201F1C;
-  --surface-elevated: #252421;
-  --surface-subtle: #35251E;
-  --surface-hover: #2B2A26;
+  --background: #050505;
+  --foreground: #F5F5F5;
 
-  /* Borders & Dividers */
-  --border-subtle: #37342F;
-  --border-muted: #2D2A26;
-  --border-accent: #52372A;
-  --border-focus: #D9825B;
+  --cv-canvas: #050505;
+  --cv-sidebar: #070707;
+  --cv-surface: #111111;
+  --cv-inset: #0A0A0A;
+  --cv-raised: #171717;
+  --cv-hover: #1F1F1F;
 
-  /* Brand Accents */
-  --accent-primary: #D9825B;
-  --accent-hover: #E09572;
-  --accent-subtle: #35251E;
-  --accent-graphite: #F2F0EA;
+  --cv-line: #262626;
+  --cv-line-strong: #333333;
 
-  /* Semantic Statuses */
-  --status-success: #34A870;
-  --status-success-bg: rgba(52, 168, 112, 0.15);
-  --status-success-border: rgba(52, 168, 112, 0.35);
+  --cv-fg: #F5F5F5;
+  --cv-fg-2: #A3A3A3;
+  --cv-fg-3: #737373;
 
-  --status-warning: #D48D3B;
-  --status-warning-bg: rgba(212, 141, 59, 0.15);
-  --status-warning-border: rgba(212, 141, 59, 0.35);
+  --cv-accent: #EFFF00;
+  --cv-accent-hover: #D7E600;
+  --cv-on-accent: #080808;
+  --cv-accent-ink: #EFFF00;
+  --cv-accent-ink-hover: #F6FF80;
+  --cv-accent-line: #EFFF00;
+  --cv-accent-soft: #161800;
+  --cv-accent-soft-line: #3F4500;
+  --cv-accent-glow: rgba(239, 255, 0, 0.22);
 
-  --status-error: #D95B52;
-  --status-error-bg: rgba(217, 91, 82, 0.15);
-  --status-error-border: rgba(217, 91, 82, 0.35);
+  --cv-success: #3FB950;
+  --cv-success-solid: #238636;
+  --cv-success-solid-hover: #2EA043;
+  --cv-success-soft: #0B1A0F;
+  --cv-success-line: #1F4D2C;
 
-  /* Typography */
-  --text-primary: #F2F0EA;
-  --text-secondary: #AAA59C;
-  --text-muted: #7E7970;
+  --cv-warning: #F5A524;
+  --cv-warning-solid: #C2851A;
+  --cv-warning-soft: #1C1305;
+  --cv-warning-line: #4D3610;
 
-  /* Scrollbars */
-  --scrollbar-track: #141413;
-  --scrollbar-thumb: #37342F;
-  --scrollbar-thumb-hover: #D9825B;
+  --cv-error: #F87171;
+  --cv-error-solid: #DA3633;
+  --cv-error-soft: #1F0A0A;
+  --cv-error-line: #5C1D1D;
+
+  --cv-overlay: #000000;
+
+  --cv-focus: #EFFF00;
+  --cv-scrollbar-track: transparent;
+  --cv-scrollbar-thumb: #2E2E2E;
+  --cv-scrollbar-thumb-hover: #EFFF00;
+
+  --cv-shadow-panel: 0 1px 2px 0 rgba(0, 0, 0, 0.6), 0 0 0 0 transparent;
+  --cv-shadow-elevated: 0 8px 24px -6px rgba(0, 0, 0, 0.8);
+}
+
+/* High contrast: strengthen borders and secondary text in both themes */
+[data-high-contrast="true"] {
+  --cv-line: #A3A3A3;
+  --cv-line-strong: #737373;
+  --cv-fg-2: #404040;
+  --cv-fg-3: #595959;
+}
+
+.dark[data-high-contrast="true"] {
+  --cv-line: #5C5C5C;
+  --cv-line-strong: #7A7A7A;
+  --cv-fg-2: #D4D4D4;
+  --cv-fg-3: #A3A3A3;
+}
+
+/* Register tokens as Tailwind colour utilities (bg-cv-*, text-cv-*, border-cv-*, ...) */
+@theme inline {
+  --color-cv-canvas: var(--cv-canvas);
+  --color-cv-sidebar: var(--cv-sidebar);
+  --color-cv-surface: var(--cv-surface);
+  --color-cv-inset: var(--cv-inset);
+  --color-cv-raised: var(--cv-raised);
+  --color-cv-hover: var(--cv-hover);
+  --color-cv-line: var(--cv-line);
+  --color-cv-line-strong: var(--cv-line-strong);
+  --color-cv-fg: var(--cv-fg);
+  --color-cv-fg-2: var(--cv-fg-2);
+  --color-cv-fg-3: var(--cv-fg-3);
+  --color-cv-accent: var(--cv-accent);
+  --color-cv-accent-hover: var(--cv-accent-hover);
+  --color-cv-on-accent: var(--cv-on-accent);
+  --color-cv-accent-ink: var(--cv-accent-ink);
+  --color-cv-accent-ink-hover: var(--cv-accent-ink-hover);
+  --color-cv-accent-line: var(--cv-accent-line);
+  --color-cv-accent-soft: var(--cv-accent-soft);
+  --color-cv-accent-soft-line: var(--cv-accent-soft-line);
+  --color-cv-success: var(--cv-success);
+  --color-cv-success-solid: var(--cv-success-solid);
+  --color-cv-success-solid-hover: var(--cv-success-solid-hover);
+  --color-cv-success-soft: var(--cv-success-soft);
+  --color-cv-success-line: var(--cv-success-line);
+  --color-cv-warning: var(--cv-warning);
+  --color-cv-warning-solid: var(--cv-warning-solid);
+  --color-cv-warning-soft: var(--cv-warning-soft);
+  --color-cv-warning-line: var(--cv-warning-line);
+  --color-cv-error: var(--cv-error);
+  --color-cv-error-solid: var(--cv-error-solid);
+  --color-cv-error-soft: var(--cv-error-soft);
+  --color-cv-error-line: var(--cv-error-line);
+  --color-cv-overlay: var(--cv-overlay);
 }
 
 html,
@@ -107,39 +194,211 @@ body {
   color: var(--foreground);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   overflow-x: hidden;
+  max-width: 100vw;
   min-height: 100vh;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
-/* Base Panel & Card Surfaces */
+/* Smooth, short cross-fade applied only while the theme is being switched
+   (class is added briefly by ThemeProvider.setTheme). Reduced-motion rules
+   below use !important and therefore always win. */
+html.cv-theme-transition,
+html.cv-theme-transition *,
+html.cv-theme-transition *::before,
+html.cv-theme-transition *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 220ms;
+  transition-timing-function: ease;
+}
+
+/* Brand emblem tile — the official logo (black + violet artwork on white) always sits on
+   a pure white emblem core framed inside a controlled dark presentation bezel so the
+   exact same original white emblem remains 100% legible in both light and dark themes. */
 .campvion-emblem-surface {
   background-color: #FFFFFF;
-  border: 1px solid #E8E2D9;
-  box-shadow: 0 1px 2px rgba(38, 35, 31, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(17, 17, 17, 0.08),
+    0 4px 14px -2px rgba(0, 0, 0, 0.18);
 }
 
 .dark .campvion-emblem-surface {
-  background-color: #F5F2EB !important;
-  border: 1px solid #DFD7CB !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  background-color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(239, 255, 0, 0.38),
+    0 0 24px -4px rgba(239, 255, 0, 0.24),
+    0 8px 20px -4px rgba(0, 0, 0, 0.75);
 }
 
+/* Dark presentation stage used behind the white CampVion emblem in both themes
+   so the white emblem has dramatic contrast in light mode and elevated depth in dark mode. */
+.cv-emblem-stage {
+  background: radial-gradient(
+    circle at 50% 38%,
+    #191922 0%,
+    #0C0C10 58%,
+    #060608 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
+    0 20px 50px -12px rgba(0, 0, 0, 0.45);
+}
+
+.dark .cv-emblem-stage {
+  background: radial-gradient(
+    circle at 50% 38%,
+    #181820 0%,
+    #0A0A0E 60%,
+    #050507 100%
+  );
+  border: 1px solid rgba(239, 255, 0, 0.28);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(239, 255, 0, 0.10),
+    0 24px 64px -12px rgba(0, 0, 0, 0.9);
+}
+
+/* Hero 3D pedestal wrapping the enlarged central white CampVion emblem */
+.cv-hero-emblem-core {
+  background-color: #FFFFFF;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 4px rgba(10, 10, 14, 0.88),
+    0 0 0 5.5px rgba(239, 255, 0, 0.55),
+    0 0 42px -4px rgba(239, 255, 0, 0.32),
+    0 22px 45px -10px rgba(0, 0, 0, 0.85);
+}
+
+/* 3D Perspective & Motion Utilities */
+.cv-perspective-stage {
+  perspective: 1200px;
+}
+
+.cv-preserve-3d {
+  transform-style: preserve-3d;
+}
+
+@keyframes cv-float-core {
+  0%, 100% {
+    transform: translate3d(0, 0px, 24px) rotateX(2deg) rotateY(-2deg);
+  }
+  50% {
+    transform: translate3d(0, -10px, 34px) rotateX(-2deg) rotateY(2deg);
+  }
+}
+
+@keyframes cv-float-node {
+  0%, 100% {
+    transform: translate3d(0, 0px, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes cv-ring-orbit {
+  0% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(360deg);
+  }
+}
+
+@keyframes cv-ring-orbit-reverse {
+  0% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(360deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotateX(64deg) rotateZ(0deg);
+  }
+}
+
+@keyframes cv-beam-flow {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cv-particle-float {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-14px) scale(1.25);
+    opacity: 0.85;
+  }
+}
+
+.cv-animate-core {
+  animation: cv-float-core 6.5s ease-in-out infinite;
+}
+
+.cv-animate-node {
+  animation: cv-float-node 5s ease-in-out infinite;
+}
+
+.cv-animate-ring {
+  animation: cv-ring-orbit 28s linear infinite;
+}
+
+.cv-animate-ring-reverse {
+  animation: cv-ring-orbit-reverse 36s linear infinite;
+}
+
+.cv-animate-beam {
+  stroke-dasharray: 3 3;
+  animation: cv-beam-flow 1.4s linear infinite;
+}
+
+.cv-animate-particle {
+  animation: cv-particle-float 4.8s ease-in-out infinite;
+}
+
+/* 3D Interactive Feature Card Tilt */
+.cv-card-3d {
+  transition:
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease,
+    box-shadow 260ms ease,
+    background-color 200ms ease;
+  will-change: transform;
+}
+
+.cv-card-3d:hover {
+  transform: perspective(900px) translateY(-5px) rotateX(2.5deg) rotateY(-1.5deg);
+  border-color: var(--cv-accent-line);
+  box-shadow:
+    0 0 0 1px var(--cv-accent-glow),
+    0 18px 36px -12px rgba(0, 0, 0, 0.22);
+}
+
+.dark .cv-card-3d:hover {
+  box-shadow:
+    0 0 0 1px rgba(239, 255, 0, 0.35),
+    0 20px 40px -12px rgba(0, 0, 0, 0.85),
+    0 0 28px -8px rgba(239, 255, 0, 0.18);
+}
+
+/* Base Panel & Card Surfaces */
 .glass-panel,
 .axora-panel {
-  background-color: var(--surface-primary);
-  border: 1px solid var(--border-subtle);
-  box-shadow:
-    0 1px 3px 0 rgba(0, 0, 0, 0.04),
-    0 4px 16px -2px rgba(0, 0, 0, 0.06);
+  background-color: var(--cv-surface);
+  border: 1px solid var(--cv-line);
+  box-shadow: var(--cv-shadow-panel);
   transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .axora-panel-elevated {
-  background-color: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
-  box-shadow:
-    0 4px 12px 0 rgba(0, 0, 0, 0.05),
-    0 12px 28px -4px rgba(0, 0, 0, 0.08);
+  background-color: var(--cv-raised);
+  border: 1px solid var(--cv-line);
+  box-shadow: var(--cv-shadow-elevated);
 }
 
 .glass-panel-hover {
@@ -147,10 +406,38 @@ body {
 }
 
 .glass-panel-hover:hover {
-  border-color: var(--accent-primary);
-  box-shadow:
-    0 2px 6px 0 rgba(198, 106, 67, 0.08),
-    0 8px 24px -4px rgba(0, 0, 0, 0.08);
+  border-color: var(--cv-accent-line);
+  box-shadow: 0 0 0 1px var(--cv-accent-glow), var(--cv-shadow-panel);
+}
+
+/* Composer focus glow (restrained neon) */
+.cv-composer-shell {
+  box-shadow: var(--cv-shadow-panel);
+}
+
+.cv-composer-shell:focus-within {
+  box-shadow: 0 0 0 3px var(--cv-accent-glow), var(--cv-shadow-elevated);
+}
+
+/* Primary neon actions: restrained lift + glow on hover (dark mode only gets the glow) */
+button.bg-cv-accent:not(:disabled),
+a.bg-cv-accent {
+  transition: background-color 150ms ease, box-shadow 200ms ease, transform 150ms ease, color 150ms ease;
+}
+
+.dark button.bg-cv-accent:not(:disabled):hover,
+.dark a.bg-cv-accent:hover {
+  box-shadow: 0 0 0 1px rgba(239, 255, 0, 0.35), 0 6px 22px -8px rgba(239, 255, 0, 0.55);
+}
+
+button.bg-cv-accent:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* Text selection */
+::selection {
+  background-color: var(--cv-accent);
+  color: var(--cv-on-accent);
 }
 
 /* Accessible focus visible states */
@@ -159,198 +446,47 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--border-focus);
+[role="button"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="switch"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--cv-focus);
   outline-offset: 2px;
 }
 
 /* Custom scrollbar matching active theme */
+* {
+  scrollbar-color: var(--cv-scrollbar-thumb) var(--cv-scrollbar-track);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: var(--cv-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: var(--cv-scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+  background: var(--cv-scrollbar-thumb-hover);
 }
 
-/* ====================================================================
-   DARK MODE ADAPTATION FOR EXISTING UTILITY CLASSES
-   Ensures instantaneous, 100% complete dark mode across all components
-   ==================================================================== */
-
-.dark body {
-  background-color: #141413 !important;
-  color: #F2F0EA !important;
+/* Native form controls follow the theme */
+input,
+textarea,
+select {
+  caret-color: var(--cv-accent-ink);
 }
 
-/* Backgrounds */
-.dark .bg-\[\#F5F2EB\] {
-  background-color: #141413 !important;
-}
-
-.dark .bg-\[\#FFFFFF\] {
-  background-color: #1D1C1A !important;
-}
-
-.dark .bg-\[\#FFFFFF\]\/90,
-.dark .bg-\[\#FFFFFF\]\/95 {
-  background-color: rgba(29, 28, 26, 0.95) !important;
-}
-
-.dark .bg-\[\#F5F2EB\]\/95 {
-  background-color: rgba(20, 20, 19, 0.95) !important;
-}
-
-.dark .bg-\[\#F0ECE5\] {
-  background-color: #252421 !important;
-}
-
-.dark .bg-\[\#FAF7F2\] {
-  background-color: #201F1C !important;
-}
-
-.dark .bg-\[\#F5E7DE\] {
-  background-color: #35251E !important;
-}
-
-.dark .bg-\[\#F5E7DE\]\/50,
-.dark .bg-\[\#F5E7DE\]\/70 {
-  background-color: rgba(53, 37, 30, 0.6) !important;
-}
-
-.dark .bg-\[\#FDFBF7\] {
-  background-color: #1D1C1A !important;
-}
-
-.dark .bg-\[\#FBF3E8\] {
-  background-color: #2D2318 !important;
-}
-
-.dark .bg-\[\#EAF4EE\] {
-  background-color: #192B21 !important;
-}
-
-.dark .bg-\[\#FBEDED\] {
-  background-color: #2C1A1A !important;
-}
-
-.dark .bg-\[\#26231F\]\/35,
-.dark .bg-\[\#26231F\]\/40 {
-  background-color: rgba(0, 0, 0, 0.65) !important;
-}
-
-.dark .bg-\[\#C66A43\] {
-  background-color: #D9825B !important;
-}
-
-/* Hovers */
-.dark .hover\:bg-\[\#AD5735\]:hover {
-  background-color: #E09572 !important;
-}
-
-.dark .hover\:bg-\[\#F0ECE5\]:hover {
-  background-color: #252421 !important;
-}
-
-.dark .hover\:bg-\[\#F5E7DE\]:hover {
-  background-color: #35251E !important;
-}
-
-.dark .hover\:bg-\[\#FFFFFF\]:hover {
-  background-color: #1D1C1A !important;
-}
-
-/* Typography */
-.dark .text-\[\#26231F\] {
-  color: #F2F0EA !important;
-}
-
-.dark .text-\[\#77716A\] {
-  color: #AAA59C !important;
-}
-
-.dark .text-\[\#A0988F\] {
-  color: #7E7970 !important;
-}
-
-.dark .text-\[\#C66A43\] {
-  color: #D9825B !important;
-}
-
-.dark .hover\:text-\[\#26231F\]:hover {
-  color: #F2F0EA !important;
-}
-
-.dark .hover\:text-\[\#C66A43\]:hover {
-  color: #D9825B !important;
-}
-
-.dark .hover\:text-\[\#AD5735\]:hover {
-  color: #E09572 !important;
-}
-
-/* Borders */
-.dark .border-\[\#E8E2D9\] {
-  border-color: #37342F !important;
-}
-
-.dark .border-\[\#DFD7CB\] {
-  border-color: #2D2A26 !important;
-}
-
-.dark .border-\[\#E8CFC1\] {
-  border-color: #52372A !important;
-}
-
-.dark .border-\[\#C66A43\] {
-  border-color: #D9825B !important;
-}
-
-.dark .border-\[\#F0D9BC\] {
-  border-color: #4D3A24 !important;
-}
-
-.dark .border-\[\#C8E3D4\] {
-  border-color: #244533 !important;
-}
-
-.dark .border-\[\#F3CBC7\] {
-  border-color: #4C2727 !important;
-}
-
-.dark .divide-\[\#E8E2D9\] > :not([hidden]) ~ :not([hidden]) {
-  border-color: #37342F !important;
-}
-
-/* Gradients */
-.dark .from-\[\#F5F2EB\] {
-  --tw-gradient-from: #141413 var(--tw-gradient-from-position) !important;
-}
-
-.dark .via-\[\#F5F2EB\]\/95 {
-  --tw-gradient-stops: var(--tw-gradient-from), rgba(20, 20, 19, 0.95) var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
-}
-
-/* High Contrast Mode */
-[data-high-contrast="true"] .border-\[\#E8E2D9\],
-[data-high-contrast="true"] .border-\[\#DFD7CB\] {
-  border-color: #A0988F !important;
-}
-
-.dark[data-high-contrast="true"] .border-\[\#E8E2D9\],
-.dark[data-high-contrast="true"] .border-\[\#DFD7CB\],
-.dark[data-high-contrast="true"] .border-\[\#37342F\] {
-  border-color: #5E5950 !important;
+select option {
+  background-color: var(--cv-surface);
+  color: var(--cv-fg);
 }
 
 /* Reduced motion preference */
@@ -364,16 +500,6 @@ select:focus-visible,
     scroll-behavior: auto !important;
   }
 }
-
-[data-reduced-motion="true"] *,
-[data-reduced-motion="true"] *::before,
-[data-reduced-motion="true"] *::after {
-  animation-duration: 0.01ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
-  scroll-behavior: auto !important;
-}
-
 
 [data-reduced-motion="true"] *,
 [data-reduced-motion="true"] *::before,

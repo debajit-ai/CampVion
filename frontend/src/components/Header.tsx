@@ -91,7 +91,7 @@ export function Header({
   ];
 
   return (
-    <header className="border-b border-[#E8E2D9] bg-[#FFFFFF]/95 backdrop-blur-md sticky top-0 z-50">
+    <header className="border-b border-cv-line bg-cv-surface/95 backdrop-blur-md sticky top-0 z-50">
       {/* Top Primary Bar */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand Identity */}
@@ -107,17 +107,17 @@ export function Header({
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-base tracking-tight text-[#26231F]">
+              <span className="font-bold text-base tracking-tight text-cv-fg">
                 CampVion
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-[#F5E7DE] border border-[#E8E2D9] text-[#C66A43] font-medium">
+              <span className="px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-cv-accent-soft border border-cv-line text-cv-accent-ink font-medium">
                 Ops Console
               </span>
-              <span className="text-[11px] font-mono text-[#A0988F] hidden sm:inline">
+              <span className="text-[11px] font-mono text-cv-fg-3 hidden sm:inline">
                 {versionText}
               </span>
             </div>
-            <p className="text-[11px] text-[#77716A] truncate hidden md:block">
+            <p className="text-[11px] text-cv-fg-2 truncate hidden md:block">
               Intelligent Campus Operations &bull; Agentic AI Assistant for Multi-Step Campus Service Workflows
             </p>
           </div>
@@ -130,7 +130,7 @@ export function Header({
             <button
               type="button"
               onClick={() => onSelectSection?.("workspace")}
-              className="hidden lg:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono bg-[#B77932]/10 border border-[#B77932]/30 text-[#B77932] hover:bg-[#B77932]/15 transition cursor-pointer"
+              className="hidden lg:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono bg-cv-warning-solid/10 border border-cv-warning/30 text-cv-warning hover:bg-cv-warning-solid/15 transition cursor-pointer"
             >
               <ShieldAlert className="h-3.5 w-3.5 animate-pulse" />
               <span>Approval Gate Active</span>
@@ -141,26 +141,26 @@ export function Header({
           <div
             className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-mono border transition-all ${
               isOnline
-                ? "bg-[#287A53]/10 border-[#287A53]/30 text-[#287A53]"
-                : "bg-[#C44E45]/10 border-[#C44E45]/30 text-[#C44E45]"
+                ? "bg-cv-success-solid/10 border-cv-success/30 text-cv-success"
+                : "bg-cv-error-solid/10 border-cv-error/30 text-cv-error"
             }`}
           >
             {isOnline ? (
               <>
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#287A53] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#287A53]" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cv-success-solid opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cv-success-solid" />
                 </span>
                 <span className="font-medium">Backend Online</span>
                 {typeof healthLatencyMs === "number" && healthLatencyMs >= 0 && (
-                  <span className="text-[10px] text-[#77716A] border-l border-[#E8E2D9] pl-2 hidden sm:inline">
+                  <span className="text-[10px] text-cv-fg-2 border-l border-cv-line pl-2 hidden sm:inline">
                     {healthLatencyMs}ms
                   </span>
                 )}
               </>
             ) : (
               <>
-                <WifiOff className="h-3.5 w-3.5 text-[#C44E45]" />
+                <WifiOff className="h-3.5 w-3.5 text-cv-error" />
                 <span className="font-medium">Backend Offline</span>
               </>
             )}
@@ -170,9 +170,9 @@ export function Header({
               disabled={healthLoading}
               title="Ping backend health endpoint"
               aria-label="Ping backend health endpoint"
-              className="ml-1 p-0.5 text-[#A0988F] hover:text-[#26231F] rounded transition cursor-pointer disabled:opacity-50"
+              className="ml-1 p-0.5 text-cv-fg-3 hover:text-cv-fg rounded transition cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`h-3 w-3 ${healthLoading ? "animate-spin text-[#C66A43]" : ""}`} />
+              <RefreshCw className={`h-3 w-3 ${healthLoading ? "animate-spin text-cv-accent-ink" : ""}`} />
             </button>
           </div>
 
@@ -181,9 +181,9 @@ export function Header({
             href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#FAF7F2] border border-[#E8E2D9] hover:border-[#C66A43]/45 text-[#26231F] hover:bg-[#F0ECE5] transition"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-cv-inset border border-cv-line hover:border-cv-accent-line/45 text-cv-fg hover:bg-cv-raised transition"
           >
-            <BookOpen className="h-3.5 w-3.5 text-[#C66A43]" />
+            <BookOpen className="h-3.5 w-3.5 text-cv-accent-ink" />
             <span className="hidden sm:inline">API Docs</span>
           </a>
         </div>
@@ -191,7 +191,7 @@ export function Header({
 
       {/* Secondary Navigation Bar */}
       {onSelectSection && (
-        <div className="border-t border-[#E8E2D9] bg-[#FAF7F2]/95 backdrop-blur-md">
+        <div className="border-t border-cv-line bg-cv-inset/95 backdrop-blur-md">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 overflow-x-auto">
             <nav aria-label="Workspace Navigation" className="flex items-center space-x-1 py-1.5">
               {navItems.map((item) => {
@@ -204,26 +204,26 @@ export function Header({
                     aria-current={isActive ? "page" : undefined}
                     className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                       isActive
-                        ? "bg-[#F5E7DE] text-[#C66A43] border border-[#E8E2D9] font-semibold shadow-xs"
-                        : "text-[#77716A] hover:text-[#26231F] hover:bg-[#F0ECE5] border border-transparent"
+                        ? "bg-cv-accent-soft text-cv-accent-ink border border-cv-line font-semibold shadow-xs"
+                        : "text-cv-fg-2 hover:text-cv-fg hover:bg-cv-raised border border-transparent"
                     }`}
                   >
-                    <span className={isActive ? "text-[#C66A43]" : "text-[#A0988F]"}>
+                    <span className={isActive ? "text-cv-accent-ink" : "text-cv-fg-3"}>
                       {item.icon}
                     </span>
                     <span className="hidden md:inline">{item.label}</span>
                     <span className="md:hidden">{item.shortLabel}</span>
 
                     {item.alert && (
-                      <span className="h-2 w-2 rounded-full bg-[#B77932] animate-pulse" />
+                      <span className="h-2 w-2 rounded-full bg-cv-warning-solid animate-pulse" />
                     )}
 
                     {item.badge !== undefined && item.badge !== null && (
                       <span
                         className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
                           isActive
-                            ? "bg-[#C66A43] text-white"
-                            : "bg-[#FFFFFF] text-[#77716A] border border-[#E8E2D9]"
+                            ? "bg-cv-accent text-cv-on-accent"
+                            : "bg-cv-surface text-cv-fg-2 border border-cv-line"
                         }`}
                       >
                         {item.badge}
@@ -235,14 +235,14 @@ export function Header({
             </nav>
 
             {/* Operational Engine Mode Indicator */}
-            <div className="hidden xl:flex items-center space-x-3 text-[11px] font-mono text-[#77716A] shrink-0">
-              <span className="flex items-center space-x-1.5 text-[#26231F]">
-                <Activity className="h-3 w-3 text-[#C66A43]" />
+            <div className="hidden xl:flex items-center space-x-3 text-[11px] font-mono text-cv-fg-2 shrink-0">
+              <span className="flex items-center space-x-1.5 text-cv-fg">
+                <Activity className="h-3 w-3 text-cv-accent-ink" />
                 <span>ENGINE: DETERMINISTIC DAG</span>
               </span>
-              <span className="text-[#DFD7CB]">|</span>
+              <span className="text-cv-line-strong">|</span>
               <span>MAX REPLANS: 3</span>
-              <span className="text-[#DFD7CB]">|</span>
+              <span className="text-cv-line-strong">|</span>
               <span>SQLITE AUDIT TRACE</span>
             </div>
           </div>

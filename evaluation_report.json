@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-11-03T12:12:18.075678+00:00",
+  "database": "SQLite axora.db",
+  "metrics": {
+    "total_scenarios_evaluated": 10,
+    "overall_success_rate_percent": 100.0,
+    "correct_eligibility_decision_rate_percent": 100.0,
+    "tool_execution_success_rate_percent": 100.0,
+    "human_approval_gate_enforcement_rate_percent": 100.0,
+    "self_healing_recovery_success_rate_percent": 100.0,
+    "average_execution_time_ms": 174.84
+  },
+  "scenarios": [
+    {
+      "scenario_id": "SCEN-A",
+      "name": "Standard Eligible Leave Request (DB Persisted)",
+      "status": "PASS",
+      "duration_ms": 410.19,
+      "details": "Gate: True, End Status: COMPLETED, Approver: Dr. Rajesh Rao"
+    },
+    {
+      "scenario_id": "SCEN-B",
+      "name": "Ineligible Leave Request (Low Attendance <75% Halted)",
+      "status": "PASS",
+      "duration_ms": 198.19,
+      "details": "Status: FAILED, Message: Unrecoverable failure on task t4: Attendance is 50.00%, whic..., Zero Writes: True"
+    },
+    {
+      "scenario_id": "SCEN-C",
+      "name": "Attendance Enquiry & Provenance Math Match",
+      "status": "PASS",
+      "duration_ms": 5.39,
+      "details": "Attended: 30, Daily Log Match: True"
+    },
+    {
+      "scenario_id": "SCEN-D",
+      "name": "Non-Existent Student Rejection & Safety Halt",
+      "status": "PASS",
+      "duration_ms": 109.7,
+      "details": "Status: FAILED, Message: Unrecoverable failure on task t1: Student not found"
+    },
+    {
+      "scenario_id": "SCEN-E",
+      "name": "Boundary / Invalid Request Data (-2 days rejected)",
+      "status": "PASS",
+      "duration_ms": 190.04,
+      "details": "Status: FAILED, Message: Unrecoverable failure on task t4: Invalid leave duration (-2 days). Duration must be at least 1 day."
+    },
+    {
+      "scenario_id": "SCEN-F",
+      "name": "Prolonged Medical Leave Doc Escalation (>3d -> HOD)",
+      "status": "PASS",
+      "duration_ms": 4.22,
+      "details": "Approver: Head of Department (HOD), Requires Docs: True"
+    },
+    {
+      "scenario_id": "SCEN-G",
+      "name": "Human-in-the-Loop Approval Granted Execution",
+      "status": "PASS",
+      "duration_ms": 286.22,
+      "details": "Held at Gate: True, Final Status: COMPLETED"
+    },
+    {
+      "scenario_id": "SCEN-H",
+      "name": "Human Denial Halts Execution (Zero Consequential Action)",
+      "status": "PASS",
+      "duration_ms": 198.91,
+      "details": "Status: FAILED, Zero DB writes: True"
+    },
+    {
+      "scenario_id": "SCEN-I",
+      "name": "Temporary Failure Self-Healing Recovery",
+      "status": "PASS",
+      "duration_ms": 313.47,
+      "details": "Replanning Count: 1, Final Status: COMPLETED"
+    },
+    {
+      "scenario_id": "SCEN-J",
+      "name": "Multi-Step Campus Service & Policy Knowledge Integration",
+      "status": "PASS",
+      "duration_ms": 32.06,
+      "details": "Hostel Pass: HR-2026-0005, Policy Chunks: 2"
+    }
+  ]
+}

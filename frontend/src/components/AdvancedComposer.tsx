@@ -12,8 +12,10 @@ import {
   UserCheck,
   UserX,
   Wrench,
+  X,
 } from "lucide-react";
 import { AttendanceRecord, CourseRecord, Student } from "../types/api";
+import { useTheme } from "../context/ThemeContext";
 
 interface AdvancedComposerProps {
   students: Student[];
@@ -24,6 +26,7 @@ interface AdvancedComposerProps {
   onSubmit: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  onClearError?: () => void;
   attendanceByStudent?: Record<string, AttendanceRecord[]>;
   coursesByStudent?: Record<string, CourseRecord[]>;
   onOpenTools: () => void;
@@ -39,11 +42,13 @@ export function AdvancedComposer({
   onSubmit,
   isLoading,
   error,
+  onClearError,
   attendanceByStudent = {},
   coursesByStudent = {},
   onOpenTools,
   textareaRef: externalRef,
 }: AdvancedComposerProps) {
+  const { experienceMode } = useTheme();
   const [studentPickerOpen, setStudentPickerOpen] = useState<boolean>(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalRef || internalRef;
@@ -91,8 +96,8 @@ export function AdvancedComposer({
     currentTotalClasses > 0
       ? Math.round((currentTotalAttended / currentTotalClasses) * 100)
       : selectedStudentId === "S001"
-      ? 75
-      : 50;
+        ? 75
+        : 50;
   const isCurrentEligible = currentPct >= 75;
 
   const isSimulationDirective = goalText.toUpperCase().includes("FAILURE_MODE=");
@@ -101,13 +106,13 @@ export function AdvancedComposer({
     <div className="relative w-full max-w-4xl mx-auto px-4 pb-4 select-none">
       {/* Fault Injection Alert Badge */}
       {isSimulationDirective && (
-        <div className="mb-2 flex items-center justify-between px-3.5 py-1.5 rounded-xl bg-[#FBF3E8] border border-[#F0D9BC] text-[#B77932] text-xs font-mono animate-in fade-in duration-150">
+        <div className="mb-2 flex items-center justify-between px-3.5 py-1.5 rounded-xl bg-cv-warning-soft border border-cv-warning-line text-cv-warning text-xs font-mono animate-in fade-in duration-150">
           <div className="flex items-center space-x-1.5">
-            <Terminal className="h-3.5 w-3.5 text-[#B77932]" />
+            <Terminal className="h-3.5 w-3.5 text-cv-warning" />
             <span className="font-semibold">TEST DIRECTIVE ACTIVE:</span>
             <span>Simulating deliberate runtime failure injection</span>
           </div>
-          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-[#FFFFFF] border border-[#F0D9BC]">
+          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-cv-surface border border-cv-warning-line">
             Override
           </span>
         </div>
@@ -117,22 +122,33 @@ export function AdvancedComposer({
       {error && (
         <div
           role="alert"
-          className="mb-2 flex items-start space-x-2.5 p-3.5 rounded-xl bg-[#FBEDED] border border-[#F3CBC7] text-[#C44E45] text-xs animate-in fade-in duration-150"
+          className="mb-2 flex items-start space-x-2.5 p-3.5 rounded-xl bg-cv-error-soft border border-cv-error-line text-cv-error text-xs animate-in fade-in duration-150"
         >
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <span className="font-semibold text-xs block">
               Workflow Execution Error
             </span>
-            <span className="block mt-0.5 text-xs text-[#26231F]">{error}</span>
+            <span className="block mt-0.5 text-xs text-cv-fg">{error}</span>
           </div>
+          {onClearError && (
+            <button
+              type="button"
+              onClick={onClearError}
+              aria-label="Dismiss error"
+              className="text-cv-fg-2 hover:text-cv-fg p-0.5 rounded transition cursor-pointer"
+              title="Dismiss error"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       )}
 
       {/* Composer Container Card */}
-      <div className="relative rounded-2xl bg-[#FFFFFF] border border-[#E8E2D9] shadow-[0_2px_12px_rgba(38,35,31,0.06)] focus-within:border-[#C66A43] focus-within:shadow-[0_4px_24px_-2px_rgba(198,106,67,0.12)] transition-all duration-200">
+      <div className="cv-composer-shell relative rounded-2xl bg-cv-surface border border-cv-line focus-within:border-cv-accent-line transition-all duration-200">
         {/* Top Control Bar: Student Context Chip & Tools Access */}
-        <div className="flex items-center justify-between px-3.5 pt-3 pb-2 border-b border-[#E8E2D9] bg-[#FAF7F2] rounded-t-2xl">
+        <div className="flex items-center justify-between px-3.5 pt-3 pb-2 border-b border-cv-line bg-cv-inset rounded-t-2xl">
           {/* Student Selector Chip with Popover */}
           <div className="relative" ref={pickerRef}>
             <button
@@ -140,14 +156,13 @@ export function AdvancedComposer({
               onClick={() => setStudentPickerOpen((prev) => !prev)}
               aria-expanded={studentPickerOpen}
               aria-label="Change Student Context"
-              className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#F0ECE5] border border-[#E8E2D9] hover:border-[#C66A43]/50 transition cursor-pointer text-left group shadow-xs"
+              className="flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-2.5 py-1.5 rounded-lg bg-cv-surface hover:bg-cv-raised border border-cv-line hover:border-cv-accent-line/50 transition cursor-pointer text-left group shadow-xs"
             >
               <div
-                className={`p-1 rounded-md shrink-0 border ${
-                  isCurrentEligible
-                    ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
-                    : "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932]"
-                }`}
+                className={`p-1 rounded-md shrink-0 border ${isCurrentEligible
+                    ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                    : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
+                  }`}
               >
                 {isCurrentEligible ? (
                   <UserCheck className="h-3.5 w-3.5" />
@@ -156,35 +171,33 @@ export function AdvancedComposer({
                 )}
               </div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-xs font-semibold text-[#26231F]">
+                <span className="text-xs font-semibold text-cv-fg">
                   {currentStudent?.name || selectedStudentId}
                 </span>
-                <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-[#F0ECE5] text-[#77716A]">
+                <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-cv-raised text-cv-fg-2">
                   {selectedStudentId}
                 </span>
                 <span
-                  className={`text-[11px] font-medium hidden sm:inline ${
-                    isCurrentEligible ? "text-[#287A53]" : "text-[#B77932]"
-                  }`}
+                  className={`text-[11px] font-medium hidden sm:inline ${isCurrentEligible ? "text-cv-success" : "text-cv-warning"
+                    }`}
                 >
                   &bull; {currentPct}% ({isCurrentEligible ? "Eligible" : "Ineligible"})
                 </span>
               </div>
               <ChevronDown
-                className={`h-3.5 w-3.5 text-[#77716A] group-hover:text-[#26231F] transition-transform ${
-                  studentPickerOpen ? "rotate-180" : ""
-                }`}
+                className={`h-3.5 w-3.5 text-cv-fg-2 group-hover:text-cv-fg transition-transform ${studentPickerOpen ? "rotate-180" : ""
+                  }`}
               />
             </button>
 
             {/* Student Picker Popover Dropdown */}
             {studentPickerOpen && (
-              <div className="absolute left-0 bottom-full mb-2 w-80 sm:w-96 rounded-xl bg-[#FFFFFF] border border-[#E8E2D9] shadow-lg p-3 z-50 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between pb-2 border-b border-[#E8E2D9] mb-2">
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-[#77716A]">
+              <div className="absolute left-0 bottom-full mb-2 w-80 sm:w-96 rounded-xl bg-cv-surface border border-cv-line shadow-lg p-3 z-50 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-cv-line mb-2">
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-cv-fg-2">
                     Select Student Context
                   </span>
-                  <span className="text-[10px] text-[#77716A]">
+                  <span className="text-[10px] text-cv-fg-2">
                     Threshold: &ge;75% Attendance
                   </span>
                 </div>
@@ -199,8 +212,8 @@ export function AdvancedComposer({
                       total > 0
                         ? Math.round((attended / total) * 100)
                         : student.student_id === "S001"
-                        ? 75
-                        : 50;
+                          ? 75
+                          : 50;
                     const eligible = pct >= 75;
 
                     return (
@@ -211,18 +224,16 @@ export function AdvancedComposer({
                           onSelectStudentId(student.student_id);
                           setStudentPickerOpen(false);
                         }}
-                        className={`w-full text-left p-2.5 rounded-lg border transition cursor-pointer flex items-start space-x-2.5 ${
-                          isSelected
-                            ? "bg-[#F5E7DE] border-[#C66A43]/50"
-                            : "bg-[#FFFFFF] hover:bg-[#F0ECE5] border-[#E8E2D9]"
-                        }`}
+                        className={`w-full text-left p-2.5 rounded-lg border transition cursor-pointer flex items-start space-x-2.5 ${isSelected
+                            ? "bg-cv-accent-soft border-cv-accent-line/50"
+                            : "bg-cv-surface hover:bg-cv-raised border-cv-line"
+                          }`}
                       >
                         <div
-                          className={`p-1.5 rounded-md mt-0.5 border shrink-0 ${
-                            eligible
-                              ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
-                              : "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932]"
-                          }`}
+                          className={`p-1.5 rounded-md mt-0.5 border shrink-0 ${eligible
+                              ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                              : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
+                            }`}
                         >
                           {eligible ? (
                             <UserCheck className="h-3.5 w-3.5" />
@@ -232,25 +243,25 @@ export function AdvancedComposer({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-semibold text-[#26231F] truncate">
+                            <span className="text-xs font-semibold text-cv-fg truncate">
                               {student.name}
                             </span>
-                            <span className="text-[10px] font-mono px-1 rounded bg-[#F0ECE5] text-[#77716A]">
+                            <span className="text-[10px] font-mono px-1 rounded bg-cv-raised text-cv-fg-2">
                               {student.student_id}
                             </span>
                           </div>
-                          <div className="flex items-center space-x-1.5 mt-0.5 text-[11px] text-[#77716A]">
-                            <GraduationCap className="h-3 w-3 text-[#C66A43]" />
+                          <div className="flex items-center space-x-1.5 mt-0.5 text-[11px] text-cv-fg-2">
+                            <GraduationCap className="h-3 w-3 text-cv-accent-ink" />
                             <span>
                               {student.program} &bull; Sem {student.semester}
                             </span>
                           </div>
                           <div className="mt-1 flex items-center justify-between text-[11px]">
-                            <span className={eligible ? "text-[#287A53]" : "text-[#B77932]"}>
+                            <span className={eligible ? "text-cv-success" : "text-cv-warning"}>
                               {pct}% Attendance ({eligible ? "Eligible" : "Policy Gate Fail"})
                             </span>
                             {courses.length > 0 && (
-                              <span className="text-[#77716A] flex items-center space-x-1 text-[10px] font-mono">
+                              <span className="text-cv-fg-2 flex items-center space-x-1 text-[10px] font-mono">
                                 <BookOpen className="h-2.5 w-2.5" />
                                 <span>{courses.map((c) => c.course_code).join(", ")}</span>
                               </span>
@@ -269,11 +280,13 @@ export function AdvancedComposer({
           <button
             type="button"
             onClick={onOpenTools}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#FFFFFF] hover:bg-[#F5E7DE] text-[#26231F] hover:text-[#C66A43] border border-[#E8E2D9] hover:border-[#C66A43]/40 transition cursor-pointer shadow-xs group"
-            title="Open Agentic Tools, Presets & Capabilities Menu"
+            className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-cv-surface hover:bg-cv-accent-soft text-cv-fg hover:text-cv-accent-ink border border-cv-line hover:border-cv-accent-line/40 transition cursor-pointer shadow-xs group"
+            title="Open Request Options, Presets & Campus Services"
           >
-            <Wrench className="h-3.5 w-3.5 text-[#C66A43] group-hover:rotate-45 transition-transform" />
-            <span className="font-medium">Tools &amp; Presets</span>
+            <Wrench className="h-3.5 w-3.5 text-cv-accent-ink group-hover:rotate-45 transition-transform" />
+            <span className="font-medium text-[11px] sm:text-xs">
+              {experienceMode === "simple" ? "Request Options" : "Tools & Presets"}
+            </span>
           </button>
         </div>
 
@@ -285,18 +298,22 @@ export function AdvancedComposer({
             value={goalText}
             onChange={(e) => onGoalTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask CampVion to apply for leave, check courses, or inject a simulation directive..."
-            className="w-full bg-transparent border-0 text-xs sm:text-sm text-[#26231F] placeholder-[#9E978E] focus:outline-none resize-none leading-relaxed font-sans"
+            placeholder="Describe what you need — apply for leave, check courses, or access campus services..."
+            className="w-full bg-transparent border-0 text-xs sm:text-sm text-cv-fg placeholder-cv-fg-3 focus:outline-none resize-none leading-relaxed font-sans"
           />
         </div>
 
         {/* Bottom Actions Bar */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 border-t border-[#E8E2D9] bg-[#FAF7F2] rounded-b-2xl">
-          <div className="flex items-center space-x-2 text-[11px] text-[#77716A]">
-            <span>Deterministic DAG</span>
+        <div className="flex items-center justify-between px-3.5 py-2.5 border-t border-cv-line bg-cv-inset rounded-b-2xl gap-2">
+          <div className="flex items-center space-x-2 text-[11px] text-cv-fg-2 min-w-0">
+            <span className="truncate max-w-[140px] sm:max-w-none">
+              {experienceMode === "simple"
+                ? "Describe what you need. CampVion will guide you through the process."
+                : "Smart Request Planning • Deterministic DAG"}
+            </span>
             <span>&bull;</span>
             <span className="hidden sm:inline">
-              Press <kbd className="px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] font-mono text-[10px]">Ctrl+Enter</kbd>
+              Press <kbd className="px-1.5 py-0.5 rounded bg-cv-surface border border-cv-line text-cv-fg-2 font-mono text-[10px]">Ctrl+Enter</kbd>
             </span>
           </div>
 
@@ -304,16 +321,24 @@ export function AdvancedComposer({
             type="button"
             onClick={onSubmit}
             disabled={isLoading || !goalText.trim() || !selectedStudentId.trim()}
-            className="flex items-center space-x-2 px-4 py-1.5 rounded-xl text-xs font-semibold bg-[#C66A43] hover:bg-[#AD5735] text-[#FFFFFF] shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-sans"
+            className="flex items-center space-x-2 px-4 py-1.5 rounded-xl text-xs font-semibold bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer font-sans"
           >
             {isLoading ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>Orchestrating...</span>
+                <span>
+                  {experienceMode === "simple"
+                    ? "Processing Request..."
+                    : "Executing..."}
+                </span>
               </>
             ) : (
               <>
-                <span>Execute Workflow</span>
+                <span>
+                  {experienceMode === "simple"
+                    ? "Submit Request"
+                    : "Execute Workflow"}
+                </span>
                 <Send className="h-3 w-3" />
               </>
             )}

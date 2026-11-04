@@ -110,23 +110,23 @@ export function NewRequestPanel({
   const isSimulationDirective = goalText.toUpperCase().includes("FAILURE_MODE=");
 
   return (
-    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-xl p-5 relative shadow-xs">
+    <div className="bg-cv-surface border border-cv-line rounded-xl p-5 relative shadow-xs">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-[#E8E2D9]">
+      <div className="flex items-center justify-between pb-4 border-b border-cv-line">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-lg bg-[#F5E7DE] border border-[#E8E2D9] text-[#C66A43]">
+          <div className="p-2 rounded-lg bg-cv-accent-soft border border-cv-line text-cv-accent-ink">
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold tracking-wide text-[#26231F] uppercase">
-              Dispatch Campus <span className="text-[#C66A43]">Service Goal</span>
+            <h2 className="text-sm font-semibold tracking-wide text-cv-fg uppercase">
+              Dispatch Campus <span className="text-cv-accent-ink">Service Goal</span>
             </h2>
-            <p className="text-xs text-[#77716A]">
+            <p className="text-xs text-cv-fg-2">
               Submit student intent or fault-injection directive to the autonomous orchestrator
             </p>
           </div>
         </div>
-        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-[#FAF7F2] border border-[#E8E2D9] text-[#77716A]">
+        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-cv-inset border border-cv-line text-cv-fg-2">
           ₹0-cost deterministic
         </span>
       </div>
@@ -135,10 +135,10 @@ export function NewRequestPanel({
         {/* Step 1: Student Context Selector */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs font-mono font-medium text-[#26231F]">
+            <label className="block text-xs font-mono font-medium text-cv-fg">
               1. SELECT DEMO STUDENT CONTEXT
             </label>
-            <span className="text-[10px] font-mono text-[#A0988F]">
+            <span className="text-[10px] font-mono text-cv-fg-3">
               Threshold: &ge;75% Attendance
             </span>
           </div>
@@ -167,15 +167,15 @@ export function NewRequestPanel({
                     aria-pressed={isSelected}
                     className={`flex items-start space-x-3 p-3.5 rounded-lg border text-left transition cursor-pointer ${
                       isSelected
-                        ? "bg-[#F5E7DE]/50 border-[#C66A43] shadow-xs"
-                        : "bg-[#FAF7F2] border-[#E8E2D9] hover:bg-[#F0ECE5] hover:border-[#C66A43]/40"
+                        ? "bg-cv-accent-soft/50 border-cv-accent-line shadow-xs"
+                        : "bg-cv-inset border-cv-line hover:bg-cv-raised hover:border-cv-accent-line/40"
                     }`}
                   >
                     <div
                       className={`p-1.5 rounded-md mt-0.5 border shrink-0 ${
                         isEligible
-                          ? "bg-[#287A53]/10 border-[#287A53]/30 text-[#287A53]"
-                          : "bg-[#B77932]/10 border-[#B77932]/30 text-[#B77932]"
+                          ? "bg-cv-success-solid/10 border-cv-success/30 text-cv-success"
+                          : "bg-cv-warning-solid/10 border-cv-warning/30 text-cv-warning"
                       }`}
                     >
                       {isEligible ? (
@@ -186,31 +186,31 @@ export function NewRequestPanel({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-[#26231F] truncate">
+                        <span className="text-xs font-semibold text-cv-fg truncate">
                           {student.name}
                         </span>
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                             isSelected
-                              ? "bg-[#C66A43] border-[#C66A43] text-white"
-                              : "bg-[#FFFFFF] border-[#E8E2D9] text-[#77716A]"
+                              ? "bg-cv-accent border-cv-accent-line text-cv-on-accent"
+                              : "bg-cv-surface border-cv-line text-cv-fg-2"
                           }`}
                         >
                           {student.student_id}
                         </span>
                       </div>
 
-                      <div className="flex items-center space-x-1.5 mt-1 text-[11px] text-[#77716A]">
-                        <GraduationCap className="h-3 w-3 shrink-0 text-[#C66A43]" />
+                      <div className="flex items-center space-x-1.5 mt-1 text-[11px] text-cv-fg-2">
+                        <GraduationCap className="h-3 w-3 shrink-0 text-cv-accent-ink" />
                         <span className="truncate">
                           {student.program} &bull; Sem {student.semester}
                         </span>
                       </div>
 
-                      <div className="mt-2 pt-1.5 border-t border-[#E8E2D9] flex items-center justify-between gap-1">
+                      <div className="mt-2 pt-1.5 border-t border-cv-line flex items-center justify-between gap-1">
                         <span
                           className={`text-[10px] font-mono font-medium ${
-                            isEligible ? "text-[#287A53]" : "text-[#B77932]"
+                            isEligible ? "text-cv-success" : "text-cv-warning"
                           }`}
                         >
                           {isEligible
@@ -218,14 +218,14 @@ export function NewRequestPanel({
                             : `Attendance: ${computedPct}% (Ineligible)`}
                         </span>
                         {totalClasses > 0 && (
-                          <span className="text-[10px] font-mono text-[#77716A]">
+                          <span className="text-[10px] font-mono text-cv-fg-2">
                             {totalAttended}/{totalClasses}
                           </span>
                         )}
                       </div>
 
                       {courses.length > 0 && (
-                        <div className="mt-1 flex items-center space-x-1 text-[10px] font-mono text-[#A0988F] truncate">
+                        <div className="mt-1 flex items-center space-x-1 text-[10px] font-mono text-cv-fg-3 truncate">
                           <BookOpen className="h-2.5 w-2.5 shrink-0" />
                           <span className="truncate">
                             {courses.map((c) => c.course_code).join(", ")}
@@ -244,7 +244,7 @@ export function NewRequestPanel({
                   onChange={(e) => setSelectedStudentId(e.target.value)}
                   placeholder="Enter Student ID (e.g. S001)"
                   aria-label="Student ID"
-                  className="w-full bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg px-3 py-2 text-xs text-[#26231F] placeholder-[#A0988F] focus:outline-none focus:border-[#C66A43] font-mono"
+                  className="w-full bg-cv-inset border border-cv-line rounded-lg px-3 py-2 text-xs text-cv-fg placeholder-cv-fg-3 focus:outline-none focus:border-cv-accent-line font-mono"
                 />
               </div>
             )}
@@ -256,12 +256,12 @@ export function NewRequestPanel({
           <div className="flex items-center justify-between mb-1.5">
             <label
               htmlFor="axora-goal-input"
-              className="block text-xs font-mono font-medium text-[#26231F]"
+              className="block text-xs font-mono font-medium text-cv-fg"
             >
               2. STUDENT GOAL IN NATURAL LANGUAGE OR SIMULATION DIRECTIVE
             </label>
             {isSimulationDirective && (
-              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#B77932]/10 border border-[#B77932]/30 text-[#B77932]">
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-cv-warning-solid/10 border border-cv-warning/30 text-cv-warning">
                 <Terminal className="h-2.5 w-2.5" />
                 <span>FAULT INJECTION ACTIVE</span>
               </span>
@@ -276,7 +276,7 @@ export function NewRequestPanel({
               onChange={(e) => setGoalText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Describe what the student wants the campus assistant to accomplish..."
-              className="w-full bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg p-3.5 text-xs text-[#26231F] placeholder-[#A0988F] focus:outline-none focus:border-[#C66A43] font-mono transition resize-none leading-relaxed"
+              className="w-full bg-cv-inset border border-cv-line rounded-lg p-3.5 text-xs text-cv-fg placeholder-cv-fg-3 focus:outline-none focus:border-cv-accent-line font-mono transition resize-none leading-relaxed"
             />
           </div>
         </div>
@@ -284,10 +284,10 @@ export function NewRequestPanel({
         {/* Step 3: Testing Presets & Failure Simulations */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-[11px] font-mono font-medium text-[#26231F]">
+            <span className="block text-[11px] font-mono font-medium text-cv-fg">
               TESTING PRESETS &amp; SIMULATIONS:
             </span>
-            <span className="text-[10px] font-mono text-[#A0988F]">
+            <span className="text-[10px] font-mono text-cv-fg-3">
               {PRESET_GOALS.length} verified scenarios
             </span>
           </div>
@@ -302,30 +302,30 @@ export function NewRequestPanel({
                   onClick={() => handleApplyPreset(preset)}
                   className={`p-2.5 rounded-lg text-left text-[11px] border transition group cursor-pointer ${
                     isPresetActive
-                      ? "bg-[#F5E7DE] border-[#C66A43] text-[#26231F] shadow-xs"
-                      : "bg-[#FAF7F2] hover:bg-[#F0ECE5] border-[#E8E2D9] hover:border-[#C66A43]/40"
+                      ? "bg-cv-accent-soft border-cv-accent-line text-cv-fg shadow-xs"
+                      : "bg-cv-inset hover:bg-cv-raised border-cv-line hover:border-cv-accent-line/40"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center space-x-1.5 font-medium text-[#26231F] min-w-0">
+                    <div className="flex items-center space-x-1.5 font-medium text-cv-fg min-w-0">
                       <span
                         className={`h-2 w-2 rounded-full shrink-0 ${
                           preset.type === "nominal"
-                            ? "bg-[#287A53]"
+                            ? "bg-cv-success-solid"
                             : preset.type === "recoverable"
-                            ? "bg-[#C66A43]"
+                            ? "bg-cv-accent"
                             : preset.type === "ineligible"
-                            ? "bg-[#B77932]"
-                            : "bg-[#C44E45]"
+                            ? "bg-cv-warning-solid"
+                            : "bg-cv-error-solid"
                         }`}
                       />
                       <span className="truncate">{preset.label}</span>
                     </div>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] shrink-0">
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cv-surface border border-cv-line text-cv-fg-2 shrink-0">
                       {preset.studentId}
                     </span>
                   </div>
-                  <p className="text-[10px] text-[#77716A] mt-1 line-clamp-1">
+                  <p className="text-[10px] text-cv-fg-2 mt-1 line-clamp-1">
                     {preset.description}
                   </p>
                 </button>
@@ -338,7 +338,7 @@ export function NewRequestPanel({
         {error && (
           <div
             role="alert"
-            className="flex items-start space-x-2.5 p-3 rounded-lg bg-[#C44E45]/10 border border-[#C44E45]/30 text-[#C44E45] text-xs"
+            className="flex items-start space-x-2.5 p-3 rounded-lg bg-cv-error-solid/10 border border-cv-error/30 text-cv-error text-xs"
           >
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -351,10 +351,10 @@ export function NewRequestPanel({
         )}
 
         {/* Submit Bar */}
-        <div className="pt-2 border-t border-[#E8E2D9] flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[11px] text-[#77716A] font-mono">
+        <div className="pt-2 border-t border-cv-line flex flex-wrap items-center justify-between gap-3">
+          <span className="text-[11px] text-cv-fg-2 font-mono">
             Press{" "}
-            <kbd className="px-1.5 py-0.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[#26231F]">
+            <kbd className="px-1.5 py-0.5 rounded bg-cv-inset border border-cv-line text-cv-fg">
               Ctrl+Enter
             </kbd>{" "}
             to launch
@@ -362,7 +362,7 @@ export function NewRequestPanel({
           <button
             type="submit"
             disabled={isLoading || !goalText.trim() || !selectedStudentId.trim()}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold bg-[#C66A43] hover:bg-[#AD5735] text-white shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {isLoading ? (
               <>

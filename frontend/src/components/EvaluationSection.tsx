@@ -19,6 +19,7 @@ import {
   WorkflowSessionSummary,
 } from "../types/api";
 import { PRESET_GOALS } from "./NewRequestPanel";
+import { useTheme } from "../context/ThemeContext";
 
 interface EvaluationSectionProps {
   state: AgentState | null;
@@ -41,6 +42,9 @@ export function EvaluationSection({
   onRunScenario,
   isLoading = false,
 }: EvaluationSectionProps) {
+  const { experienceMode } = useTheme();
+  const isSimple = experienceMode === "simple";
+
   const completedCount =
     state?.completed_tasks.length ?? result?.completed_tasks.length ?? 0;
   const failedCount =
@@ -73,100 +77,126 @@ export function EvaluationSection({
   ).length;
 
   return (
-    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-2xl p-5 space-y-5 shadow-xs select-none">
+    <div className="bg-cv-surface border border-cv-line rounded-2xl p-5 space-y-5 shadow-xs select-none">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#E8E2D9]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-cv-line">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43]">
+          <div className="p-2 rounded-xl bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink">
             <BarChart3 className="h-4 w-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-[#26231F]">
-              Operational Telemetry &amp; <span className="text-[#C66A43]">Evaluation</span>
+            <h2 className="text-sm font-semibold tracking-tight text-cv-fg">
+              {isSimple ? (
+                <>System Performance &amp; <span className="text-cv-accent-ink">Reliability</span></>
+              ) : (
+                <>Operational Telemetry &amp; <span className="text-cv-accent-ink">Evaluation</span></>
+              )}
             </h2>
-            <p className="text-xs text-[#77716A] mt-0.5">
-              Live execution metrics computed from verified backend trace data
+            <p className="text-xs text-cv-fg-2 mt-0.5">
+              {isSimple
+                ? "Real-time health, response times, and automated recovery statistics"
+                : "Live execution metrics computed from verified backend trace data"}
             </p>
           </div>
         </div>
-        <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#77716A]">
-          Empirical Telemetry
+        <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
+          {isSimple ? "Live Health & Performance" : "Empirical Telemetry"}
         </span>
       </div>
 
       {/* Real Computed Telemetry Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9]">
-          <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
-            Task Completion Rate
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line">
+          <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
+            {isSimple ? "Request Success Rate" : "Task Completion Rate"}
           </span>
           <div className="flex items-baseline space-x-1.5 mt-1.5">
-            <span className="text-xl font-bold font-mono text-[#287A53]">
+            <span className="text-xl font-bold font-mono text-cv-success">
               {completionRate}%
             </span>
-            <span className="text-[10px] text-[#77716A] font-mono">
+            <span className="text-[10px] text-cv-fg-2 font-mono">
               ({completedCount}/{totalTasks})
             </span>
           </div>
-          <div className="mt-2 text-[10px] text-[#77716A]">
+          <div className="mt-2 text-[10px] text-cv-fg-2">
             {failedCount > 0 ? (
-              <span className="text-[#C44E45]">{failedCount} task(s) failed</span>
+              <span className="text-cv-error">
+                {isSimple ? `${failedCount} step(s) had issues` : `${failedCount} task(s) failed`}
+              </span>
             ) : (
-              <span>0 failed tasks</span>
+              <span>{isSimple ? "All steps successful" : "0 failed tasks"}</span>
             )}
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9]">
-          <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
-            Replanning Events
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line">
+          <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
+            {isSimple ? "Automatic Recovery" : "Replanning Events"}
           </span>
           <div className="flex items-baseline space-x-1.5 mt-1.5">
-            <span className="text-xl font-bold font-mono text-[#C66A43]">
+            <span className="text-xl font-bold font-mono text-cv-accent-ink">
               {replanCount}
             </span>
-            <span className="text-[10px] text-[#77716A]">self-heals</span>
+            <span className="text-[10px] text-cv-fg-2">
+              {isSimple ? "auto-fixes" : "self-heals"}
+            </span>
           </div>
-          <div className="mt-2 text-[10px] text-[#77716A]">
+          <div className="mt-2 text-[10px] text-cv-fg-2">
             <span>
-              Observer: {recoverableObsCount} recoverable / {nonRecoverableObsCount} fatal
+              {isSimple
+                ? `Auto-resolved: ${recoverableObsCount} of ${recoverableObsCount + nonRecoverableObsCount} issues`
+                : `Observer: ${recoverableObsCount} recoverable / ${nonRecoverableObsCount} fatal`}
             </span>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9]">
-          <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
-            Human Interventions
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line">
+          <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
+            {isSimple ? "Secure Approvals" : "Human Interventions"}
           </span>
           <div className="flex items-baseline space-x-1.5 mt-1.5">
-            <span className="text-xl font-bold font-mono text-[#B77932]">
+            <span className="text-xl font-bold font-mono text-cv-warning">
               {humanCount}
             </span>
-            <span className="text-[10px] text-[#77716A]">gate(s)</span>
+            <span className="text-[10px] text-cv-fg-2">
+              {isSimple ? "check(s)" : "gate(s)"}
+            </span>
           </div>
-          <div className="mt-2 text-[10px] text-[#77716A]">
-            <span>Decision: {state?.human_approval_status || "NONE"}</span>
+          <div className="mt-2 text-[10px] text-cv-fg-2">
+            <span>
+              {isSimple
+                ? state?.human_approval_status === "APPROVED"
+                  ? "Approved by student"
+                  : state?.human_approval_status === "REJECTED"
+                  ? "Cancelled by student"
+                  : state?.human_approval_required
+                  ? "Needs your review"
+                  : "None required"
+                : `Decision: ${state?.human_approval_status || "NONE"}`}
+            </span>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9]">
-          <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
-            Latency &amp; Trace Audit
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line">
+          <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
+            {isSimple ? "Response Speed & Health" : "Latency & Trace Audit"}
           </span>
           <div className="flex items-center space-x-2 mt-2">
-            <span className="text-xs font-mono text-[#26231F] flex items-center space-x-1">
-              <Clock className="h-3.5 w-3.5 text-[#C66A43]" />
+            <span className="text-xs font-mono text-cv-fg flex items-center space-x-1">
+              <Clock className="h-3.5 w-3.5 text-cv-accent-ink" />
               <span>{runtime > 0 ? `${runtime}s` : "Pending"}</span>
             </span>
-            <span className="text-[#E8E2D9]">&bull;</span>
-            <div className="flex items-center space-x-1 text-xs text-[#287A53] font-semibold">
+            <span className="text-cv-line">&bull;</span>
+            <div className="flex items-center space-x-1 text-xs text-cv-success font-semibold">
               <ShieldCheck className="h-3.5 w-3.5" />
-              <span>{isMonotonic ? "Strict" : "Pending"}</span>
+              <span>{isMonotonic ? (isSimple ? "Healthy" : "Strict") : "Pending"}</span>
             </div>
           </div>
-          <div className="mt-2 text-[10px] text-[#77716A]">
+          <div className="mt-2 text-[10px] text-cv-fg-2">
             <span>
-              {traces.length} trace events &bull; {successObsCount} success obs
+              {isSimple
+                ? `${traces.length} steps recorded • ${successObsCount} completed`
+                : `${traces.length} trace events • ${successObsCount} success obs`}
             </span>
           </div>
         </div>
@@ -176,29 +206,32 @@ export function EvaluationSection({
       {sessionSummaries.length > 0 && (
         <div className="pt-2">
           <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-xs uppercase tracking-wider font-semibold text-[#26231F]">
-              Recorded Session <span className="text-[#C66A43]">Workflow</span> Ledger ({sessionSummaries.length} run
-              {sessionSummaries.length === 1 ? "" : "s"})
+            <h3 className="text-xs uppercase tracking-wider font-semibold text-cv-fg">
+              {isSimple ? (
+                <>Recent Service <span className="text-cv-accent-ink">Requests</span> History ({sessionSummaries.length} run{sessionSummaries.length === 1 ? "" : "s"})</>
+              ) : (
+                <>Recorded Session <span className="text-cv-accent-ink">Workflow</span> Ledger ({sessionSummaries.length} run{sessionSummaries.length === 1 ? "" : "s"})</>
+              )}
             </h3>
-            <span className="text-[10px] text-[#77716A]">
-              Click any run to inspect its plan and trace
+            <span className="text-[10px] text-cv-fg-2">
+              {isSimple ? "Select any request to view details" : "Click any run to inspect its plan and trace"}
             </span>
           </div>
-          <div className="overflow-x-auto rounded-xl border border-[#E8E2D9] bg-[#FFFFFF]">
+          <div className="overflow-x-auto rounded-xl border border-cv-line bg-cv-surface">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF7F2] text-[10px] uppercase text-[#77716A] border-b border-[#E8E2D9]">
+              <thead className="bg-cv-inset text-[10px] uppercase text-cv-fg-2 border-b border-cv-line">
                 <tr>
                   <th className="py-2.5 px-3">Req ID</th>
                   <th className="py-2.5 px-3">Student</th>
-                  <th className="py-2.5 px-3">Goal / Directive</th>
+                  <th className="py-2.5 px-3">{isSimple ? "Request Description" : "Goal / Directive"}</th>
                   <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Tasks</th>
-                  <th className="py-2.5 px-3">Replans</th>
-                  <th className="py-2.5 px-3">Governance</th>
-                  <th className="py-2.5 px-3 text-right">Latency</th>
+                  <th className="py-2.5 px-3">{isSimple ? "Steps" : "Tasks"}</th>
+                  <th className="py-2.5 px-3">{isSimple ? "Auto-Fixes" : "Replans"}</th>
+                  <th className="py-2.5 px-3">{isSimple ? "Approval" : "Governance"}</th>
+                  <th className="py-2.5 px-3 text-right">{isSimple ? "Duration" : "Latency"}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E8E2D9]">
+              <tbody className="divide-y divide-cv-line">
                 {sessionSummaries.map((item) => {
                   const isCurrent = item.request_id === activeRequestId;
                   return (
@@ -207,14 +240,14 @@ export function EvaluationSection({
                       onClick={() => onSelectRequestId?.(item.request_id)}
                       className={`transition cursor-pointer ${
                         isCurrent
-                          ? "bg-[#F5E7DE]/60 text-[#26231F] font-medium"
-                          : "hover:bg-[#FAF7F2] text-[#26231F]"
+                          ? "bg-cv-accent-soft/60 text-cv-fg font-medium"
+                          : "hover:bg-cv-inset text-cv-fg"
                       }`}
                     >
                       <td className="py-2.5 px-3 font-semibold font-mono">
                         #{item.request_id}
                       </td>
-                      <td className="py-2.5 px-3 text-[#C66A43] font-mono">{item.student_id}</td>
+                      <td className="py-2.5 px-3 text-cv-accent-ink font-mono">{item.student_id}</td>
                       <td className="py-2.5 px-3 max-w-[240px] truncate">
                         {item.goal}
                       </td>
@@ -222,12 +255,12 @@ export function EvaluationSection({
                         <span
                           className={`inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium border uppercase ${
                             item.status === "COMPLETED"
-                              ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
+                              ? "bg-cv-success-soft border-cv-success-line text-cv-success"
                               : item.status === "WAITING_FOR_HUMAN"
-                              ? "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932]"
+                              ? "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
                               : item.status === "FAILED"
-                              ? "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
-                              : "bg-[#F5E7DE] border-[#E8CFC1] text-[#C66A43]"
+                              ? "bg-cv-error-soft border-cv-error-line text-cv-error"
+                              : "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink"
                           }`}
                         >
                           {item.status === "COMPLETED" && (
@@ -247,7 +280,7 @@ export function EvaluationSection({
                       </td>
                       <td className="py-2.5 px-3 font-mono">
                         {item.replanning_count > 0 ? (
-                          <span className="inline-flex items-center space-x-1 text-[#C66A43]">
+                          <span className="inline-flex items-center space-x-1 text-cv-accent-ink">
                             <RotateCcw className="h-2.5 w-2.5" />
                             <span>{item.replanning_count}</span>
                           </span>
@@ -272,11 +305,17 @@ export function EvaluationSection({
       {onRunScenario && (
         <div className="pt-1">
           <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-xs uppercase tracking-wider font-semibold text-[#26231F]">
-              Scenario Reliability &amp; <span className="text-[#C66A43]">Verification</span> Matrix
+            <h3 className="text-xs uppercase tracking-wider font-semibold text-cv-fg">
+              {isSimple ? (
+                <>Sample Campus <span className="text-cv-accent-ink">Requests</span></>
+              ) : (
+                <>Scenario Reliability &amp; <span className="text-cv-accent-ink">Verification</span> Matrix</>
+              )}
             </h3>
-            <span className="text-[10px] text-[#77716A]">
-              Execute scenarios against live SQLite backend
+            <span className="text-[10px] text-cv-fg-2">
+              {isSimple
+                ? "Try sample university requests directly"
+                : "Execute scenarios against live SQLite backend"}
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -287,33 +326,33 @@ export function EvaluationSection({
               return (
                 <div
                   key={idx}
-                  className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] flex flex-col justify-between gap-2.5"
+                  className="p-3.5 rounded-xl bg-cv-inset border border-cv-line flex flex-col justify-between gap-2.5"
                 >
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[#26231F] truncate">
+                      <span className="text-xs font-semibold text-cv-fg truncate">
                         {scenario.label}
                       </span>
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] shrink-0">
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cv-surface border border-cv-line text-cv-fg-2 shrink-0">
                         {scenario.badge}
                       </span>
                     </div>
-                    <p className="text-[11px] text-[#77716A] mt-1 leading-relaxed">
+                    <p className="text-[11px] text-cv-fg-2 mt-1 leading-relaxed">
                       {scenario.description}
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-[#E8E2D9] flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-cv-line flex items-center justify-between gap-2">
                     {matchingRun ? (
                       <button
                         type="button"
                         onClick={() => onSelectRequestId?.(matchingRun.request_id)}
-                        className="text-[10px] font-mono text-[#287A53] hover:underline cursor-pointer"
+                        className="text-[10px] font-mono text-cv-success hover:underline cursor-pointer"
                       >
                         Verified: Req #{matchingRun.request_id} ({matchingRun.status})
                       </button>
                     ) : (
-                      <span className="text-[10px] text-[#77716A]">
+                      <span className="text-[10px] text-cv-fg-2">
                         Not yet executed
                       </span>
                     )}
@@ -322,9 +361,9 @@ export function EvaluationSection({
                       type="button"
                       disabled={isLoading}
                       onClick={() => onRunScenario(scenario.studentId, scenario.goal)}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#FFFFFF] hover:bg-[#C66A43] hover:text-[#FFFFFF] border border-[#E8E2D9] text-[10px] font-semibold text-[#26231F] transition disabled:opacity-50 cursor-pointer shrink-0 shadow-xs"
+                      className="group inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cv-surface hover:bg-cv-accent hover:text-cv-on-accent border border-cv-line text-[10px] font-semibold text-cv-fg transition disabled:opacity-50 cursor-pointer shrink-0 shadow-xs"
                     >
-                      <Play className="h-2.5 w-2.5 text-[#C66A43] group-hover:text-[#FFFFFF]" />
+                      <Play className="h-2.5 w-2.5 text-cv-accent-ink group-hover:text-cv-on-accent" />
                       <span>Run</span>
                     </button>
                   </div>
@@ -336,9 +375,9 @@ export function EvaluationSection({
       )}
 
       {/* Phase Roadmap & Transparency Notice */}
-      <div className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] text-xs text-[#77716A] space-y-1">
-        <div className="flex items-center space-x-2 text-[#26231F] font-semibold text-[11px]">
-          <Info className="h-3.5 w-3.5 text-[#C66A43]" />
+      <div className="p-3.5 rounded-xl bg-cv-inset border border-cv-line text-xs text-cv-fg-2 space-y-1">
+        <div className="flex items-center space-x-2 text-cv-fg font-semibold text-[11px]">
+          <Info className="h-3.5 w-3.5 text-cv-accent-ink" />
           <span>
             ROADMAP NOTICE: PHASE 6 BENCHMARKING ENGINE
           </span>

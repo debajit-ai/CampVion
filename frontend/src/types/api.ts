@@ -145,3 +145,53 @@ export interface WorkflowSessionSummary {
   final_message: string;
   updated_at: string;
 }
+
+export type UserRole = "student" | "faculty" | "administrator" | "system_administrator";
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  student_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+  last_login_at?: string | null;
+}
+
+export interface AuthSessionResponse {
+  authenticated: boolean;
+  user: UserProfile;
+  csrf_token: string;
+  expires_at: string;
+  session_token?: string | null;
+}
+
+export interface SignupPayload {
+  full_name: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+  accept_terms: boolean;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+  remember_me?: boolean;
+}
+
+export interface ForgotPasswordResponse {
+  status: string;
+  message: string;
+  email_service_configured: boolean;
+  delivery_mode: string;
+  configuration_notice?: string | null;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  new_password: string;
+  confirm_password: string;
+}
+

@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { TraceItem } from "../types/api";
+import { useTheme } from "../context/ThemeContext";
 
 interface ExecutionTraceProps {
   traces: TraceItem[];
@@ -29,6 +30,8 @@ export function ExecutionTrace({
   searchQuery: controlledSearch,
   onSearchQueryChange,
 }: ExecutionTraceProps) {
+  const { experienceMode } = useTheme();
+  const isSimple = experienceMode === "simple";
   const [filter, setFilter] = useState<string>("ALL");
   const [localSearch, setLocalSearch] = useState<string>("");
   const [expandedTraceIds, setExpandedTraceIds] = useState<Set<number>>(new Set());
@@ -142,18 +145,18 @@ export function ExecutionTrace({
 
   const getEventBadgeColor = (eventType: string, status: string) => {
     if (status === "failure" || eventType.includes("FAILED")) {
-      return "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]";
+      return "bg-cv-error-soft border-cv-error-line text-cv-error";
     }
     if (eventType.includes("HUMAN")) {
-      return "bg-[#FBF3E8] border-[#F0D9BC] text-[#B77932]";
+      return "bg-cv-warning-soft border-cv-warning-line text-cv-warning";
     }
     if (eventType.includes("REPLAN") || eventType.startsWith("TOOL")) {
-      return "bg-[#F5E7DE] border-[#E8CFC1] text-[#C66A43]";
+      return "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink";
     }
     if (eventType.includes("PLAN") || eventType.includes("GOAL")) {
-      return "bg-[#F0ECE5] border-[#E8E2D9] text-[#26231F]";
+      return "bg-cv-raised border-cv-line text-cv-fg";
     }
-    return "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]";
+    return "bg-cv-success-soft border-cv-success-line text-cv-success";
   };
 
   const formatJson = (jsonString: string | null | undefined) => {
@@ -181,29 +184,35 @@ export function ExecutionTrace({
   };
 
   return (
-    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-2xl p-5 shadow-xs select-none">
+    <div className="bg-cv-surface border border-cv-line rounded-2xl p-5 shadow-xs select-none">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#E8E2D9]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-cv-line">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43]">
+          <div className="p-2 rounded-xl bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink">
             <Terminal className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center flex-wrap gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-[#26231F]">
-                Decision <span className="text-[#C66A43]">Trace</span> Audit Log
+              <h2 className="text-sm font-semibold tracking-tight text-cv-fg">
+                {isSimple ? (
+                  <>Activity <span className="text-cv-accent-ink">History</span></>
+                ) : (
+                  <>Decision <span className="text-cv-accent-ink">Trace</span> Audit Log</>
+                )}
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#EAF4EE] border border-[#C8E3D4] text-[#287A53]">
-                Chronological ({traces.length} steps)
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cv-success-soft border border-cv-success-line text-cv-success">
+                {isSimple ? `${traces.length} actions recorded` : `Chronological (${traces.length} steps)`}
               </span>
               {requestId && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#77716A]">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
                   #REQ-{requestId}
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#77716A] mt-0.5">
-              Complete verifiable log of agent reasoning, tool payloads, and observations
+            <p className="text-xs text-cv-fg-2 mt-0.5">
+              {isSimple
+                ? "Step-by-step record of actions taken for your request"
+                : "Complete verifiable log of agent reasoning, tool payloads, and observations"}
             </p>
           </div>
         </div>
@@ -212,21 +221,21 @@ export function ExecutionTrace({
         <div className="flex flex-wrap items-center gap-2">
           {/* Search input */}
           <div className="relative flex items-center">
-            <Search className="h-3.5 w-3.5 text-[#77716A] absolute left-2.5 pointer-events-none" />
+            <Search className="h-3.5 w-3.5 text-cv-fg-2 absolute left-2.5 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter trace..."
-              aria-label="Filter execution trace"
-              className="w-36 sm:w-44 pl-7 pr-6 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#E8E2D9] text-xs font-mono text-[#26231F] placeholder-[#9E978E] focus:outline-none focus:border-[#C66A43]"
+              placeholder={isSimple ? "Search activity..." : "Filter trace..."}
+              aria-label={isSimple ? "Search activity history" : "Filter execution trace"}
+              className="w-36 sm:w-44 pl-7 pr-6 py-1.5 rounded-lg bg-cv-inset border border-cv-line text-xs font-mono text-cv-fg placeholder-cv-fg-3 focus:outline-none focus:border-cv-accent-line"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
                 aria-label="Clear trace filter"
-                className="absolute right-2 text-[#77716A] hover:text-[#26231F] cursor-pointer"
+                className="absolute right-2 text-cv-fg-2 hover:text-cv-fg cursor-pointer"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -234,19 +243,26 @@ export function ExecutionTrace({
           </div>
 
           {/* Category filter pills */}
-          <div className="flex items-center bg-[#FAF7F2] p-1 rounded-lg border border-[#E8E2D9] text-xs font-mono overflow-x-auto">
-            {["ALL", "TOOLS", "PLANNING", "HUMAN", "RECOVERY", "ERRORS"].map((cat) => (
+          <div className="flex items-center bg-cv-inset p-1 rounded-lg border border-cv-line text-xs font-mono overflow-x-auto">
+            {[
+              { id: "ALL", label: isSimple ? "All" : "ALL" },
+              { id: "TOOLS", label: isSimple ? "Services" : "TOOLS" },
+              { id: "PLANNING", label: isSimple ? "Planning" : "PLANNING" },
+              { id: "HUMAN", label: isSimple ? "Approvals" : "HUMAN" },
+              { id: "RECOVERY", label: isSimple ? "Auto-Recovery" : "RECOVERY" },
+              { id: "ERRORS", label: isSimple ? "Issues" : "ERRORS" },
+            ].map((cat) => (
               <button
-                key={cat}
+                key={cat.id}
                 type="button"
-                onClick={() => setFilter(cat)}
+                onClick={() => setFilter(cat.id)}
                 className={`px-2 py-1 rounded transition cursor-pointer ${
-                  filter === cat
-                    ? "bg-[#F5E7DE] text-[#C66A43] font-semibold"
-                    : "text-[#77716A] hover:text-[#26231F]"
+                  filter === cat.id
+                    ? "bg-cv-accent-soft text-cv-accent-ink font-semibold"
+                    : "text-cv-fg-2 hover:text-cv-fg"
                 }`}
               >
-                {cat}
+                {cat.label}
               </button>
             ))}
           </div>
@@ -257,7 +273,7 @@ export function ExecutionTrace({
                 type="button"
                 onClick={handleToggleExpandAll}
                 title={allExpanded ? "Collapse all trace steps" : "Expand all trace steps"}
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] hover:bg-[#FAF7F2] text-xs font-mono text-[#77716A] hover:text-[#26231F] transition cursor-pointer"
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-cv-surface border border-cv-line hover:bg-cv-inset text-xs font-mono text-cv-fg-2 hover:text-cv-fg transition cursor-pointer"
               >
                 {allExpanded ? (
                   <>
@@ -276,7 +292,7 @@ export function ExecutionTrace({
                 type="button"
                 onClick={handleExportAll}
                 title="Download Trace JSON"
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] hover:bg-[#FAF7F2] text-xs font-mono text-[#C66A43] transition cursor-pointer"
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-cv-surface border border-cv-line hover:bg-cv-inset text-xs font-mono text-cv-accent-ink transition cursor-pointer"
               >
                 <Download className="h-3 w-3" />
                 <span className="hidden sm:inline">Export</span>
@@ -288,18 +304,22 @@ export function ExecutionTrace({
 
       {/* Traces List */}
       {traces.length === 0 ? (
-        <div className="py-12 text-center text-[#77716A]">
-          <Clock className="h-8 w-8 mx-auto mb-2.5 text-[#9E978E]" />
-          <p className="text-xs font-mono text-[#26231F]">
-            No traces recorded yet for this session.
+        <div className="py-12 text-center text-cv-fg-2">
+          <Clock className="h-8 w-8 mx-auto mb-2.5 text-cv-fg-3" />
+          <p className="text-xs font-mono text-cv-fg">
+            {isSimple
+              ? "No activity recorded yet for this session."
+              : "No traces recorded yet for this session."}
           </p>
-          <p className="text-[11px] text-[#77716A] mt-1">
-            Launch a workflow to stream chronological execution events in real time.
+          <p className="text-[11px] text-cv-fg-2 mt-1">
+            {isSimple
+              ? "Submit a request to see actions taken in real time."
+              : "Launch a workflow to stream chronological execution events in real time."}
           </p>
         </div>
       ) : filteredTraces.length === 0 ? (
-        <div className="py-10 text-center text-[#77716A]">
-          <p className="text-xs font-mono text-[#26231F]">
+        <div className="py-10 text-center text-cv-fg-2">
+          <p className="text-xs font-mono text-cv-fg">
             No trace events match filter &ldquo;{filter}&rdquo;
             {searchQuery ? ` and query "${searchQuery}"` : ""}.
           </p>
@@ -309,7 +329,7 @@ export function ExecutionTrace({
               setFilter("ALL");
               setSearchQuery("");
             }}
-            className="mt-2 px-3 py-1 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-xs font-mono text-[#C66A43] hover:underline cursor-pointer"
+            className="mt-2 px-3 py-1 rounded bg-cv-inset border border-cv-line text-xs font-mono text-cv-accent-ink hover:underline cursor-pointer"
           >
             Reset Filters
           </button>
@@ -326,7 +346,7 @@ export function ExecutionTrace({
             return (
               <div
                 key={trace.id}
-                className="rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] hover:border-[#C66A43]/40 transition overflow-hidden"
+                className="rounded-xl border border-cv-line bg-cv-inset hover:border-cv-accent-line/40 transition overflow-hidden"
               >
                 {/* Trace header row */}
                 <div
@@ -343,7 +363,7 @@ export function ExecutionTrace({
                   className="p-3 flex items-center justify-between gap-2 cursor-pointer select-none text-xs font-mono"
                 >
                   <div className="flex items-center space-x-2.5 min-w-0">
-                    <span className="text-[11px] font-bold text-[#26231F] bg-[#FFFFFF] border border-[#E8E2D9] px-1.5 py-0.5 rounded shrink-0">
+                    <span className="text-[11px] font-bold text-cv-fg bg-cv-surface border border-cv-line px-1.5 py-0.5 rounded shrink-0">
                       #{trace.step_number}
                     </span>
 
@@ -353,18 +373,18 @@ export function ExecutionTrace({
                       {trace.event_type}
                     </span>
 
-                    <span className="text-[10px] text-[#77716A] px-1.5 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] shrink-0">
+                    <span className="text-[10px] text-cv-fg-2 px-1.5 py-0.5 rounded bg-cv-surface border border-cv-line shrink-0">
                       {trace.component} &rsaquo; {trace.action}
                     </span>
 
                     {trace.error_message && (
-                      <span className="text-[11px] text-[#C44E45] font-sans truncate">
+                      <span className="text-[11px] text-cv-error font-sans truncate">
                         &mdash; {trace.error_message}
                       </span>
                     )}
 
                     {inlinePreview && (
-                      <span className="text-[11px] text-[#77716A] truncate hidden lg:inline font-sans">
+                      <span className="text-[11px] text-cv-fg-2 truncate hidden lg:inline font-sans">
                         &mdash; {inlinePreview}
                       </span>
                     )}
@@ -374,34 +394,34 @@ export function ExecutionTrace({
                     <span
                       className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
                         trace.status === "success"
-                          ? "text-[#287A53] bg-[#EAF4EE] border-[#C8E3D4]"
+                          ? "text-cv-success bg-cv-success-soft border-cv-success-line"
                           : trace.status === "failure"
-                          ? "text-[#C44E45] bg-[#FBEDED] border-[#F3CBC7]"
-                          : "text-[#B77932] bg-[#FBF3E8] border-[#F0D9BC]"
+                          ? "text-cv-error bg-cv-error-soft border-cv-error-line"
+                          : "text-cv-warning bg-cv-warning-soft border-cv-warning-line"
                       }`}
                     >
                       {trace.status}
                     </span>
-                    <span className="text-[10px] text-[#77716A] hidden md:inline">
+                    <span className="text-[10px] text-cv-fg-2 hidden md:inline">
                       {new Date(trace.timestamp).toLocaleTimeString()}
                     </span>
                     {isExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-[#77716A]" />
+                      <ChevronDown className="h-3.5 w-3.5 text-cv-fg-2" />
                     ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-[#77716A]" />
+                      <ChevronRight className="h-3.5 w-3.5 text-cv-fg-2" />
                     )}
                   </div>
                 </div>
 
                 {/* Expanded Trace Inspector */}
                 {isExpanded && (
-                  <div className="px-4 pb-3.5 pt-2.5 border-t border-[#E8E2D9] bg-[#FFFFFF] text-xs font-mono space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[#77716A] text-[11px]">
+                  <div className="px-4 pb-3.5 pt-2.5 border-t border-cv-line bg-cv-surface text-xs font-mono space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-cv-fg-2 text-[11px]">
                       <span>TIMESTAMP: {trace.timestamp}</span>
                       <button
                         type="button"
                         onClick={() => handleCopyJson(trace)}
-                        className="flex items-center space-x-1 text-[#C66A43] hover:underline transition cursor-pointer"
+                        className="flex items-center space-x-1 text-cv-accent-ink hover:underline transition cursor-pointer"
                       >
                         <Copy className="h-3 w-3" />
                         <span>{copiedId === trace.id ? "Copied!" : "Copy Step JSON"}</span>
@@ -409,7 +429,7 @@ export function ExecutionTrace({
                     </div>
 
                     {trace.error_message && (
-                      <div className="p-2.5 rounded bg-[#FBEDED] border border-[#F3CBC7] text-[#C44E45] text-xs font-mono flex items-start space-x-2">
+                      <div className="p-2.5 rounded bg-cv-error-soft border border-cv-error-line text-cv-error text-xs font-mono flex items-start space-x-2">
                         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                         <div>
                           <span className="font-bold block uppercase text-[10px]">
@@ -422,10 +442,10 @@ export function ExecutionTrace({
 
                     {formattedInput && (
                       <div>
-                        <span className="text-[#77716A] text-[10px] uppercase font-bold block mb-1">
+                        <span className="text-cv-fg-2 text-[10px] uppercase font-bold block mb-1">
                           Input Arguments Payload:
                         </span>
-                        <pre className="p-2.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[11px] text-[#26231F] overflow-x-auto">
+                        <pre className="p-2.5 rounded bg-cv-inset border border-cv-line text-[11px] text-cv-fg overflow-x-auto">
                           {formattedInput}
                         </pre>
                       </div>
@@ -433,10 +453,10 @@ export function ExecutionTrace({
 
                     {formattedOutput && (
                       <div>
-                        <span className="text-[#77716A] text-[10px] uppercase font-bold block mb-1">
+                        <span className="text-cv-fg-2 text-[10px] uppercase font-bold block mb-1">
                           Output / Observation Payload:
                         </span>
-                        <pre className="p-2.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[11px] text-[#287A53] overflow-x-auto">
+                        <pre className="p-2.5 rounded bg-cv-inset border border-cv-line text-[11px] text-cv-success overflow-x-auto">
                           {formattedOutput}
                         </pre>
                       </div>

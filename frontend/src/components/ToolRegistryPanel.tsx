@@ -18,6 +18,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { AgentState, HealthResponse, ToolSchema, TraceItem } from "../types/api";
+import { useTheme } from "../context/ThemeContext";
+import { getFriendlyToolName } from "../utils/language";
 
 interface ToolRegistryPanelProps {
   tools: ToolSchema[];
@@ -42,6 +44,7 @@ export function ToolRegistryPanel({
   onRefreshHealth,
   onInspectToolInTrace,
 }: ToolRegistryPanelProps) {
+  const { experienceMode } = useTheme();
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
 
@@ -81,35 +84,41 @@ export function ToolRegistryPanel({
   );
 
   return (
-    <div className="bg-[#FFFFFF] border border-[#E8E2D9] rounded-2xl p-5 space-y-5 shadow-xs select-none">
+    <div className="bg-cv-surface border border-cv-line rounded-2xl p-5 space-y-5 shadow-xs select-none">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#E8E2D9]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-cv-line">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43]">
+          <div className="p-2 rounded-xl bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink">
             <Wrench className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center flex-wrap gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-[#26231F]">
-                Tool Registry &amp; <span className="text-[#C66A43]">System Status</span>
+              <h2 className="text-sm font-semibold tracking-tight text-cv-fg">
+                {experienceMode === "simple" ? (
+                  <>Campus <span className="text-cv-accent-ink">Services</span> &amp; Capabilities</>
+                ) : (
+                  <>Tool Registry &amp; <span className="text-cv-accent-ink">System Status</span></>
+                )}
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F0ECE5] border border-[#E8E2D9] text-[#77716A]">
-                {tools.length} Registered Tools
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
+                {tools.length} {experienceMode === "simple" ? "Campus Services" : "Registered Tools"}
               </span>
               {executedToolsMap.size > 0 && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#EAF4EE] border border-[#C8E3D4] text-[#287A53]">
-                  {executedToolsMap.size} Executed in Active Run
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cv-success-soft border border-cv-success-line text-cv-success">
+                  {executedToolsMap.size} Used in Current Request
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#77716A] mt-0.5">
-              Deterministic campus tool schemas, policy governance gates, and backend connectivity status
+            <p className="text-xs text-cv-fg-2 mt-0.5">
+              {experienceMode === "simple"
+                ? "The university services and systems CampVion coordinates to complete student workflows"
+                : "Deterministic campus tool schemas, policy governance gates, and backend connectivity status"}
             </p>
           </div>
         </div>
 
         {/* Category Filter */}
-        <div className="flex items-center bg-[#FAF7F2] p-1 rounded-lg border border-[#E8E2D9] text-xs font-mono overflow-x-auto">
+        <div className="flex items-center bg-cv-inset p-1 rounded-lg border border-cv-line text-xs font-mono overflow-x-auto">
           {categories.map((cat) => (
             <button
               key={cat}
@@ -117,8 +126,8 @@ export function ToolRegistryPanel({
               onClick={() => setCategoryFilter(cat)}
               className={`px-2.5 py-1 rounded uppercase transition cursor-pointer ${
                 categoryFilter === cat
-                  ? "bg-[#F5E7DE] text-[#C66A43] font-semibold"
-                  : "text-[#77716A] hover:text-[#26231F]"
+                  ? "bg-cv-accent-soft text-cv-accent-ink font-semibold"
+                  : "text-cv-fg-2 hover:text-cv-fg"
               }`}
             >
               {cat}
@@ -129,13 +138,13 @@ export function ToolRegistryPanel({
 
       {/* System Status & Backend Connectivity Strip */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div
               className={`p-2 rounded-xl border ${
                 isOnline
-                  ? "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
-                  : "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
+                  ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                  : "bg-cv-error-soft border-cv-error-line text-cv-error"
               }`}
             >
               {isOnline ? (
@@ -145,10 +154,10 @@ export function ToolRegistryPanel({
               )}
             </div>
             <div>
-              <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
+              <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
                 Backend Connectivity
               </span>
-              <span className="text-xs font-semibold text-[#26231F]">
+              <span className="text-xs font-semibold text-cv-fg">
                 {isOnline
                   ? `${(health?.service || "CampVion Backend").replace(/AXORA/gi, "CampVion")} (${health?.status})`
                   : "Unreachable / Offline"}
@@ -159,44 +168,44 @@ export function ToolRegistryPanel({
             type="button"
             onClick={onRefreshHealth}
             disabled={healthLoading}
-            className="p-1.5 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A] hover:text-[#C66A43] transition cursor-pointer"
+            className="p-1.5 rounded-lg bg-cv-surface border border-cv-line text-cv-fg-2 hover:text-cv-accent-ink transition cursor-pointer"
             title="Refresh backend status"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${healthLoading ? "animate-spin text-[#C66A43]" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${healthLoading ? "animate-spin text-cv-accent-ink" : ""}`} />
           </button>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line flex items-center justify-between">
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="p-2 rounded-xl bg-[#F5E7DE] border border-[#E8CFC1] text-[#C66A43] shrink-0">
+            <div className="p-2 rounded-xl bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink shrink-0">
               <Database className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
+              <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
                 API Endpoint &amp; Ping
               </span>
-              <span className="text-xs font-mono text-[#26231F] truncate block">
+              <span className="text-xs font-mono text-cv-fg truncate block">
                 {apiBaseUrl}
               </span>
             </div>
           </div>
           {typeof healthLatencyMs === "number" && healthLatencyMs >= 0 && (
-            <span className="text-xs font-mono px-2 py-0.5 rounded bg-[#EAF4EE] border border-[#C8E3D4] text-[#287A53] shrink-0">
+            <span className="text-xs font-mono px-2 py-0.5 rounded bg-cv-success-soft border border-cv-success-line text-cv-success shrink-0">
               {healthLatencyMs}ms
             </span>
           )}
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-cv-inset border border-cv-line flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-[#F0ECE5] border border-[#E8E2D9] text-[#26231F]">
+            <div className="p-2 rounded-xl bg-cv-raised border border-cv-line text-cv-fg">
               <BookOpen className="h-4 w-4" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-semibold text-[#77716A] block">
+              <span className="text-[10px] uppercase font-semibold text-cv-fg-2 block">
                 OpenAPI Specification
               </span>
-              <span className="text-xs font-medium text-[#26231F]">
+              <span className="text-xs font-medium text-cv-fg">
                 FastAPI Swagger Docs ({health?.version || "0.1.0"})
               </span>
             </div>
@@ -205,7 +214,7 @@ export function ToolRegistryPanel({
             href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E8E2D9] hover:bg-[#FAF7F2] text-xs font-medium text-[#26231F] hover:text-[#C66A43] transition shadow-xs"
+            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-cv-surface border border-cv-line hover:bg-cv-inset text-xs font-medium text-cv-fg hover:text-cv-accent-ink transition shadow-xs"
           >
             <span>Open</span>
             <ExternalLink className="h-3 w-3" />
@@ -215,7 +224,7 @@ export function ToolRegistryPanel({
 
       {/* Registered Tools Grid */}
       {filteredTools.length === 0 ? (
-        <div className="py-8 text-center text-xs text-[#77716A]">
+        <div className="py-8 text-center text-xs text-cv-fg-2">
           No registered tools loaded. Ensure the backend service is online.
         </div>
       ) : (
@@ -239,9 +248,9 @@ export function ToolRegistryPanel({
                 className={`rounded-xl border transition-all ${
                   isExecuted
                     ? executionInfo?.status === "FAILED"
-                      ? "bg-[#FBEDED]/35 border-[#F3CBC7]"
-                      : "bg-[#EAF4EE]/35 border-[#C8E3D4]"
-                    : "bg-[#FAF7F2] border-[#E8E2D9]"
+                      ? "bg-cv-error-soft/35 border-cv-error-line"
+                      : "bg-cv-success-soft/35 border-cv-success-line"
+                    : "bg-cv-inset border-cv-line"
                 }`}
               >
                 <div
@@ -259,26 +268,31 @@ export function ToolRegistryPanel({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center flex-wrap gap-2">
-                      <span className="font-mono text-xs font-semibold text-[#26231F]">
-                        {tool.name}
+                      <span className="font-semibold text-xs text-cv-fg">
+                        {experienceMode === "simple" ? getFriendlyToolName(tool.name) : tool.name}
                       </span>
-                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#F0ECE5] text-[#77716A]">
+                      {experienceMode === "simple" && (
+                        <span className="font-mono text-[10px] text-cv-fg-2 px-1.5 py-0.2 rounded bg-cv-surface border border-cv-line">
+                          {tool.name}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-cv-raised text-cv-fg-2">
                         {tool.category}
                       </span>
                       {tool.requires_human_approval ? (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#FBF3E8] border border-[#F0D9BC] text-[#B77932]">
+                        <span className="inline-flex items-center space-x-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-cv-warning-soft border border-cv-warning-line text-cv-warning">
                           <ShieldAlert className="h-2.5 w-2.5" />
-                          <span>Human Approval Gate</span>
+                          <span>Approval Required</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#EAF4EE] border border-[#C8E3D4] text-[#287A53]">
-                          <ShieldCheck className="h-2.5 w-2.5 text-[#287A53]" />
-                          <span>Autonomous</span>
+                        <span className="inline-flex items-center space-x-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-cv-success-soft border border-cv-success-line text-cv-success">
+                          <ShieldCheck className="h-2.5 w-2.5 text-cv-success" />
+                          <span>{experienceMode === "simple" ? "Automated" : "Autonomous"}</span>
                         </span>
                       )}
                     </div>
 
-                    <p className="text-xs text-[#77716A] mt-1.5 leading-relaxed">{tool.description}</p>
+                    <p className="text-xs text-cv-fg-2 mt-1.5 leading-relaxed">{tool.description}</p>
 
                     {/* Registered vs Executed status row */}
                     <div className="mt-2.5 flex items-center flex-wrap gap-2 text-[10px]">
@@ -286,8 +300,8 @@ export function ToolRegistryPanel({
                         <span
                           className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded border font-medium ${
                             executionInfo?.status === "FAILED"
-                              ? "bg-[#FBEDED] border-[#F3CBC7] text-[#C44E45]"
-                              : "bg-[#EAF4EE] border-[#C8E3D4] text-[#287A53]"
+                              ? "bg-cv-error-soft border-cv-error-line text-cv-error"
+                              : "bg-cv-success-soft border-cv-success-line text-cv-success"
                           }`}
                         >
                           {executionInfo?.status === "FAILED" ? (
@@ -302,20 +316,20 @@ export function ToolRegistryPanel({
                           </span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded bg-[#FFFFFF] border border-[#E8E2D9] text-[#77716A]">
+                        <span className="px-2 py-0.5 rounded bg-cv-surface border border-cv-line text-cv-fg-2">
                           Registered Catalog Tool (Idle in Current Run)
                         </span>
                       )}
 
                       {toolTraceCount > 0 && (
-                        <span className="text-[#77716A]">
+                        <span className="text-cv-fg-2">
                           {toolTraceCount} trace event(s)
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-1 text-[#77716A] shrink-0 mt-0.5">
+                  <div className="flex items-center space-x-1 text-cv-fg-2 shrink-0 mt-0.5">
                     <Code2 className="h-3.5 w-3.5" />
                     {isExpanded ? (
                       <ChevronDown className="h-4 w-4" />
@@ -327,22 +341,22 @@ export function ToolRegistryPanel({
 
                 {/* Expanded Schema Inspector */}
                 {isExpanded && (
-                  <div className="px-4 pb-3.5 pt-2.5 border-t border-[#E8E2D9] bg-[#FFFFFF] text-xs font-mono space-y-2 rounded-b-xl">
+                  <div className="px-4 pb-3.5 pt-2.5 border-t border-cv-line bg-cv-surface text-xs font-mono space-y-2 rounded-b-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase text-[#77716A]">
+                      <span className="text-[10px] uppercase text-cv-fg-2">
                         JSON Input Schema Contract:
                       </span>
                       {isExecuted && onInspectToolInTrace && (
                         <button
                           type="button"
                           onClick={() => onInspectToolInTrace(tool.name)}
-                          className="text-[11px] text-[#C66A43] hover:underline cursor-pointer"
+                          className="text-[11px] text-cv-accent-ink hover:underline cursor-pointer"
                         >
                           Filter Trace by {tool.name} &rarr;
                         </button>
                       )}
                     </div>
-                    <pre className="p-2.5 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[11px] text-[#26231F] overflow-x-auto">
+                    <pre className="p-2.5 rounded bg-cv-inset border border-cv-line text-[11px] text-cv-fg overflow-x-auto">
                       {JSON.stringify(tool.input_schema, null, 2)}
                     </pre>
                   </div>

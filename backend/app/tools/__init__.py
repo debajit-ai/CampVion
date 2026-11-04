@@ -6,10 +6,18 @@ from app.tools.campus_tools import (
     GetLeavePolicyTool,
     CheckLeaveEligibilityTool,
     CreateLeaveApplicationTool,
-    GetLeaveApplicationStatusTool
+    GetLeaveApplicationStatusTool,
+    GetStudentAcademicSummaryTool,
+    GetHostelStatusTool,
+    SubmitHostelServiceRequestTool,
+    GetFeeStatusTool,
+    CreateSupportTicketTool,
+    QueryCampusPolicyTool,
+    GetExaminationScheduleTool,
 )
 
 def register_all_tools():
+    # Core existing tools
     registry.register(GetStudentProfileTool())
     registry.register(GetAttendanceTool())
     registry.register(GetCourseScheduleTool())
@@ -17,5 +25,14 @@ def register_all_tools():
     registry.register(CheckLeaveEligibilityTool())
     registry.register(CreateLeaveApplicationTool())
     registry.register(GetLeaveApplicationStatusTool())
+
+    # Extended operational campus tools
+    registry.register(GetStudentAcademicSummaryTool())
+    registry.register(GetHostelStatusTool())
+    registry.register(SubmitHostelServiceRequestTool())
+    registry.register(GetFeeStatusTool())
+    registry.register(CreateSupportTicketTool())
+    registry.register(QueryCampusPolicyTool())
+    registry.register(GetExaminationScheduleTool())
 
 register_all_tools()

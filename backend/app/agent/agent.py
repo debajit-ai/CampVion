@@ -160,10 +160,22 @@ class AXORAAgent:
                 kwargs = {}
                 if "student_id" in tool.input_schema.get("properties", {}):
                     kwargs["student_id"] = state.student_id
-                if tool_name == "create_leave_application":
+
+                if tool_name in ["create_leave_application", "check_leave_eligibility"]:
                     params = state.normalized_goal.get("parameters", {}) if state.normalized_goal else {}
-                    kwargs["reason"] = params.get("reason", "personal leave")
-                    kwargs["days"] = params.get("days", 1)
+                    reason = params.get("reason", "personal leave")
+                    days = params.get("days", 1)
+                    category = params.get("category", "personal")
+                    if "reason" in tool.input_schema.get("properties", {}):
+                        kwargs["reason"] = reason
+                    if "days" in tool.input_schema.get("properties", {}):
+                        kwargs["days"] = days
+                    if "category" in tool.input_schema.get("properties", {}):
+                        kwargs["category"] = category
+
+                if tool_name == "create_leave_application":
+                    kwargs["request_id"] = state.request_id
+                    kwargs["human_approved"] = (state.human_approval_status == "APPROVED")
                 
                 state.current_step += 1
                 self._log_trace(state.request_id, state.current_step, "TOOL_STARTED", "executor", "execute", "pending", input_data=json.dumps(kwargs))
@@ -195,6 +207,10 @@ class AXORAAgent:
                         state.current_step += 1
                         self._log_trace(state.request_id, state.current_step, "TOOL_COMPLETED", "executor", "execute", "success", output_data=json.dumps(result))
                     except Exception as e:
+                        try:
+                            self.db.rollback()
+                        except Exception:
+                            pass
                         result = {"error": str(e)}
                         state.current_step += 1
                         self._log_trace(state.request_id, state.current_step, "TOOL_FAILED", "executor", "execute", "failure", error_message=str(e))

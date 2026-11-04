@@ -1,9 +1,16 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
+export type ExperienceMode = "simple" | "advanced";
 
 export interface ThemeContextType {
   theme: ThemeMode;
@@ -13,6 +20,8 @@ export interface ThemeContextType {
   setReducedMotion: (val: boolean) => void;
   highContrast: boolean;
   setHighContrast: (val: boolean) => void;
+  experienceMode: ExperienceMode;
+  setExperienceMode: (mode: ExperienceMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -20,6 +29,25 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = "campvion_theme";
 const MOTION_STORAGE_KEY = "campvion_reduced_motion";
 const CONTRAST_STORAGE_KEY = "campvion_high_contrast";
+const EXPERIENCE_MODE_KEY = "campvion_experience_mode";
+
+const EVENT_THEME_CHANGE = "campvion_theme_change";
+const EVENT_MODE_CHANGE = "campvion_mode_change";
+const EVENT_ACCESSIBILITY_CHANGE = "campvion_accessibility_change";
+
+function subscribeStore(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(EVENT_THEME_CHANGE, callback);
+  window.addEventListener(EVENT_MODE_CHANGE, callback);
+  window.addEventListener(EVENT_ACCESSIBILITY_CHANGE, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(EVENT_THEME_CHANGE, callback);
+    window.removeEventListener(EVENT_MODE_CHANGE, callback);
+    window.removeEventListener(EVENT_ACCESSIBILITY_CHANGE, callback);
+  };
+}
 
 function getSystemTheme(): ResolvedTheme {
   if (typeof window !== "undefined" && window.matchMedia) {
@@ -28,56 +56,98 @@ function getSystemTheme(): ResolvedTheme {
   return "light";
 }
 
+function getThemeSnapshot(): ThemeMode {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+    if (saved === "light" || saved === "dark" || saved === "system") {
+      return saved;
+    }
+  } catch {
+    // safe fallback
+  }
+  return "system";
+}
+
+function getThemeServerSnapshot(): ThemeMode {
+  return "system";
+}
+
+function getExperienceModeSnapshot(): ExperienceMode {
+  try {
+    const saved = localStorage.getItem(EXPERIENCE_MODE_KEY) as ExperienceMode | null;
+    if (saved === "simple" || saved === "advanced") {
+      return saved;
+    }
+  } catch {
+    // safe fallback
+  }
+  return "simple";
+}
+
+function getExperienceModeServerSnapshot(): ExperienceMode {
+  return "simple";
+}
+
+function getReducedMotionSnapshot(): boolean {
+  try {
+    const saved = localStorage.getItem(MOTION_STORAGE_KEY);
+    if (saved !== null) return saved === "true";
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return true;
+    }
+  } catch {
+    // safe fallback
+  }
+  return false;
+}
+
+function getReducedMotionServerSnapshot(): boolean {
+  return false;
+}
+
+function getHighContrastSnapshot(): boolean {
+  try {
+    const saved = localStorage.getItem(CONTRAST_STORAGE_KEY);
+    if (saved !== null) return saved === "true";
+  } catch {
+    // safe fallback
+  }
+  return false;
+}
+
+function getHighContrastServerSnapshot(): boolean {
+  return false;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "system";
-    try {
-      const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
-      if (saved === "light" || saved === "dark" || saved === "system") {
-        return saved;
-      }
-    } catch {
-      // safe fallback
-    }
-    return "system";
-  });
+  const theme = useSyncExternalStore(subscribeStore, getThemeSnapshot, getThemeServerSnapshot);
+  const experienceMode = useSyncExternalStore(
+    subscribeStore,
+    getExperienceModeSnapshot,
+    getExperienceModeServerSnapshot
+  );
+  const reducedMotion = useSyncExternalStore(
+    subscribeStore,
+    getReducedMotionSnapshot,
+    getReducedMotionServerSnapshot
+  );
+  const highContrast = useSyncExternalStore(
+    subscribeStore,
+    getHighContrastSnapshot,
+    getHighContrastServerSnapshot
+  );
 
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
-    if (typeof window === "undefined") return "light";
-    try {
-      const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
-      if (saved === "light" || saved === "dark") return saved;
+  // Resolved theme calculation
+  const resolvedTheme: ResolvedTheme = useMemo(() => {
+    if (theme === "system") {
       return getSystemTheme();
-    } catch {
-      // safe fallback
     }
-    return "light";
-  });
-
-  const [reducedMotion, setReducedMotionState] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem(MOTION_STORAGE_KEY);
-      if (saved !== null) return saved === "true";
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        return true;
-      }
-    } catch {
-      // safe fallback
-    }
-    return false;
-  });
-
-  const [highContrast, setHighContrastState] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem(CONTRAST_STORAGE_KEY);
-      if (saved !== null) return saved === "true";
-    } catch {
-      // safe fallback
-    }
-    return false;
-  });
+    return theme;
+  }, [theme]);
 
   // Synchronize DOM attributes with resolved theme
   useEffect(() => {
@@ -116,10 +186,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-    const handleSystemChange = (e: MediaQueryListEvent) => {
+    const handleSystemChange = () => {
       if (theme === "system") {
-        const newResolved: ResolvedTheme = e.matches ? "dark" : "light";
-        setResolvedTheme(newResolved);
+        window.dispatchEvent(new Event(EVENT_THEME_CHANGE));
       }
     };
 
@@ -128,33 +197,42 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   const setTheme = (newTheme: ThemeMode) => {
-    setThemeState(newTheme);
     try {
+      // Briefly enable a short colour cross-fade so the theme switch feels smooth.
+      // Reduced-motion preferences override this via CSS (!important rules).
+      const root = document.documentElement;
+      root.classList.add("cv-theme-transition");
+      window.setTimeout(() => root.classList.remove("cv-theme-transition"), 260);
+
       localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+      window.dispatchEvent(new Event(EVENT_THEME_CHANGE));
     } catch {
       // safe fallback
-    }
-
-    if (newTheme === "system") {
-      setResolvedTheme(getSystemTheme());
-    } else {
-      setResolvedTheme(newTheme);
     }
   };
 
   const setReducedMotion = (val: boolean) => {
-    setReducedMotionState(val);
     try {
       localStorage.setItem(MOTION_STORAGE_KEY, String(val));
+      window.dispatchEvent(new Event(EVENT_ACCESSIBILITY_CHANGE));
     } catch {
       // safe fallback
     }
   };
 
   const setHighContrast = (val: boolean) => {
-    setHighContrastState(val);
     try {
       localStorage.setItem(CONTRAST_STORAGE_KEY, String(val));
+      window.dispatchEvent(new Event(EVENT_ACCESSIBILITY_CHANGE));
+    } catch {
+      // safe fallback
+    }
+  };
+
+  const setExperienceMode = (mode: ExperienceMode) => {
+    try {
+      localStorage.setItem(EXPERIENCE_MODE_KEY, mode);
+      window.dispatchEvent(new Event(EVENT_MODE_CHANGE));
     } catch {
       // safe fallback
     }
@@ -169,8 +247,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setReducedMotion,
       highContrast,
       setHighContrast,
+      experienceMode,
+      setExperienceMode,
     }),
-    [theme, resolvedTheme, reducedMotion, highContrast]
+    [theme, resolvedTheme, reducedMotion, highContrast, experienceMode]
   );
 
   return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;

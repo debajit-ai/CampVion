@@ -8,7 +8,7 @@ class GoalNormalizer:
         text_lower = text.lower()
         
         # 1. Goal type detection (Campus services)
-        if any(kw in text_lower for kw in ["leave", "absence", "sick", "vacation", "holiday", "permission"]) or "failure_mode" in text_lower:
+        if any(kw in text_lower for kw in ["leave", "absence", "sick", "vacation", "holiday", "permission", "won't be coming", "not coming", "traveling home"]) or "failure_mode" in text_lower:
             goal_type = "LEAVE_APPLICATION"
         else:
             goal_type = "LEAVE_APPLICATION"  # Default workflow in Phase 3
@@ -20,29 +20,35 @@ class GoalNormalizer:
         if failure_match:
             parameters["failure_mode"] = failure_match.group(1).lower()
         
-        # 3. Days extraction
-        days_match = re.search(r"(\d+)\s*(?:day|days)", text_lower)
+        # 3. Days extraction (supporting negative numbers for validation checks)
+        days_match = re.search(r"(-?\d+)\s*(?:day|days)", text_lower)
         if days_match:
             parameters["days"] = int(days_match.group(1))
+        elif "week" in text_lower:
+            parameters["days"] = 5
         else:
             parameters["days"] = 1
             
         # 4. Reason extraction
-        if "family function" in text_lower:
+        if "family function" in text_lower or "diwali" in text_lower or "traveling home" in text_lower:
             parameters["reason"] = "family function"
+            parameters["category"] = "family_emergency" if "emergency" in text_lower else "personal"
         elif "medical" in text_lower or "fever" in text_lower or "sick" in text_lower:
             parameters["reason"] = "medical reasons"
+            parameters["category"] = "medical"
         else:
             reason_match = re.search(r"(?:because|due to|reason\s*[:=]|for reason)\s+([^.,;]+)", text_lower)
             if reason_match:
                 extracted = reason_match.group(1).strip()
-                # Clean up leading phrases like "i have a"
                 extracted = re.sub(r"^(?:i\s+have\s+a|i\s+have|a)\s+", "", extracted).strip()
                 parameters["reason"] = extracted
+                parameters["category"] = "medical" if any(w in extracted.lower() for w in ["sick", "fever", "illness", "hospital"]) else "personal"
             elif "failure_mode" in text_lower:
                 parameters["reason"] = "simulated diagnostic test"
+                parameters["category"] = "personal"
             else:
                 parameters["reason"] = "personal leave"
+                parameters["category"] = "personal"
                 
         return Goal(
             goal_type=goal_type,
