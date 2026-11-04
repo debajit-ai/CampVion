@@ -195,3 +195,117 @@ export interface ResetPasswordPayload {
   confirm_password: string;
 }
 
+// =============================================================================
+// Phase 4 — Conversational Agentic AI Assistant Types
+// =============================================================================
+
+export interface ConfirmationProposal {
+  proposal_id: string;
+  operation_type: string;
+  title: string;
+  student_id: string;
+  student_name: string;
+  attendance_pct: number;
+  is_eligible: boolean;
+  fields: Record<string, string | number | boolean>;
+  raw_goal: string;
+}
+
+export interface ConversationMessageMetadata {
+  intent_category?: string;
+  llm_telemetry?: {
+    used_llm?: boolean;
+    provider?: string;
+    model?: string;
+    latency_ms?: number;
+    status?: string;
+  };
+  student_id?: string;
+  quick_replies?: string[];
+  policy_citations?: Array<{
+    policy_id: string;
+    title: string;
+    category: string;
+    provenance_type: string;
+    description: string;
+    version: string;
+  }>;
+  guidance_type?: string;
+  tool_data?: {
+    type: string;
+    tool_name?: string;
+    overall_percentage?: number;
+    total_attended?: number;
+    total_classes?: number;
+    is_eligible?: boolean;
+    courses?: Array<{
+      course_code: string;
+      course_name: string;
+      attended?: number;
+      total?: number;
+      percentage?: number;
+      faculty?: string;
+    }>;
+    academic_summary?: Record<string, unknown>;
+    exams?: Array<{
+      course_code: string;
+      course_name: string;
+      exam_type: string;
+      exam_date: string;
+      start_time: string;
+      duration_minutes: number;
+      room: string;
+    }>;
+    fee_status?: Record<string, unknown>;
+    hostel_status?: Record<string, unknown>;
+    leave_status?: Record<string, unknown>;
+    result?: Record<string, unknown>;
+  };
+  awaiting_clarification?: boolean;
+  awaiting_confirmation?: boolean;
+  confirmation_proposal?: ConfirmationProposal;
+  collected_slots?: Record<string, unknown>;
+  missing_slots?: string[];
+  workflow_executed?: boolean;
+  request_id?: number;
+  workflow_result?: AgentResult;
+  workflow_state?: AgentState;
+  ambiguous_confirmation_blocked?: boolean;
+  request_canceled?: boolean;
+}
+
+export interface ConversationMessageItem {
+  id: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  intent_category?: string | null;
+  metadata?: ConversationMessageMetadata;
+  created_at?: string | null;
+}
+
+export interface ConversationSessionData {
+  conversation_id: string;
+  student_id: string;
+  title: string;
+  status: string;
+  active_intent?: string | null;
+  collected_slots: Record<string, unknown>;
+  missing_slots: string[];
+  pending_confirmation?: ConfirmationProposal | null;
+  active_workflow_request_id?: number | null;
+  workflow_state?: AgentState | null;
+  messages: ConversationMessageItem[];
+  latest_reply?: ConversationMessageItem | null;
+}
+
+export interface ConversationSummaryItem {
+  conversation_id: string;
+  student_id: string;
+  title: string;
+  status: string;
+  active_intent?: string | null;
+  active_workflow_request_id?: number | null;
+  updated_at?: string | null;
+}
+
+

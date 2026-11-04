@@ -31,6 +31,7 @@ import {
   AgentResult,
   AgentState,
   AttendanceRecord,
+  ConversationSessionData,
   CourseRecord,
   HealthResponse,
   Student,
@@ -74,9 +75,8 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   // Workflow dispatch and execution states
   const [customStudentId, setSelectedStudentId] = useState<string | null>(null);
   const selectedStudentId = customStudentId || user?.student_id || "S001";
-  const [goalText, setGoalText] = useState<string>(
-    "I want to apply for leave tomorrow because I have a family function."
-  );
+  const [goalText, setGoalText] = useState<string>("");
+  const [conversation, setConversation] = useState<ConversationSessionData | null>(null);
 
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [recentRequestIds, setRecentRequestIds] = useState<number[]>([]);
@@ -310,7 +310,54 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     [resultsById]
   );
 
-  // Submit new goal from composer
+  // Load or recover the active conversation session when student changes or on refresh
+  useEffect(() => {
+    if (!isAuthenticated || !selectedStudentId) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const listRes = await apiClient
+          .listConversations(selectedStudentId)
+          .catch(() => []);
+        if (!isMounted) return;
+
+        if (listRes && listRes.length > 0) {
+          const latestSummary = listRes[0];
+          const fullConv = await apiClient
+            .getConversation(latestSummary.conversation_id)
+            .catch(() => null);
+          if (!isMounted) return;
+
+          if (fullConv) {
+            setConversation(fullConv);
+            if (fullConv.active_workflow_request_id) {
+              setActiveRequestId(fullConv.active_workflow_request_id);
+              await fetchWorkflowDetails(fullConv.active_workflow_request_id).catch(
+                () => undefined
+              );
+            } else {
+              setActiveRequestId(null);
+              setAgentState(null);
+              setAgentResult(null);
+              setTasks([]);
+              setTraces([]);
+            }
+            return;
+          }
+        }
+
+        // No existing conversation for this student yet
+        setConversation(null);
+      } catch {
+        // Ignore background session recovery errors
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, selectedStudentId, fetchWorkflowDetails]);
+
+  // Direct workflow execution (used by simulation fault-injection directives & evaluation suite)
   const handleLaunchAgent = async (studentId?: string, goal?: string) => {
     const sId = studentId || selectedStudentId;
     const gText = goal || goalText;
@@ -320,28 +367,97 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     setIsLoading(true);
     setError(null);
     try {
-      // Natural language clarification check before launching consequential DAG
-      if (!gText.toUpperCase().includes("FAILURE_MODE=") && !gText.toLowerCase().includes("simulate")) {
-        try {
-          const interp = await apiClient.interpretIntent(sId, gText);
-          if (interp.success && interp.needs_clarification && interp.clarification_question) {
-            setError(`Clarification Needed: ${interp.clarification_question}`);
-            setIsLoading(false);
-            return;
-          }
-        } catch {
-          // Fall back seamlessly to direct agent execution if interpretation probe is unavailable
-        }
-      }
-
       const result = await apiClient.runAgent({ student_id: sId, goal: gText });
       setAgentResult(result);
       setActiveRequestId(result.request_id);
       await fetchWorkflowDetails(result.request_id, result);
       setActiveSection("chat");
+      setGoalText("");
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to execute agent workflow";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Conversational Assistant multi-turn message handler
+  const handleSendMessage = async (overrideText?: string) => {
+    const rawText = overrideText !== undefined ? overrideText : goalText;
+    const trimmed = rawText.trim();
+    if (!selectedStudentId.trim() || !trimmed || isLoading) return;
+
+    // Direct fault-injection directives bypass conversation engine to test deterministic DAG self-healing
+    if (trimmed.toUpperCase().includes("FAILURE_MODE=")) {
+      await handleLaunchAgent(selectedStudentId, trimmed);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const sessionData = await apiClient.sendConversationMessage({
+        conversation_id:
+          conversation && conversation.student_id === selectedStudentId
+            ? conversation.conversation_id
+            : undefined,
+        student_id: selectedStudentId,
+        message: trimmed,
+      });
+
+      setConversation(sessionData);
+      // Clear input ONLY after submission succeeds
+      if (overrideText === undefined || overrideText === goalText) {
+        setGoalText("");
+      }
+
+      if (sessionData.active_workflow_request_id) {
+        setActiveRequestId(sessionData.active_workflow_request_id);
+        await fetchWorkflowDetails(sessionData.active_workflow_request_id);
+      }
+      setActiveSection("chat");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to send message to CampVion Assistant. Please try again.";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => {
+        composerTextareaRef.current?.focus();
+      }, 40);
+    }
+  };
+
+  // Smart Confirmation Card action handler (confirm / edit / cancel)
+  const handleConfirmAction = async (
+    action: "confirm" | "cancel" | "edit",
+    updatedSlots?: Record<string, unknown>
+  ) => {
+    if (!conversation?.conversation_id || isLoading) return;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const sessionData = await apiClient.confirmConversationAction(
+        conversation.conversation_id,
+        {
+          action,
+          updated_slots: updatedSlots,
+        }
+      );
+      setConversation(sessionData);
+      if (sessionData.active_workflow_request_id) {
+        setActiveRequestId(sessionData.active_workflow_request_id);
+        await fetchWorkflowDetails(sessionData.active_workflow_request_id);
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to process confirmation action.";
       setError(message);
     } finally {
       setIsLoading(false);
@@ -411,15 +527,21 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   };
 
   // New conversation reset action
-  const handleNewRequest = () => {
+  const handleNewRequest = async () => {
     setActiveRequestId(null);
     setAgentState(null);
     setAgentResult(null);
     setTasks([]);
     setTraces([]);
     setError(null);
+    setGoalText("");
     setActiveSection("chat");
-    setGoalText("I want to apply for leave tomorrow because I have a family function.");
+    try {
+      const freshSession = await apiClient.createNewConversation(selectedStudentId);
+      setConversation(freshSession);
+    } catch {
+      setConversation(null);
+    }
     setTimeout(() => {
       composerTextareaRef.current?.focus();
     }, 50);
@@ -648,6 +770,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
             <div className="flex-1 flex flex-col min-h-full">
               <div className="flex-1 flex flex-col">
                 <ConversationFeed
+                  conversation={conversation}
                   state={agentState}
                   result={agentResult}
                   tasks={tasks}
@@ -656,6 +779,8 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onSelectPreset={handleSelectPreset}
+                  onSendMessage={handleSendMessage}
+                  onConfirmAction={handleConfirmAction}
                   onInspectToolInTrace={handleInspectToolInTrace}
                 />
               </div>
@@ -671,13 +796,15 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                     setGoalText(text);
                     if (error) setError(null);
                   }}
-                  onSubmit={() => handleLaunchAgent(selectedStudentId, goalText)}
+                  onSubmit={(text) => handleSendMessage(text)}
                   isLoading={isLoading}
                   error={error}
                   onClearError={() => setError(null)}
                   attendanceByStudent={attendanceByStudent}
                   coursesByStudent={coursesByStudent}
                   onOpenTools={() => setToolsMenuOpen(true)}
+                  onNewConversation={() => void handleNewRequest()}
+                  activeConversationTitle={conversation?.title}
                   textareaRef={composerTextareaRef}
                 />
               </div>

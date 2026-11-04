@@ -15,6 +15,8 @@ import {
   ToolSchema,
   TraceItem,
   UserProfile,
+  ConversationSessionData,
+  ConversationSummaryItem,
 } from "../types/api";
 
 const BASE_URL =
@@ -262,5 +264,54 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify({ student_id: studentId, request_text: requestText }),
     });
+  },
+
+  // Phase 4 — Conversational Assistant Endpoints
+  async listConversations(studentId?: string): Promise<ConversationSummaryItem[]> {
+    const query = studentId ? `?student_id=${encodeURIComponent(studentId)}` : "";
+    return fetchJson<ConversationSummaryItem[]>(`/conversations/${query}`);
+  },
+
+  async createNewConversation(
+    studentId?: string,
+    title?: string
+  ): Promise<ConversationSessionData> {
+    return fetchJson<ConversationSessionData>("/conversations/new", {
+      method: "POST",
+      body: JSON.stringify({ student_id: studentId, title }),
+    });
+  },
+
+  async getConversation(conversationId: string): Promise<ConversationSessionData> {
+    return fetchJson<ConversationSessionData>(
+      `/conversations/${encodeURIComponent(conversationId)}`
+    );
+  },
+
+  async sendConversationMessage(payload: {
+    conversation_id?: string | null;
+    student_id: string;
+    message: string;
+  }): Promise<ConversationSessionData> {
+    return fetchJson<ConversationSessionData>("/conversations/message", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async confirmConversationAction(
+    conversationId: string,
+    payload: {
+      action: "confirm" | "cancel" | "edit";
+      updated_slots?: Record<string, unknown>;
+    }
+  ): Promise<ConversationSessionData> {
+    return fetchJson<ConversationSessionData>(
+      `/conversations/${encodeURIComponent(conversationId)}/confirm`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 };

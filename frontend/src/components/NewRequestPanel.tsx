@@ -96,7 +96,11 @@ export function NewRequestPanel({
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "Enter" && e.shiftKey) {
+      return;
+    }
+    if (e.key === "Enter") {
       e.preventDefault();
       await handleSubmit();
     }
@@ -355,9 +359,13 @@ export function NewRequestPanel({
           <span className="text-[11px] text-cv-fg-2 font-mono">
             Press{" "}
             <kbd className="px-1.5 py-0.5 rounded bg-cv-inset border border-cv-line text-cv-fg">
-              Ctrl+Enter
+              Enter
             </kbd>{" "}
-            to launch
+            to send &bull;{" "}
+            <kbd className="px-1.5 py-0.5 rounded bg-cv-inset border border-cv-line text-cv-fg">
+              Shift+Enter
+            </kbd>{" "}
+            for new line
           </span>
           <button
             type="submit"

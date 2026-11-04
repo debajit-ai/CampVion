@@ -67,19 +67,25 @@ class GroqCloudProvider(BaseLLMProvider):
         self._client: Optional[AsyncGroq] = None
 
     def _get_client(self) -> AsyncGroq:
-        """Initialize or return AsyncGroq client."""
+        """Initialize or return AsyncGroq client bound to the current running event loop."""
         if not self.api_key:
             raise LLMAuthenticationError(
                 "GROQ_API_KEY is not configured. Please paste your key into backend/.env.",
                 provider=self.provider_name
             )
-        if self._client is None:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if self._client is None or getattr(self, "_client_loop", None) is not current_loop:
             clean_base_url = self.base_url.rstrip("/").removesuffix("/openai/v1") if self.base_url else None
             self._client = AsyncGroq(
                 api_key=self.api_key,
                 base_url=clean_base_url,
                 timeout=self.timeout_seconds
             )
+            self._client_loop = current_loop
         return self._client
 
     def mask_api_key(self) -> str:

@@ -449,3 +449,47 @@ class PasswordResetToken(Base):
 
     user = relationship("UserAccount", back_populates="reset_tokens")
 
+
+# =============================================================================
+# DOMAIN K: MULTI-TURN CONVERSATION SESSIONS & MESSAGES
+# =============================================================================
+
+class ConversationSession(Base):
+    __tablename__ = "conversation_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_uuid = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=True, index=True)
+    student_id = Column(String, ForeignKey("students.student_id"), nullable=False, index=True)
+    title = Column(String, nullable=False, default="New Campus Conversation")
+    active_intent = Column(String, nullable=True)  # e.g., LEAVE_APPLICATION, ATTENDANCE_ENQUIRY, HOSTEL_SERVICE, SUPPORT_TICKET
+    collected_slots_json = Column(Text, nullable=False, default="{}")
+    missing_slots_json = Column(Text, nullable=False, default="[]")
+    pending_confirmation_json = Column(Text, nullable=True)
+    active_workflow_request_id = Column(Integer, ForeignKey("campus_requests.id"), nullable=True)
+    status = Column(String, nullable=False, default="active")  # active, awaiting_clarification, awaiting_confirmation, workflow_running, completed
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
+
+    messages = relationship(
+        "ConversationMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ConversationMessage.id.asc()",
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversation_sessions.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)  # user, assistant, system
+    content = Column(Text, nullable=False)
+    intent_category = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+
+    session = relationship("ConversationSession", back_populates="messages")
+
+
