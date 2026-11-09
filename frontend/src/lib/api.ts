@@ -19,8 +19,26 @@ import {
   ConversationSummaryItem,
 } from "../types/api";
 
-const BASE_URL =
+export const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000/api";
+
+let _activeBaseUrl: string = DEFAULT_API_BASE_URL;
+
+function getCandidateBaseUrls(): string[] {
+  const candidates: string[] = [_activeBaseUrl, DEFAULT_API_BASE_URL];
+
+  if (DEFAULT_API_BASE_URL.includes("://localhost:")) {
+    candidates.push(DEFAULT_API_BASE_URL.replace("://localhost:", "://127.0.0.1:"));
+  } else if (DEFAULT_API_BASE_URL.includes("://127.0.0.1:")) {
+    candidates.push(DEFAULT_API_BASE_URL.replace("://127.0.0.1:", "://localhost:"));
+  }
+
+  if (typeof window !== "undefined") {
+    candidates.push("/api");
+  }
+
+  return Array.from(new Set(candidates));
+}
 
 // Strictly in-memory runtime references (never persisted to localStorage)
 let _inMemorySessionToken: string | null = null;
@@ -45,7 +63,7 @@ export class ApiError extends Error {
 }
 
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const method = (options.method || "GET").toUpperCase();
   const extraHeaders: Record<string, string> = {};
 
@@ -60,60 +78,74 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
     }
   }
 
-  try {
-    const res = await fetch(url, {
-      ...options,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...extraHeaders,
-        ...options.headers,
-      },
-      // Avoid stale cache in dev/operations console
-      cache: "no-store",
-    });
+  const candidateBases = getCandidateBaseUrls();
+  let lastNetworkError: unknown = null;
 
-    if (!res.ok) {
-      let errorBody: unknown;
-      try {
-        errorBody = await res.json();
-      } catch {
-        errorBody = await res.text();
-      }
+  for (const base of candidateBases) {
+    const url = `${base}${normalizedEndpoint}`;
+    try {
+      const res = await fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...extraHeaders,
+          ...options.headers,
+        },
+        // Avoid stale cache in dev/operations console
+        cache: "no-store",
+      });
 
-      let message = `API request failed: ${res.status} ${res.statusText}`;
-      if (typeof errorBody === "object" && errorBody !== null && "detail" in errorBody) {
-        const detail = (errorBody as { detail: unknown }).detail;
-        if (typeof detail === "object" && detail !== null && "message" in detail) {
-          message = String((detail as { message: unknown }).message);
-        } else if (Array.isArray(detail) && detail.length > 0) {
-          const first = detail[0] as { msg?: string };
-          message = first?.msg || "Validation error in submitted fields.";
-        } else {
-          message = String(detail);
+      // Remember the reachable base URL for subsequent requests
+      _activeBaseUrl = base;
+
+      if (!res.ok) {
+        let errorBody: unknown;
+        try {
+          errorBody = await res.json();
+        } catch {
+          errorBody = await res.text();
         }
-      }
-      throw new ApiError(message, res.status, errorBody);
-    }
 
-    return (await res.json()) as T;
-  } catch (err: unknown) {
-    if (err instanceof ApiError) {
-      throw err;
+        let message = `API request failed: ${res.status} ${res.statusText}`;
+        if (typeof errorBody === "object" && errorBody !== null && "detail" in errorBody) {
+          const detail = (errorBody as { detail: unknown }).detail;
+          if (typeof detail === "object" && detail !== null && "message" in detail) {
+            message = String((detail as { message: unknown }).message);
+          } else if (Array.isArray(detail) && detail.length > 0) {
+            const first = detail[0] as { msg?: string };
+            message = first?.msg || "Validation error in submitted fields.";
+          } else {
+            message = String(detail);
+          }
+        }
+        throw new ApiError(message, res.status, errorBody);
+      }
+
+      return (await res.json()) as T;
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      lastNetworkError = err;
     }
-    const rawMsg = err instanceof Error ? err.message : "Network error or backend unreachable";
-    const message =
-      rawMsg === "Failed to fetch"
-        ? `Failed to fetch — Backend server is unreachable at ${BASE_URL}. Ensure the FastAPI server is running.`
-        : rawMsg;
-    throw new ApiError(message, 0);
   }
+
+  const rawMsg =
+    lastNetworkError instanceof Error
+      ? lastNetworkError.message
+      : "Network error or backend unreachable";
+  const message =
+    rawMsg === "Failed to fetch"
+      ? `Failed to fetch — Backend server is unreachable at ${DEFAULT_API_BASE_URL}. Ensure the FastAPI server is running.`
+      : rawMsg;
+  throw new ApiError(message, 0);
 }
 
 export const apiClient = {
   getBaseUrl(): string {
-    return BASE_URL;
+    return _activeBaseUrl || DEFAULT_API_BASE_URL;
   },
 
   async checkHealth(): Promise<HealthResponse> {

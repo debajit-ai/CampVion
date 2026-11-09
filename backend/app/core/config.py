@@ -4,12 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 _ENV_FILE_PATH = os.path.join(_BACKEND_DIR, ".env")
+_DEFAULT_SQLITE_PATH = os.path.join(_BACKEND_DIR, "axora.db").replace("\\", "/")
 
 class Settings(BaseSettings):
     APP_NAME: str = "CampVion"
     APP_VERSION: str = "0.2.0"
     ENVIRONMENT: str = "development"
-    DATABASE_URL: str = "sqlite:///./axora.db"
+    DATABASE_URL: str = f"sqlite:///{_DEFAULT_SQLITE_PATH}"
     API_PREFIX: str = "/api"
 
     # Cloud-First LLM Architecture (Groq as Primary)

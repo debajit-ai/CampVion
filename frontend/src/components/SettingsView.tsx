@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { HealthResponse } from "../types/api";
+import { DEFAULT_API_BASE_URL } from "../lib/api";
 import { useTheme } from "../context/ThemeContext";
 
 const ENTER_STORAGE_KEY = "campvion_enter_to_send";
@@ -83,7 +84,7 @@ export function SettingsView({
   onSelectStudentId,
   inspectorOpen,
   onToggleInspector,
-  apiBaseUrl = "http://127.0.0.1:8000",
+  apiBaseUrl = DEFAULT_API_BASE_URL,
 }: SettingsViewProps) {
   const {
     theme,

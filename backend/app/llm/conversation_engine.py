@@ -351,9 +351,12 @@ class ConversationEngine:
             }
 
         history_lines = []
-        for msg in recent_messages[-8:]:
+        for msg in recent_messages[-6:]:
             role_label = "Student" if msg.role == "user" else "CampVion"
-            history_lines.append(f"{role_label}: {msg.content}")
+            snippet = (msg.content or "").strip()
+            if len(snippet) > 220:
+                snippet = snippet[:217] + "..."
+            history_lines.append(f"{role_label}: {snippet}")
         history_block = "\n".join(history_lines) if history_lines else "(Start of conversation)"
 
         collected_slots = json.loads(session.collected_slots_json or "{}")

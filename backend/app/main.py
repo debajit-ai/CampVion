@@ -51,13 +51,26 @@ app = FastAPI(
     version=settings.APP_VERSION
 )
 
-# CORS configuration supporting HttpOnly session cookies across local and deployed origins
+# CORS configuration supporting HttpOnly session cookies across local (IPv4/IPv6) and deployed origins
+_allowed_origins = list(
+    {
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://[::1]:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        settings.FRONTEND_BASE_URL.rstrip("/"),
+    }
+)
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=_allowed_origins,
     allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-CSRF-Token"],
 )
 
 app.include_router(api_router, prefix=settings.API_PREFIX)
