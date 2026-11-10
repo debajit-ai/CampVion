@@ -35,7 +35,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 ### Frontend
@@ -44,3 +44,9 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Academic Documentation & Evaluation (CSE276 CA-1)
+- **[Formal Academic Project Report](docs/PROJECT_55_FINAL_REPORT.md)**: State-space mathematical formulation, PEAS specification, neuro-symbolic architecture, 15-scenario baseline benchmark matrix, and Responsible AI safety analysis.
+- **[Examiner Viva & Defense Guide](docs/VIVA_PREPARATION_GUIDE.md)**: 10 critical technical questions & model answers, scenario reference matrix, and live demo checklist for evaluators.
+- **[Empirical Evaluation Report](evaluation_report.json)**: JSON telemetry comparing the Agentic Engine (100% completion, 100% self-healing) vs. the Scripted Rule-Based Baseline (46.7% completion, 0% self-healing).
+

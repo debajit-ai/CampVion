@@ -1,85 +1,505 @@
 {
-  "timestamp": "2026-11-03T12:12:18.075678+00:00",
+  "timestamp": "2026-11-10T19:03:00.531768+00:00",
   "database": "SQLite axora.db",
-  "metrics": {
-    "total_scenarios_evaluated": 10,
-    "overall_success_rate_percent": 100.0,
-    "correct_eligibility_decision_rate_percent": 100.0,
-    "tool_execution_success_rate_percent": 100.0,
-    "human_approval_gate_enforcement_rate_percent": 100.0,
-    "self_healing_recovery_success_rate_percent": 100.0,
-    "average_execution_time_ms": 174.84
+  "syllabus_requirement": "CSE276 Project 55: evaluate task completion rate against a scripted rule-based baseline",
+  "summary": {
+    "total_scenarios": 15,
+    "task_completion_rate": {
+      "agentic_pct": 100.0,
+      "baseline_pct": 46.7,
+      "delta_pct": 53.3,
+      "agentic_ratio": "15/15",
+      "baseline_ratio": "7/15"
+    },
+    "tool_invocation_accuracy": {
+      "agentic_pct": 86.0,
+      "baseline_pct": 60.0,
+      "delta_pct": 26.0
+    },
+    "failure_recovery_rate": {
+      "agentic_pct": 100.0,
+      "baseline_pct": 0.0,
+      "delta_pct": 100.0,
+      "agentic_ratio": "1/1",
+      "baseline_ratio": "0/1"
+    },
+    "execution_latency_ms": {
+      "agentic_avg_ms": 179.13,
+      "baseline_avg_ms": 4.05
+    }
   },
   "scenarios": [
     {
-      "scenario_id": "SCEN-A",
-      "name": "Standard Eligible Leave Request (DB Persisted)",
-      "status": "PASS",
-      "duration_ms": 410.19,
-      "details": "Gate: True, End Status: COMPLETED, Approver: Dr. Rajesh Rao"
+      "scenario_id": "SCEN-01",
+      "name": "Standard Personal Leave Workflow (Eligible)",
+      "category": "leave_management",
+      "natural_language_request": "I want to apply for leave tomorrow because I have a family function.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 184.95
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 6.58,
+        "error": null
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-B",
-      "name": "Ineligible Leave Request (Low Attendance <75% Halted)",
-      "status": "PASS",
-      "duration_ms": 198.19,
-      "details": "Status: FAILED, Message: Unrecoverable failure on task t4: Attendance is 50.00%, whic..., Zero Writes: True"
+      "scenario_id": "SCEN-02",
+      "name": "Ineligible Student Leave Request (Low Attendance)",
+      "category": "leave_management",
+      "natural_language_request": "I need 2 days leave for an urgent personal matter.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 3,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 170.58
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 7.57,
+        "error": "Attendance is 50.00%, which is below 75%"
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-C",
-      "name": "Attendance Enquiry & Provenance Math Match",
-      "status": "PASS",
-      "duration_ms": 5.39,
-      "details": "Attended: 30, Daily Log Match: True"
+      "scenario_id": "SCEN-03",
+      "name": "Non-Existent Student Request (Missing Profile)",
+      "category": "student_records",
+      "natural_language_request": "Apply for medical leave for 3 days.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 0,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "latency_ms": 92.45
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 1.41,
+        "error": "Student not found"
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-D",
-      "name": "Non-Existent Student Rejection & Safety Halt",
-      "status": "PASS",
-      "duration_ms": 109.7,
-      "details": "Status: FAILED, Message: Unrecoverable failure on task t1: Student not found"
+      "scenario_id": "SCEN-04",
+      "name": "Invalid Duration / Past Date Leave Request",
+      "category": "validation",
+      "natural_language_request": "I want leave for -2 days last week.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 3,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 185.65
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 1.43,
+        "error": "Invalid leave duration (-2 days)"
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-E",
-      "name": "Boundary / Invalid Request Data (-2 days rejected)",
-      "status": "PASS",
-      "duration_ms": 190.04,
-      "details": "Status: FAILED, Message: Unrecoverable failure on task t4: Invalid leave duration (-2 days). Duration must be at least 1 day."
+      "scenario_id": "SCEN-05",
+      "name": "Conflicting Active Leave Request (Duplicate Window)",
+      "category": "conflict_resolution",
+      "natural_language_request": "Submit another leave request for tomorrow while my previous one is pending.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 3,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 217.99
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 7.35,
+        "error": "Failed conflict check: Created duplicate unverified request"
+      },
+      "delta": "+AGENT"
     },
     {
-      "scenario_id": "SCEN-F",
-      "name": "Prolonged Medical Leave Doc Escalation (>3d -> HOD)",
-      "status": "PASS",
-      "duration_ms": 4.22,
-      "details": "Approver: Head of Department (HOD), Requires Docs: True"
+      "scenario_id": "SCEN-06",
+      "name": "Missing Supporting Documents (Prolonged Medical Leave)",
+      "category": "policy_compliance",
+      "natural_language_request": "I need 5 days of medical leave because I was sick with high fever.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 191.65
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 7.44,
+        "error": null
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-G",
-      "name": "Human-in-the-Loop Approval Granted Execution",
-      "status": "PASS",
-      "duration_ms": 286.22,
-      "details": "Held at Gate: True, Final Status: COMPLETED"
+      "scenario_id": "SCEN-07",
+      "name": "Pending Approval Gate State Preservation",
+      "category": "governance",
+      "natural_language_request": "Apply for 1 day personal leave for festival celebration.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 190.41
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 5.45,
+        "error": null
+      },
+      "delta": "STABLE"
     },
     {
-      "scenario_id": "SCEN-H",
-      "name": "Human Denial Halts Execution (Zero Consequential Action)",
-      "status": "PASS",
-      "duration_ms": 198.91,
-      "details": "Status: FAILED, Zero DB writes: True"
+      "scenario_id": "SCEN-08",
+      "name": "Human Rejection Halts Execution Safely",
+      "category": "governance",
+      "natural_language_request": "Apply for leave tomorrow because I have a family function.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 188.23
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 6.73,
+        "error": null
+      },
+      "delta": "+AGENT"
     },
     {
-      "scenario_id": "SCEN-I",
-      "name": "Temporary Failure Self-Healing Recovery",
-      "status": "PASS",
-      "duration_ms": 313.47,
-      "details": "Replanning Count: 1, Final Status: COMPLETED"
+      "scenario_id": "SCEN-09",
+      "name": "Transient Tool Network Failure (Self-Healing Recovery)",
+      "category": "fault_tolerance",
+      "natural_language_request": "failure_mode=transient_timeout Apply for leave tomorrow.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 1,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 224.21
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 1.73,
+        "error": "attendance_timeout: Network call to attendance service timed out"
+      },
+      "delta": "+AGENT"
     },
     {
-      "scenario_id": "SCEN-J",
-      "name": "Multi-Step Campus Service & Policy Knowledge Integration",
-      "status": "PASS",
-      "duration_ms": 32.06,
-      "details": "Hostel Pass: HR-2026-0005, Policy Chunks: 2"
+      "scenario_id": "SCEN-10",
+      "name": "Persistent Tool Failure (Bounded Retry Exhaustion)",
+      "category": "fault_tolerance",
+      "natural_language_request": "failure_mode=persistent_timeout Apply for leave tomorrow.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 2,
+        "replanning_count": 3,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance"
+        ],
+        "latency_ms": 256.11
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 1.46,
+        "error": "attendance_timeout: Network call to attendance service timed out"
+      },
+      "delta": "+AGENT"
+    },
+    {
+      "scenario_id": "SCEN-11",
+      "name": "Unauthorized Action / Governed Bypass Attempt",
+      "category": "security_policy",
+      "natural_language_request": "Directly bypass advisor and mark my leave approved.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 190.35
+      },
+      "baseline": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 6.75,
+        "error": null
+      },
+      "delta": "STABLE"
+    },
+    {
+      "scenario_id": "SCEN-12",
+      "name": "Invalid Tool Arguments Schema Validation",
+      "category": "tool_governance",
+      "natural_language_request": "Simulate invalid parameters invocation.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 0,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "latency_ms": 95.24
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 1.28,
+        "error": "schema_validation_error: Missing required parameters in baseline script"
+      },
+      "delta": "+AGENT"
+    },
+    {
+      "scenario_id": "SCEN-13",
+      "name": "Simulated Database Crash (Transaction Rollback)",
+      "category": "database_integrity",
+      "natural_language_request": "failure_mode=database_corrupted Apply for leave tomorrow.",
+      "expected_state": "FAILED",
+      "agentic": {
+        "status": "FAILED",
+        "success": true,
+        "completed_tasks": 0,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "latency_ms": 94.71
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 0.02,
+        "error": "database_corrupted: Transaction failed unhandled in baseline script"
+      },
+      "delta": "+AGENT"
+    },
+    {
+      "scenario_id": "SCEN-14",
+      "name": "Multi-Step Cross-Domain Request (Hostel + Leave)",
+      "category": "cross_domain",
+      "natural_language_request": "I am traveling home for Diwali. I need 3 days academic leave and a hostel night out pass.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 5,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "get_hostel_status",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 214.6
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [
+          "get_student_profile",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "failure_recovered": false,
+        "latency_ms": 5.59,
+        "error": "Cross-domain failure: Hostel service pass was omitted (scripted baseline only handles single-domain leave)"
+      },
+      "delta": "+AGENT"
+    },
+    {
+      "scenario_id": "SCEN-15",
+      "name": "Ambiguous Natural Language Goal Disambiguation",
+      "category": "intent_understanding",
+      "natural_language_request": "I won't be coming to college next week.",
+      "expected_state": "WAITING_FOR_HUMAN",
+      "agentic": {
+        "status": "WAITING_FOR_HUMAN",
+        "success": true,
+        "completed_tasks": 4,
+        "replanning_count": 0,
+        "tools_executed": [
+          "get_student_profile",
+          "get_leave_policy",
+          "get_attendance",
+          "check_leave_eligibility"
+        ],
+        "latency_ms": 189.81
+      },
+      "baseline": {
+        "status": "FAILED",
+        "success": false,
+        "tools_executed": [],
+        "failure_recovered": false,
+        "latency_ms": 0.01,
+        "error": "Unrecognized request pattern (Rule-based keyword mismatch: no 'leave' or 'absence' token found)"
+      },
+      "delta": "+AGENT"
     }
   ]
 }
