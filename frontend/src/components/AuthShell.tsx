@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -29,6 +29,11 @@ export function AuthShell({
   footerPrompt,
 }: AuthShellProps) {
   const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
@@ -78,14 +83,22 @@ export function AuthShell({
               type="button"
               onClick={toggleTheme}
               aria-label={
-                resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
+                mounted
+                  ? resolvedTheme === "dark"
+                    ? "Switch to Light Mode"
+                    : "Switch to Dark Mode"
+                  : "Toggle Theme"
               }
               title={
-                resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
+                mounted
+                  ? resolvedTheme === "dark"
+                    ? "Switch to Light Mode"
+                    : "Switch to Dark Mode"
+                  : "Toggle Theme"
               }
               className="p-2 rounded-lg bg-cv-surface hover:bg-cv-raised text-cv-fg-2 hover:text-cv-accent-ink border border-cv-line transition cursor-pointer"
             >
-              {resolvedTheme === "dark" ? (
+              {mounted && resolvedTheme === "dark" ? (
                 <Sun className="h-4 w-4 text-cv-accent-ink" />
               ) : (
                 <Moon className="h-4 w-4 text-cv-fg" />

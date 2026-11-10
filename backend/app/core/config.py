@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: str = "no-reply@campvion.edu"
     FRONTEND_BASE_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "*"
 
     model_config = SettingsConfigDict(
         env_file=(_ENV_FILE_PATH, ".env"),

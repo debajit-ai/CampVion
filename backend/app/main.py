@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -56,15 +57,18 @@ app = FastAPI(
     version=settings.APP_VERSION
 )
 
-# CORS configuration supporting HttpOnly session cookies across local (IPv4/IPv6) and deployed origins
-_allowed_origins = list(
+# CORS configuration supporting HttpOnly session cookies across local (IPv4/IPv6) and deployed cloud origins (Vercel / Render)
+_frontend_url = os.getenv("FRONTEND_URL", settings.FRONTEND_URL or "*").strip()
+_allowed_origins = ["*"] if _frontend_url == "*" else list(
     {
+        "*",
+        _frontend_url.rstrip("/"),
+        settings.FRONTEND_BASE_URL.rstrip("/"),
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://[::1]:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
-        settings.FRONTEND_BASE_URL.rstrip("/"),
     }
 )
 

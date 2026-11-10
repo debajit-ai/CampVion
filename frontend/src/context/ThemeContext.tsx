@@ -123,8 +123,25 @@ function getHighContrastServerSnapshot(): boolean {
   return false;
 }
 
+function getResolvedThemeSnapshot(): ResolvedTheme {
+  const currentTheme = getThemeSnapshot();
+  if (currentTheme === "system") {
+    return getSystemTheme();
+  }
+  return currentTheme;
+}
+
+function getResolvedThemeServerSnapshot(): ResolvedTheme {
+  return "light";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSyncExternalStore(subscribeStore, getThemeSnapshot, getThemeServerSnapshot);
+  const resolvedTheme = useSyncExternalStore(
+    subscribeStore,
+    getResolvedThemeSnapshot,
+    getResolvedThemeServerSnapshot
+  );
   const experienceMode = useSyncExternalStore(
     subscribeStore,
     getExperienceModeSnapshot,
@@ -140,14 +157,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     getHighContrastSnapshot,
     getHighContrastServerSnapshot
   );
-
-  // Resolved theme calculation
-  const resolvedTheme: ResolvedTheme = useMemo(() => {
-    if (theme === "system") {
-      return getSystemTheme();
-    }
-    return theme;
-  }, [theme]);
 
   // Synchronize DOM attributes with resolved theme
   useEffect(() => {

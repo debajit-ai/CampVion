@@ -21,8 +21,14 @@ import {
   PendingApprovalItem,
 } from "../types/api";
 
-export const DEFAULT_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000/api";
+const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(
+  /\/+$/,
+  ""
+);
+
+export const DEFAULT_API_BASE_URL = RAW_API_URL.endsWith("/api")
+  ? RAW_API_URL
+  : `${RAW_API_URL}/api`;
 
 let _activeBaseUrl: string = DEFAULT_API_BASE_URL;
 
@@ -42,14 +48,63 @@ function getCandidateBaseUrls(): string[] {
   return Array.from(new Set(candidates));
 }
 
-// Strictly in-memory runtime references (never persisted to localStorage)
+const SESSION_TOKEN_KEY = "campvion_session_token";
+const CSRF_TOKEN_KEY = "campvion_csrf_token";
+
 let _inMemorySessionToken: string | null = null;
 let _inMemoryCsrfToken: string | null = null;
 
+function getSessionToken(): string | null {
+  if (_inMemorySessionToken) return _inMemorySessionToken;
+  if (typeof window !== "undefined") {
+    try {
+      const saved = sessionStorage.getItem(SESSION_TOKEN_KEY);
+      if (saved) {
+        _inMemorySessionToken = saved;
+        return saved;
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+  return null;
+}
+
+function setSessionTokens(sessionToken: string | null, csrfToken: string | null) {
+  _inMemorySessionToken = sessionToken;
+  _inMemoryCsrfToken = csrfToken;
+  if (typeof window !== "undefined") {
+    try {
+      if (sessionToken) {
+        sessionStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+      } else {
+        sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      }
+      if (csrfToken) {
+        sessionStorage.setItem(CSRF_TOKEN_KEY, csrfToken);
+      } else {
+        sessionStorage.removeItem(CSRF_TOKEN_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+}
+
 function readCsrfCookie(): string | null {
-  if (typeof document === "undefined") return _inMemoryCsrfToken;
-  const match = document.cookie.match(/(?:^|;\s*)campvion_csrf=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : _inMemoryCsrfToken;
+  if (typeof document !== "undefined") {
+    const match = document.cookie.match(/(?:^|;\s*)campvion_csrf=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  if (_inMemoryCsrfToken) return _inMemoryCsrfToken;
+  if (typeof window !== "undefined") {
+    try {
+      return sessionStorage.getItem(CSRF_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export class ApiError extends Error {
@@ -69,8 +124,9 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
   const method = (options.method || "GET").toUpperCase();
   const extraHeaders: Record<string, string> = {};
 
-  if (_inMemorySessionToken) {
-    extraHeaders["Authorization"] = `Bearer ${_inMemorySessionToken}`;
+  const activeSessionToken = getSessionToken();
+  if (activeSessionToken) {
+    extraHeaders["Authorization"] = `Bearer ${activeSessionToken}`;
   }
 
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
@@ -160,8 +216,7 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    _inMemorySessionToken = res.session_token || null;
-    _inMemoryCsrfToken = res.csrf_token || null;
+    setSessionTokens(res.session_token || null, res.csrf_token || null);
     return res;
   },
 
@@ -170,8 +225,7 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    _inMemorySessionToken = res.session_token || null;
-    _inMemoryCsrfToken = res.csrf_token || null;
+    setSessionTokens(res.session_token || null, res.csrf_token || null);
     return res;
   },
 
@@ -181,8 +235,7 @@ export const apiClient = {
         method: "POST",
       });
     } finally {
-      _inMemorySessionToken = null;
-      _inMemoryCsrfToken = null;
+      setSessionTokens(null, null);
     }
   },
 
