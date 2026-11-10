@@ -366,5 +366,23 @@ export interface BenchmarkReportResponse {
   scenarios: ScenarioComparisonItem[];
 }
 
+export interface PendingApprovalItem {
+  request_id: number;
+  student_id: string;
+  student_name: string;
+  student_email?: string | null;
+  goal: string;
+  days?: number | null;
+  category?: string | null;
+  reason?: string | null;
+  attendance_percentage?: number | null;
+  assigned_approver?: string | null;
+  current_status: WorkflowStatus;
+  human_approval_status: HumanApprovalStatus;
+  pending_task_description?: string | null;
+  created_at?: string | null;
+}
+
+
 
 

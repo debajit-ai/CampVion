@@ -41,7 +41,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-screen bg-cv-canvas text-cv-fg flex flex-col selection:bg-cv-accent selection:text-cv-on-accent overflow-x-hidden max-w-full"
       >
-        <Script id="campvion-theme-init" strategy="beforeInteractive">
+        <Script id="campvion-theme-init" strategy="afterInteractive">
           {`
             (function() {
               try {

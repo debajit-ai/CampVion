@@ -1,29 +1,40 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
   Clock,
+  Eye,
+  FileText,
+  Loader2,
   PlusCircle,
   RefreshCw,
   RotateCcw,
   Search,
   ShieldAlert,
+  ShieldCheck,
+  User,
   Wrench,
+  X,
+  XCircle,
   Zap,
 } from "lucide-react";
 import {
   AgentResult,
   AgentState,
+  PendingApprovalItem,
   ToolSchema,
+  UserProfile,
   WorkflowSessionSummary,
   WorkflowStatus,
   WorkspaceSection,
 } from "../types/api";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import { apiClient } from "../lib/api";
 
 interface OverviewDashboardProps {
   state: AgentState | null;
@@ -37,6 +48,10 @@ interface OverviewDashboardProps {
   onRefreshActiveRequest?: () => void;
   onNavigateToSection?: (section: WorkspaceSection) => void;
   onFocusComposer?: () => void;
+  user?: UserProfile | null;
+  onApproveWorkflow?: (requestId: number) => Promise<void>;
+  onRejectWorkflow?: (requestId: number) => Promise<void>;
+  onRefreshPendingApprovals?: () => void;
 }
 
 export function OverviewDashboard({
@@ -51,9 +66,112 @@ export function OverviewDashboard({
   onRefreshActiveRequest,
   onNavigateToSection,
   onFocusComposer,
+  user,
+  onApproveWorkflow,
+  onRejectWorkflow,
+  onRefreshPendingApprovals,
 }: OverviewDashboardProps) {
   const { experienceMode } = useTheme();
+  const { user: authUser } = useAuth();
+  const effectiveUser = user || authUser;
+  const roleStr = (effectiveUser?.role || "").toLowerCase();
+  const isAdmin = roleStr === "administrator" || roleStr === "system_administrator";
+
   const [lookupIdInput, setLookupIdInput] = useState<string>("");
+
+  // Pending Approvals Queue State for Administrators
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalItem[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState<boolean>(false);
+  const [approvalActionId, setApprovalActionId] = useState<number | null>(null);
+  const [approvalsFilter, setApprovalsFilter] = useState<string>("");
+  const [displayLimit, setDisplayLimit] = useState<number>(6);
+  const [actionNotification, setActionNotification] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+
+  const fetchApprovals = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setApprovalsLoading(true);
+      const items = await apiClient.listPendingApprovals();
+      setPendingApprovals(items);
+      if (onRefreshPendingApprovals) {
+        onRefreshPendingApprovals();
+      }
+    } catch (err: unknown) {
+      console.error("Failed to fetch pending approvals:", err);
+    } finally {
+      setApprovalsLoading(false);
+    }
+  }, [isAdmin, onRefreshPendingApprovals]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchApprovals();
+    }
+  }, [isAdmin, fetchApprovals]);
+
+  const handleApproveItem = async (requestId: number) => {
+    try {
+      setApprovalActionId(requestId);
+      if (onApproveWorkflow) {
+        await onApproveWorkflow(requestId);
+      } else {
+        await apiClient.approveWorkflow(requestId);
+      }
+      setActionNotification({
+        message: `Request #REQ-${requestId} approved! Autonomous DAG workflow resumed to completion.`,
+        type: "success",
+      });
+      setPendingApprovals((prev) => prev.filter((item) => item.request_id !== requestId));
+      onSelectRequestId(requestId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Approval failed";
+      setActionNotification({ message: msg, type: "error" });
+    } finally {
+      setApprovalActionId(null);
+    }
+  };
+
+  const handleRejectItem = async (requestId: number) => {
+    try {
+      setApprovalActionId(requestId);
+      if (onRejectWorkflow) {
+        await onRejectWorkflow(requestId);
+      } else {
+        await apiClient.rejectWorkflow(requestId);
+      }
+      setActionNotification({
+        message: `Request #REQ-${requestId} rejected. Workflow terminated per human administrative decision.`,
+        type: "error",
+      });
+      setPendingApprovals((prev) => prev.filter((item) => item.request_id !== requestId));
+      onSelectRequestId(requestId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Rejection failed";
+      setActionNotification({ message: msg, type: "error" });
+    } finally {
+      setApprovalActionId(null);
+    }
+  };
+
+  const filteredApprovals = useMemo(() => {
+    if (!approvalsFilter.trim()) return pendingApprovals;
+    const query = approvalsFilter.toLowerCase();
+    return pendingApprovals.filter(
+      (item) =>
+        item.student_name.toLowerCase().includes(query) ||
+        item.student_id.toLowerCase().includes(query) ||
+        item.goal.toLowerCase().includes(query) ||
+        String(item.request_id).includes(query) ||
+        (item.assigned_approver && item.assigned_approver.toLowerCase().includes(query))
+    );
+  }, [pendingApprovals, approvalsFilter]);
+
+  const displayedApprovals = useMemo(() => {
+    return filteredApprovals.slice(0, displayLimit);
+  }, [filteredApprovals, displayLimit]);
 
   const currentStatus: WorkflowStatus = state?.current_status || result?.status || "IDLE";
   const completedCount = state?.completed_tasks.length ?? result?.completed_tasks.length ?? 0;
@@ -214,6 +332,276 @@ export function OverviewDashboard({
           )}
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 🛡️ ADMINISTRATOR PENDING APPROVALS QUEUE (FRONT AND CENTER FOR ADMINS)     */}
+      {/* ========================================================================= */}
+      {isAdmin && (
+        <div className="bg-cv-surface border-2 border-cv-warning-line/70 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-cv-line">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-cv-warning-soft border border-cv-warning-line text-cv-warning shrink-0">
+                <ShieldAlert className="h-5 w-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2 flex-wrap">
+                  <h3 className="text-sm font-bold tracking-tight text-cv-fg font-sans uppercase">
+                    Institutional Governance &amp; <span className="text-cv-accent-ink">Admin Approval Queue</span>
+                  </h3>
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-cv-warning-soft border border-cv-warning-line text-cv-warning">
+                    {pendingApprovals.length} PENDING
+                  </span>
+                </div>
+                <p className="text-xs text-cv-fg-2 mt-0.5 font-sans">
+                  Multi-step workflows paused at Human-in-the-Loop policy checkpoints awaiting administrative action.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={fetchApprovals}
+                disabled={approvalsLoading}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cv-inset border border-cv-line hover:border-cv-accent-line text-xs font-mono text-cv-fg transition cursor-pointer disabled:opacity-50"
+                title="Refresh approval queue from database"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${approvalsLoading ? "animate-spin text-cv-accent-ink" : ""}`} />
+                <span>Refresh Queue</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search / Filter and Count */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Search className="h-3.5 w-3.5 text-cv-fg-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={approvalsFilter}
+                onChange={(e) => setApprovalsFilter(e.target.value)}
+                placeholder="Filter by student name, ID, or goal keyword..."
+                className="w-full pl-9 pr-7 py-1.5 rounded-lg bg-cv-inset border border-cv-line text-xs text-cv-fg placeholder-cv-fg-3 focus:outline-none focus:border-cv-accent-line"
+              />
+              {approvalsFilter && (
+                <button
+                  type="button"
+                  onClick={() => setApprovalsFilter("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-cv-fg-3 hover:text-cv-fg text-xs"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] font-mono text-cv-fg-2">
+              Showing {displayedApprovals.length} of {filteredApprovals.length} request(s)
+            </span>
+          </div>
+
+          {/* Notification feedback banner if any */}
+          {actionNotification && (
+            <div
+              className={`px-3.5 py-2.5 rounded-lg border text-xs flex items-center justify-between ${
+                actionNotification.type === "success"
+                  ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                  : "bg-cv-error-soft border-cv-error-line text-cv-error"
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                {actionNotification.type === "success" ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                )}
+                <span className="font-medium">{actionNotification.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionNotification(null)}
+                className="p-1 hover:opacity-75 cursor-pointer"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Queue List */}
+          {approvalsLoading && pendingApprovals.length === 0 ? (
+            <div className="p-8 text-center rounded-lg bg-cv-inset border border-cv-line">
+              <Loader2 className="h-6 w-6 animate-spin text-cv-accent-ink mx-auto mb-2" />
+              <p className="text-xs font-mono text-cv-fg-2">Querying database for pending student workflows...</p>
+            </div>
+          ) : filteredApprovals.length === 0 ? (
+            <div className="p-8 text-center rounded-lg bg-cv-inset border border-cv-line space-y-2">
+              <ShieldCheck className="h-8 w-8 text-cv-success mx-auto" />
+              <h4 className="text-xs font-bold font-mono uppercase text-cv-fg">Queue Clear</h4>
+              <p className="text-xs text-cv-fg-2">
+                {approvalsFilter
+                  ? "No pending approvals match your search filter."
+                  : "No campus service workflows are currently paused for human approval."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {displayedApprovals.map((item) => {
+                const isOperating = approvalActionId === item.request_id;
+                return (
+                  <div
+                    key={item.request_id}
+                    className="p-4 rounded-xl bg-cv-surface border border-cv-line hover:border-cv-accent-line/40 transition-all shadow-xs space-y-3"
+                  >
+                    {/* Top Row: Request ID, Status, Student info, Approver Role */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cv-raised border border-cv-line text-cv-fg">
+                          #REQ-{item.request_id}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-cv-warning-soft border border-cv-warning-line text-cv-warning flex items-center space-x-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-cv-warning-solid animate-pulse" />
+                          <span>WAITING FOR HUMAN</span>
+                        </span>
+                        <span className="text-xs font-semibold text-cv-fg flex items-center space-x-1">
+                          <User className="h-3.5 w-3.5 text-cv-accent-ink" />
+                          <span>{item.student_name}</span>
+                          <span className="text-[11px] font-mono text-cv-fg-2 font-normal">({item.student_id})</span>
+                        </span>
+                        {item.student_email && (
+                          <span className="text-[11px] text-cv-fg-3 font-mono hidden md:inline">
+                            &bull; {item.student_email}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cv-inset border border-cv-line text-cv-fg-2">
+                          Approver: {item.assigned_approver || "Academic Administrator"}
+                        </span>
+                        {item.created_at && (
+                          <span className="text-[10px] font-mono text-cv-fg-3 hidden lg:inline">
+                            {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Middle: Student's Natural Language Request */}
+                    <div className="p-3 rounded-lg bg-cv-inset border border-cv-line/60">
+                      <div className="text-[11px] font-mono text-cv-fg-2 uppercase tracking-wide mb-1 flex items-center space-x-1">
+                        <FileText className="h-3 w-3 text-cv-accent-ink" />
+                        <span>Student Natural Language Goal:</span>
+                      </div>
+                      <p className="text-xs font-mono text-cv-fg font-medium">
+                        &ldquo;{item.goal}&rdquo;
+                      </p>
+                    </div>
+
+                    {/* Metadata Context Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                      <div className="p-2 rounded bg-cv-raised border border-cv-line">
+                        <span className="text-cv-fg-3 block text-[9px] uppercase">Duration &amp; Type</span>
+                        <span className="font-semibold text-cv-fg capitalize">
+                          {item.days || 1} day(s) &bull; {item.category || "General"}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-cv-raised border border-cv-line">
+                        <span className="text-cv-fg-3 block text-[9px] uppercase">Verified Attendance</span>
+                        <span className="font-semibold text-cv-success">
+                          {item.attendance_percentage !== null && item.attendance_percentage !== undefined
+                            ? `${item.attendance_percentage.toFixed(1)}% (Eligible)`
+                            : "Verified (≥75%)"}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-cv-raised border border-cv-line col-span-2">
+                        <span className="text-cv-fg-3 block text-[9px] uppercase">Paused DAG Task</span>
+                        <span className="font-semibold text-cv-warning truncate block">
+                          {item.pending_task_description || "Create leave application (requires authorization)"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions Strip */}
+                    <div className="pt-2 border-t border-cv-line flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectRequestId(item.request_id);
+                          if (onNavigateToSection) onNavigateToSection("workspace");
+                        }}
+                        className="inline-flex items-center space-x-1.5 text-xs font-mono text-cv-fg-2 hover:text-cv-accent-ink transition cursor-pointer"
+                        title="View DAG plan and trace for this request"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Inspect DAG &amp; Traces</span>
+                      </button>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectItem(item.request_id)}
+                          disabled={isOperating || isLoading}
+                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-cv-surface hover:bg-cv-error-soft text-cv-fg hover:text-cv-error border border-cv-line hover:border-cv-error-line transition cursor-pointer disabled:opacity-40"
+                          title="Reject request and terminate autonomous workflow"
+                        >
+                          <XCircle className="h-3.5 w-3.5 text-cv-error" />
+                          <span>Reject</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleApproveItem(item.request_id)}
+                          disabled={isOperating || isLoading}
+                          className="inline-flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-cv-success-solid hover:bg-cv-success-solid/90 text-white shadow-xs transition cursor-pointer disabled:opacity-40"
+                          title="Approve request and resume DAG execution"
+                        >
+                          {isOperating ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Resuming DAG...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Approve Workflow</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Pagination / View More */}
+              {filteredApprovals.length > 6 && (
+                <div className="flex items-center justify-between pt-2 text-xs font-mono">
+                  <span className="text-cv-fg-2">
+                    Showing {Math.min(displayLimit, filteredApprovals.length)} of {filteredApprovals.length}
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    {displayLimit < filteredApprovals.length ? (
+                      <button
+                        type="button"
+                        onClick={() => setDisplayLimit((prev) => prev + 10)}
+                        className="px-3 py-1 rounded bg-cv-raised border border-cv-line hover:border-cv-accent-line text-cv-fg text-xs cursor-pointer"
+                      >
+                        Show More (+10)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDisplayLimit(6)}
+                        className="px-3 py-1 rounded bg-cv-raised border border-cv-line hover:border-cv-accent-line text-cv-fg text-xs cursor-pointer"
+                      >
+                        Show Less
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 4 Core Operational Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

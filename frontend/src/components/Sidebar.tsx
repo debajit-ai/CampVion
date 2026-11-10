@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import {
+  Activity,
   ArrowRight,
   BarChart3,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  ShieldAlert,
   Terminal,
   User,
   Wrench,
@@ -61,6 +63,7 @@ interface SidebarProps {
   onInspectToolInTrace?: (toolName: string) => void;
   user?: UserProfile | null;
   onLogout?: () => void;
+  pendingApprovalsCount?: number;
 }
 
 export function Sidebar({
@@ -85,6 +88,7 @@ export function Sidebar({
   onInspectToolInTrace,
   user,
   onLogout,
+  pendingApprovalsCount,
 }: SidebarProps) {
   const { experienceMode } = useTheme();
   const isOnline = health?.status === "healthy";
@@ -104,36 +108,66 @@ export function Sidebar({
 
   const friendlyStatus = getFriendlyWorkflowStatus(workflowStatus, experienceMode);
 
+  const roleStr = (user?.role || "").toLowerCase();
+  const isAdmin = roleStr === "administrator" || roleStr === "system_administrator";
+
   const navItems = [
+    ...(isAdmin
+      ? [
+          {
+            id: "unified" as WorkspaceSection,
+            label: "Admin Approvals & Queue",
+            shortLabel: "Approvals",
+            icon: <ShieldAlert className="h-4 w-4 text-cv-warning" />,
+            badge: (pendingApprovalsCount ?? 0) > 0 ? (pendingApprovalsCount ?? 0) : undefined,
+          },
+        ]
+      : []),
     {
       id: "chat" as WorkspaceSection,
       label: experienceMode === "simple" ? "Campus Assistant" : "Conversational Assistant",
       shortLabel: "Assistant",
       icon: <MessageSquare className="h-4 w-4" />,
+      badge: undefined,
     },
+    ...(!isAdmin
+      ? [
+          {
+            id: "unified" as WorkspaceSection,
+            label: experienceMode === "simple" ? "Operations Overview" : "Unified Operations Overview",
+            shortLabel: "Overview",
+            icon: <Activity className="h-4 w-4" />,
+            badge: undefined,
+          },
+        ]
+      : []),
     {
       id: "workspace" as WorkspaceSection,
       label: experienceMode === "simple" ? "Request Progress" : "Workflow Pipeline (DAG)",
       shortLabel: "Progress",
       icon: <Layers className="h-4 w-4" />,
+      badge: undefined,
     },
     {
       id: "observability" as WorkspaceSection,
       label: experienceMode === "simple" ? "Activity History" : "Decision Traces & Logs",
       shortLabel: "Activity",
       icon: <Terminal className="h-4 w-4" />,
+      badge: undefined,
     },
     {
       id: "evaluation" as WorkspaceSection,
       label: experienceMode === "simple" ? "System Performance" : "Evaluation & Reliability",
       shortLabel: "Performance",
       icon: <BarChart3 className="h-4 w-4" />,
+      badge: undefined,
     },
     {
       id: "registry" as WorkspaceSection,
       label: experienceMode === "simple" ? "Campus Services" : "Tool Registry & Schemas",
       shortLabel: "Services",
       icon: <Wrench className="h-4 w-4" />,
+      badge: undefined,
     },
   ];
 
@@ -233,14 +267,24 @@ export function Sidebar({
                 title={item.label}
               >
                 <div
-                  className={`shrink-0 ${
+                  className={`shrink-0 relative ${
                     isActive ? "text-cv-accent-ink" : "text-cv-fg-2"
                   }`}
                 >
                   {item.icon}
+                  {isCollapsed && item.badge !== undefined && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-cv-warning-solid animate-pulse" />
+                  )}
                 </div>
                 {!isCollapsed && (
-                  <span className="truncate">{item.label}</span>
+                  <div className="flex-1 flex items-center justify-between min-w-0">
+                    <span className="truncate">{item.label}</span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cv-warning-soft border border-cv-warning-line text-cv-warning shrink-0 animate-pulse">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
                 )}
                 {/* Neon active indicator */}
                 <span

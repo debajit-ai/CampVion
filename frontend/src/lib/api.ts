@@ -18,6 +18,7 @@ import {
   ConversationSessionData,
   ConversationSummaryItem,
   BenchmarkReportResponse,
+  PendingApprovalItem,
 } from "../types/api";
 
 export const DEFAULT_API_BASE_URL =
@@ -267,6 +268,12 @@ export const apiClient = {
     });
   },
 
+  async listPendingApprovals(): Promise<PendingApprovalItem[]> {
+    return fetchJson<PendingApprovalItem[]>("/agent/pending-approvals", {
+      method: "GET",
+    });
+  },
+
   async getLLMStatus(): Promise<{
     provider: string;
     model: string;
@@ -365,4 +372,6 @@ export const apiClient = {
 export const api = apiClient;
 export const getBenchmarkReport = apiClient.getBenchmarkReport;
 export const runBenchmarkSuite = apiClient.runBenchmarkSuite;
+export const listPendingApprovals = apiClient.listPendingApprovals;
+
 

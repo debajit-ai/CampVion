@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  Clock,
   Loader2,
   ShieldAlert,
   User,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { AgentState } from "../types/api";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
 interface HumanApprovalCenterProps {
   state: AgentState | null;
@@ -27,6 +29,12 @@ export function HumanApprovalCenter({
   isLoading,
 }: HumanApprovalCenterProps) {
   const { experienceMode } = useTheme();
+  const { user } = useAuth();
+
+  const isAuthorizedApprover =
+    user?.role === "administrator" ||
+    user?.role === "system_administrator" ||
+    user?.role === "faculty";
 
   // CRITICAL REQUIREMENT: Never display approval controls for a workflow that is not awaiting human approval
   if (
@@ -62,24 +70,43 @@ export function HumanApprovalCenter({
           <div>
             <div className="flex items-center flex-wrap gap-2">
               <h2 className="text-sm font-bold tracking-tight text-cv-fg">
-                {experienceMode === "simple" ? (
+                {isAuthorizedApprover ? (
+                  experienceMode === "simple" ? (
+                    <>
+                      Your Approval is <span className="text-cv-accent-ink">Required</span>
+                    </>
+                  ) : (
+                    <>
+                      Human-in-the-Loop <span className="text-cv-accent-ink">Approval Required</span>
+                    </>
+                  )
+                ) : experienceMode === "simple" ? (
                   <>
-                    Your Approval is <span className="text-cv-accent-ink">Required</span>
+                    Institutional Review <span className="text-cv-accent-ink">in Progress</span>
                   </>
                 ) : (
                   <>
-                    Human-in-the-Loop <span className="text-cv-accent-ink">Approval Required</span>
+                    Institutional Gate <span className="text-cv-accent-ink">Awaiting Review</span>
                   </>
                 )}
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-cv-warning-soft border border-cv-warning-line text-cv-warning">
-                {experienceMode === "simple" ? "Needs Your Review" : "Action Paused"}
+              <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-cv-warning-soft border border-cv-warning-line text-cv-warning flex items-center space-x-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-cv-warning animate-ping mr-1" />
+                {isAuthorizedApprover
+                  ? experienceMode === "simple"
+                    ? "Needs Your Review"
+                    : "Action Paused (Awaiting Admin)"
+                  : "Awaiting Warden / Admin Review"}
               </span>
             </div>
             <p className="text-xs text-cv-fg-2 mt-0.5">
-              {experienceMode === "simple"
-                ? "Please review and approve this request before CampVion submits your official application."
-                : "The autonomous agent paused before executing a consequential campus administrative action."}
+              {isAuthorizedApprover
+                ? experienceMode === "simple"
+                  ? "Please review and authorize this student request to proceed with official submission."
+                  : "The autonomous agent paused before executing a consequential campus administrative action. Administrative review required."
+                : experienceMode === "simple"
+                ? "Your leave request is queued and currently awaiting official authorization from the Warden / Faculty Advisor."
+                : "Execution has halted before the consequential database write (`create_leave_application`). Paused for Warden / Administrator review."}
             </p>
           </div>
         </div>
@@ -160,54 +187,92 @@ export function HumanApprovalCenter({
         </div>
       </div>
 
-      {/* Caution message */}
+      {/* Institutional Gate Notice Box */}
       <div className="mt-3 flex items-start space-x-2.5 text-xs text-cv-warning bg-cv-warning-soft p-3 rounded-xl border border-cv-warning-line">
         <AlertTriangle className="h-4 w-4 shrink-0 text-cv-warning mt-0.5" />
-        <p className="text-xs leading-relaxed text-cv-fg">
-          {experienceMode === "simple"
-            ? "Approving will officially submit this leave application to the university administration. Rejecting will cancel this request safely."
-            : "Authorizing grants execution rights to submit the official campus leave application. Rejecting will terminate the workflow safely with an audit trail."}
-        </p>
+        <div className="text-xs leading-relaxed text-cv-fg">
+          {isAuthorizedApprover ? (
+            <p>
+              {experienceMode === "simple"
+                ? "Approving will officially submit this leave application to the university administration. Rejecting will cancel this request safely."
+                : "Authorizing grants execution rights to submit the official campus leave application. Rejecting will terminate the workflow safely with an audit trail."}
+            </p>
+          ) : (
+            <div>
+              <p className="font-semibold text-cv-warning">
+                Institutional Safety Gate: Awaiting Administrator / Warden Approval
+              </p>
+              <p className="text-cv-fg-2 mt-0.5">
+                Students cannot self-approve official leave records. This request has paused at the Institutional Gate and is currently in the Admin Review Queue. You may withdraw this request at any time prior to approval.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Decision Controls */}
-      <div className="mt-5 flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-cv-warning-line">
-        <button
-          type="button"
-          onClick={() => onReject(requestId)}
-          disabled={isLoading}
-          className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-cv-error-soft hover:bg-cv-error-line text-cv-error border border-cv-error-line transition disabled:opacity-50 cursor-pointer"
-        >
-          {isLoading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <X className="h-3.5 w-3.5 text-cv-error" />
-          )}
-          <span>{experienceMode === "simple" ? "Cancel Request" : "Reject Workflow"}</span>
-        </button>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-cv-warning-line">
+        {!isAuthorizedApprover ? (
+          <>
+            <div className="flex items-center space-x-2 text-xs text-cv-warning font-medium">
+              <Clock className="h-3.5 w-3.5 animate-pulse" />
+              <span>Awaiting Warden / Administrator Review</span>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => onApprove(requestId)}
-          disabled={isLoading}
-          className="flex items-center space-x-2 px-5 py-2 rounded-xl text-xs font-semibold bg-cv-success-solid hover:bg-cv-success-solid-hover text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Submitting Application...</span>
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4 stroke-[2.5]" />
-              <span>
-                {experienceMode === "simple"
-                  ? "Approve & Submit Application"
-                  : "Authorize & Continue Execution"}
-              </span>
-            </>
-          )}
-        </button>
+            <button
+              type="button"
+              onClick={() => onReject(requestId)}
+              disabled={isLoading}
+              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-cv-error-soft hover:bg-cv-error-line text-cv-error border border-cv-error-line transition disabled:opacity-50 cursor-pointer"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <X className="h-3.5 w-3.5 text-cv-error" />
+              )}
+              <span>{experienceMode === "simple" ? "Withdraw Request" : "Cancel Request"}</span>
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center justify-end gap-3 w-full">
+            <button
+              type="button"
+              onClick={() => onReject(requestId)}
+              disabled={isLoading}
+              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-cv-error-soft hover:bg-cv-error-line text-cv-error border border-cv-error-line transition disabled:opacity-50 cursor-pointer"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <X className="h-3.5 w-3.5 text-cv-error" />
+              )}
+              <span>{experienceMode === "simple" ? "Reject Request" : "Reject Workflow"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onApprove(requestId)}
+              disabled={isLoading}
+              className="flex items-center space-x-2 px-5 py-2 rounded-xl text-xs font-semibold bg-cv-success-solid hover:bg-cv-success-solid-hover text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Authorizing Application...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 stroke-[2.5]" />
+                  <span>
+                    {experienceMode === "simple"
+                      ? "Authorize & Submit Application"
+                      : "Authorize & Continue Execution"}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

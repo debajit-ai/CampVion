@@ -1518,7 +1518,7 @@ class ConversationEngine:
         session.missing_slots_json = "[]"
 
         if op_type == "LEAVE_APPLICATION":
-            agent = AXORAAgent(self.db)
+            agent = AXORAAgent(self.db, auto_approve=False)
             result = agent.start(student_id, raw_goal)
             state = agent.get_state(result.request_id)
 
@@ -1531,13 +1531,13 @@ class ConversationEngine:
 
             if result.status == "WAITING_FOR_HUMAN":
                 fields = proposal.get("fields", {})
+                approver_label = fields.get("approver_gate", "Warden / Faculty Advisor")
                 reply = (
-                    f"Your leave request has been validated and registered as **Request #{result.request_id}**.\n\n"
+                    f"Your leave application has been compiled and registered as **Request #{result.request_id}**.\n\n"
                     f"- **Eligibility & Policy Check**: Verified (`get_student_profile`, `get_attendance`, `get_leave_policy`, `check_leave_eligibility` completed)\n"
-                    f"- **Current Status**: **Awaiting Institutional Approval** ({fields.get('approver_gate', 'Faculty Advisor')})\n\n"
-                    "Please note: your confirmation submitted the request into the campus workflow. "
-                    "An authorized reviewer can now approve or reject **Request #"
-                    f"{result.request_id}** using the approval card below."
+                    f"- **Institutional Governance Status**: **WAITING FOR APPROVAL** — Paused at Institutional Gate\n"
+                    f"- **Designated Approver**: {approver_label}\n\n"
+                    "Your request is now queued in the university administrative dashboard awaiting formal authorization by the Warden / Administrator."
                 )
             elif result.status == "COMPLETED":
                 reply = (
@@ -1673,7 +1673,7 @@ class ConversationEngine:
         directive_text: str,
     ) -> Tuple[str, Dict[str, Any]]:
         """Support diagnostic fault-injection directives (`FAILURE_MODE=...`) for reliability testing."""
-        agent = AXORAAgent(self.db)
+        agent = AXORAAgent(self.db, auto_approve=False)
         result = agent.start(session.student_id, directive_text)
         state = agent.get_state(result.request_id)
         session.active_workflow_request_id = result.request_id
@@ -1728,7 +1728,7 @@ class ConversationEngine:
 
         workflow_state = None
         if session.active_workflow_request_id:
-            agent = AXORAAgent(self.db)
+            agent = AXORAAgent(self.db, auto_approve=False)
             st = agent.get_state(session.active_workflow_request_id)
             if st:
                 workflow_state = st.model_dump()

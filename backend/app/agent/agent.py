@@ -17,8 +17,9 @@ from app.schemas.trace import TraceCreate
 from app.db.models import AgentStateModel, CampusRequest
 
 class AXORAAgent:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, auto_approve: bool = False):
         self.db = db
+        self.auto_approve = auto_approve
         self.normalizer = GoalNormalizer()
         self.decomposer = GoalDecomposer()
         self.planner = Planner()
@@ -138,25 +139,71 @@ class AXORAAgent:
                 if unmet_deps:
                     raise ValueError(f"Task '{task_id}' has unmet dependencies: {unmet_deps}")
                 
-                # Check human approval requirement
-                if task.requires_human_approval and state.human_approval_status != "APPROVED":
-                    state.current_status = "WAITING_FOR_HUMAN"
-                    state.human_approval_required = True
-                    state.human_approval_status = "PENDING"
-                    state.current_step += 1
-                    self._log_trace(state.request_id, state.current_step, "HUMAN_APPROVAL_REQUIRED", "orchestrator", "pause", "pending")
-                    self._save_state(state)
-                    return self._build_result(state, "Waiting for human approval", start_time=start_time)
+                # Strict Human-in-the-Loop (HITL) Halt Gate
+                # Halt immediately BEFORE tool selection or execution if task requires approval
+                # or candidate tools involve consequential operations (leave application, hostel allocation)
+                candidate_tools = getattr(task, "candidate_tools", []) or []
+                is_consequential_task = (
+                    task.requires_human_approval
+                    or any(t in ["create_leave_application", "submit_hostel_service_request"] for t in candidate_tools)
+                )
+
+                if is_consequential_task and state.human_approval_status != "APPROVED":
+                    if not self.auto_approve:
+                        state.current_status = "WAITING_FOR_HUMAN"
+                        state.human_approval_required = True
+                        state.human_approval_status = "PENDING"
+                        state.current_step += 1
+                        self._log_trace(
+                            state.request_id,
+                            state.current_step,
+                            "HUMAN_APPROVAL_REQUIRED",
+                            "orchestrator",
+                            "pause",
+                            "pending",
+                            output_data=json.dumps({
+                                "task_id": task_id,
+                                "task_description": task.description,
+                                "message": "Paused at Institutional Gate: Awaiting Administrator / Warden authorization."
+                            })
+                        )
+                        self._save_state(state)
+                        return self._build_result(state, "Waiting for human approval", start_time=start_time)
 
                 state.current_step += 1
                 tool_name = self.tool_selector.select_tool(task)
                 state.selected_tools[task_id] = tool_name
                 self._log_trace(state.request_id, state.current_step, "TOOL_SELECTED", "tool_selector", "select", "success", output_data=tool_name)
+
+                # Tool-level secondary safety gate: verify if selected tool requires approval
+                tool = registry.get_tool(tool_name)
+                tool_requires_approval = getattr(tool, "requires_human_approval", False) if tool else False
+                if (tool_requires_approval or tool_name in ["create_leave_application", "submit_hostel_service_request"]) and state.human_approval_status != "APPROVED":
+                    if not self.auto_approve:
+                        task.requires_human_approval = True
+                        state.current_status = "WAITING_FOR_HUMAN"
+                        state.human_approval_required = True
+                        state.human_approval_status = "PENDING"
+                        state.current_step += 1
+                        self._log_trace(
+                            state.request_id,
+                            state.current_step,
+                            "HUMAN_APPROVAL_REQUIRED",
+                            "orchestrator",
+                            "pause",
+                            "pending",
+                            output_data=json.dumps({
+                                "task_id": task_id,
+                                "tool_name": tool_name,
+                                "message": "Secondary safety gate: Consequential tool requires explicit human approval."
+                            })
+                        )
+                        self._save_state(state)
+                        return self._build_result(state, "Waiting for human approval", start_time=start_time)
                 
                 if not self.policy_engine.validate_tool_execution(tool_name):
                     raise ValueError(f"Tool {tool_name} failed policy check")
 
-                tool = registry.get_tool(tool_name)
                 kwargs = {}
                 if "student_id" in tool.input_schema.get("properties", {}):
                     kwargs["student_id"] = state.student_id

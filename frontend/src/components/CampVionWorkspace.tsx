@@ -9,6 +9,7 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   ConversationSessionData,
   CourseRecord,
   HealthResponse,
+  PendingApprovalItem,
   Student,
   Task,
   ToolSchema,
@@ -91,6 +93,12 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     Record<number, WorkflowSessionSummary>
   >({});
 
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalItem[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState<boolean>(false);
+
+  const roleStr = (user?.role || "").toLowerCase();
+  const isAdmin = roleStr === "administrator" || roleStr === "system_administrator";
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +118,44 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       setSelectedStudentId(user.student_id);
     }
   }, [user?.student_id, customStudentId]);
+
+  // Global pending approvals fetcher for administrators
+  const fetchPendingApprovals = useCallback(async () => {
+    if (!user) return;
+    const role = (user.role || "").toLowerCase();
+    if (role === "administrator" || role === "system_administrator") {
+      try {
+        setApprovalsLoading(true);
+        const list = await apiClient.listPendingApprovals();
+        setPendingApprovals(list);
+        if (list.length > 0) {
+          setRecentRequestIds((prev) => {
+            const idsToAdd = list.slice(0, 10).map((i) => i.request_id);
+            const combined = Array.from(new Set([...idsToAdd, ...prev]));
+            return combined.slice(0, 15);
+          });
+        }
+      } catch (err: unknown) {
+        console.error("Failed to load pending approvals:", err);
+      } finally {
+        setApprovalsLoading(false);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchPendingApprovals();
+  }, [fetchPendingApprovals]);
+
+  // When Administrator logs in, default view immediately to Operations Overview / Admin Queue
+  useEffect(() => {
+    if (user) {
+      const role = (user.role || "").toLowerCase();
+      if ((role === "administrator" || role === "system_administrator") && activeSection === "chat") {
+        setActiveSection("unified");
+      }
+    }
+  }, [user]);
 
   // Load initial backend dependencies, student attendance/courses, and tool schemas
   const loadInitialData = useCallback(async () => {
@@ -500,6 +546,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       const result = await apiClient.approveWorkflow(requestId);
       setAgentResult(result);
       await fetchWorkflowDetails(requestId, result);
+      await fetchPendingApprovals();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Approval failed";
       setError(message);
@@ -516,6 +563,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       const result = await apiClient.rejectWorkflow(requestId);
       setAgentResult(result);
       await fetchWorkflowDetails(requestId, result);
+      await fetchPendingApprovals();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Rejection failed";
       setError(message);
@@ -625,6 +673,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         onInspectToolInTrace={handleInspectToolInTrace}
         user={user}
         onLogout={handleLogout}
+        pendingApprovalsCount={pendingApprovals.length}
       />
 
       {/* 2. Central Area */}
@@ -679,6 +728,18 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cv-warning-soft border border-cv-warning-line text-cv-warning animate-pulse">
                 Approval Required
               </span>
+            )}
+
+            {isAdmin && pendingApprovals.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveSection("unified")}
+                className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-cv-warning-soft border border-cv-warning-line text-cv-warning hover:bg-cv-warning-soft/80 transition cursor-pointer"
+                title="View Admin Approval Queue"
+              >
+                <ShieldAlert className="h-3 w-3 animate-pulse text-cv-warning" />
+                <span>{pendingApprovals.length} Approval{pendingApprovals.length > 1 ? "s" : ""} Pending</span>
+              </button>
             )}
           </div>
 
@@ -907,6 +968,10 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                   setActiveSection("chat");
                   setTimeout(() => composerTextareaRef.current?.focus(), 50);
                 }}
+                user={user}
+                onApproveWorkflow={handleApprove}
+                onRejectWorkflow={handleReject}
+                onRefreshPendingApprovals={fetchPendingApprovals}
               />
 
               {pendingApproval && (
