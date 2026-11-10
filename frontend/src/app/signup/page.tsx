@@ -19,9 +19,10 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signup, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { signup, isAuthenticated, isLoading: authLoading, setPreferredDisplayName } = useAuth();
 
   const [fullName, setFullName] = useState("");
+  const [displayNameInput, setDisplayNameInput] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -79,6 +80,9 @@ export default function SignupPage() {
 
     setSubmitting(true);
     try {
+      if (displayNameInput.trim()) {
+        setPreferredDisplayName(displayNameInput.trim());
+      }
       await signup({
         full_name: trimmedName,
         email: trimmedEmail,
@@ -154,6 +158,32 @@ export default function SignupPage() {
               className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-cv-inset border border-cv-line text-xs text-cv-fg placeholder-cv-fg-3 focus:border-cv-accent-line focus:bg-cv-surface transition"
             />
           </div>
+        </div>
+
+        {/* Preferred Display Name (Optional) */}
+        <div>
+          <label
+            htmlFor="signup-display-name"
+            className="block text-xs font-semibold text-cv-fg mb-1.5"
+          >
+            What should CampVion call you?{" "}
+            <span className="text-[10px] text-cv-fg-3 font-normal">(Optional)</span>
+          </label>
+          <div className="relative">
+            <User className="h-4 w-4 text-cv-accent-ink absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              id="signup-display-name"
+              name="displayName"
+              type="text"
+              value={displayNameInput}
+              onChange={(e) => setDisplayNameInput(e.target.value)}
+              placeholder="e.g., Alex, Dev, Champ"
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-cv-inset border border-cv-line text-xs text-cv-fg placeholder-cv-fg-3 focus:border-cv-accent-line focus:bg-cv-surface transition"
+            />
+          </div>
+          <p className="text-[11px] text-cv-fg-3 mt-1">
+            Leave empty to use your full name by default.
+          </p>
         </div>
 
         {/* University Email */}

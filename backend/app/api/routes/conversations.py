@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.security import require_authenticated_user
 from app.db import models
 from app.db.database import get_db
+from app.services import student_service
 from app.llm.conversation_engine import ConversationEngine, resolve_human_date
 
 router = APIRouter()
@@ -46,10 +47,13 @@ def _resolve_authorized_student_id(
     In strict production isolation mode (or for non-demo arbitrary student IDs), a student
     account can only access their own linked `user.student_id`.
     """
-    target_id = (requested_student_id or user.student_id or "S001").strip()
+    if user.role == "student":
+        student_service.ensure_student_for_user(db, user)
+
+    own_id = (user.student_id or "S001").strip()
+    target_id = (requested_student_id or own_id).strip()
 
     if user.role == "student":
-        own_id = (user.student_id or "S001").strip()
         if strict_isolation and target_id != own_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -94,6 +98,10 @@ class SendMessageRequest(BaseModel):
         min_length=1,
         max_length=2000,
         description="Student natural language message",
+    )
+    user_display_name: str = Field(
+        default="Student",
+        description="Student's preferred display name",
     )
 
 
@@ -265,7 +273,11 @@ async def send_conversation_message(
         db.commit()
 
     engine = ConversationEngine(db)
-    return await engine.process_message(session=session, user_text=trimmed)
+    return await engine.process_message(
+        session=session,
+        user_text=trimmed,
+        user_display_name=payload.user_display_name or "Student",
+    )
 
 
 @router.post("/{conversation_id}/confirm")

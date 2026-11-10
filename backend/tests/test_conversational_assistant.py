@@ -219,3 +219,28 @@ def test_14_student_authorization_and_strict_isolation(client):
     )
     assert res.status_code == 403
     assert "not authorized" in res.json()["detail"].lower()
+
+
+def test_15_preferred_display_name_integration(client):
+    """
+    Verify that user_display_name is accepted and dynamically integrated:
+    1. When user_display_name="Champ", greeting addresses "Champ".
+    2. When user_display_name is omitted, it gracefully falls back to the student name ("Alice").
+    """
+    # 1. Preferred display name
+    res1 = client.post(
+        "/api/conversations/message",
+        json={"student_id": "S001", "message": "Hey CampVion!", "user_display_name": "Champ"},
+    )
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert "Champ" in data1["latest_reply"]["content"]
+
+    # 2. Omitted / default falls back to student's name
+    res2 = client.post(
+        "/api/conversations/message",
+        json={"student_id": "S001", "message": "Hey CampVion!"},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert "Alice" in data2["latest_reply"]["content"]

@@ -15,17 +15,44 @@ export interface AuthContextType {
   user: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  preferredDisplayName: string;
+  setPreferredDisplayName: (name: string) => void;
   login: (payload: LoginPayload) => Promise<UserProfile>;
   signup: (payload: SignupPayload) => Promise<UserProfile>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<UserProfile | null>;
 }
 
+const DISPLAY_NAME_STORAGE_KEY = "campvion_user_display_name";
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [preferredDisplayName, setPreferredDisplayNameState] = useState<string>("");
+
+  // Initialize preferred display name from localStorage if present
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(DISPLAY_NAME_STORAGE_KEY);
+      if (stored && stored.trim()) {
+        setPreferredDisplayNameState(stored.trim());
+      }
+    }
+  }, []);
+
+  const setPreferredDisplayName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    setPreferredDisplayNameState(trimmed);
+    if (typeof window !== "undefined") {
+      if (trimmed) {
+        localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, trimmed);
+      } else {
+        localStorage.removeItem(DISPLAY_NAME_STORAGE_KEY);
+      }
+    }
+  }, []);
 
   const refreshSession = useCallback(async (): Promise<UserProfile | null> => {
     try {
@@ -79,12 +106,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isAuthenticated: Boolean(user),
       isLoading,
+      preferredDisplayName,
+      setPreferredDisplayName,
       login,
       signup,
       logout,
       refreshSession,
     }),
-    [user, isLoading, login, signup, logout, refreshSession]
+    [user, isLoading, preferredDisplayName, setPreferredDisplayName, login, signup, logout, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

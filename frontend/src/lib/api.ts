@@ -324,6 +324,7 @@ export const apiClient = {
     conversation_id?: string | null;
     student_id: string;
     message: string;
+    user_display_name?: string;
   }): Promise<ConversationSessionData> {
     return fetchJson<ConversationSessionData>("/conversations/message", {
       method: "POST",

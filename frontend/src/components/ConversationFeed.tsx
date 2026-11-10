@@ -36,6 +36,7 @@ import {
 import { HumanApprovalCenter } from "./HumanApprovalCenter";
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import {
   formatStudentFriendlyError,
   getFriendlyTaskTitle,
@@ -426,12 +427,17 @@ export function ConversationFeed({
   onInspectToolInTrace,
 }: ConversationFeedProps) {
   const { experienceMode } = useTheme();
+  const { user, preferredDisplayName } = useAuth();
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
   const messages: ConversationMessageItem[] = conversation?.messages || [];
   const hasMessages = messages.length > 0;
   const hasWorkflow = Boolean(state || result || tasks.length > 0 || activeRequestId);
+
+  const bannerDisplayName =
+    preferredDisplayName?.trim() ||
+    (user?.full_name ? user.full_name.trim().split(" ")[0] : "Student");
 
   // Auto-scroll to bottom when new messages arrive or loading state toggles
   useEffect(() => {
@@ -443,31 +449,92 @@ export function ConversationFeed({
   // Empty state when no conversation messages and no active workflow exist
   if (!hasMessages && !hasWorkflow) {
     return (
-      <div className="flex flex-col items-center p-6 text-center max-w-3xl mx-auto select-none my-auto">
-        {/* Welcome Avatar & Headline */}
-        <div className="relative mb-5">
-          <div className="h-16 w-16 rounded-2xl campvion-emblem-surface p-2.5 flex items-center justify-center mx-auto shadow-sm">
-            <Image
-              src="/brand/campvion-symbol.png"
-              alt="CampVion Emblem"
-              width={48}
-              height={48}
-              priority
-              className="h-full w-full object-contain"
-            />
-          </div>
-          <span
-            className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-cv-success-solid border-2 border-cv-surface"
-            title="CampVion Intelligence Active"
-          />
-        </div>
+      <div className="flex flex-col items-center p-4 sm:p-6 text-center max-w-3xl mx-auto select-none my-auto w-full">
+        {/* Dynamic Colorful Welcome Card with Electric Violet & Neon Gold Gradient Accents */}
+        <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 w-full bg-[#050505] border border-[#27272a] shadow-2xl transition-all duration-300">
+          {/* Ambient Glows */}
+          <div className="absolute -top-24 -left-20 w-72 h-72 bg-[#8B5CF6]/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-20 w-72 h-72 bg-[#EFFF00]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#10B981]/10 rounded-full blur-3xl pointer-events-none" />
 
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-cv-fg">
-          Welcome to <span className="text-cv-accent-ink">CampVion</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-cv-fg-2 max-w-lg mt-2 leading-relaxed">
-          Your conversational campus assistant. Ask about your attendance, university policies, exams, or apply for leave naturally—CampVion remembers context and asks before submitting actions.
-        </p>
+          {/* Badge & Emblem */}
+          <div className="relative z-10 flex flex-col items-center">
+            {/* CampVion Brand Emblem with Neon Halo */}
+            <div className="relative mb-3">
+              <div className="h-16 w-16 rounded-2xl campvion-emblem-surface p-2.5 flex items-center justify-center mx-auto shadow-lg ring-1 ring-[#8B5CF6]/40 hover:ring-[#EFFF00]/60 transition-all duration-300">
+                <Image
+                  src="/brand/campvion-symbol.png"
+                  alt="CampVion Emblem"
+                  width={48}
+                  height={48}
+                  priority
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <span
+                className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-cv-success-solid border-2 border-[#050505]"
+                title="CampVion Intelligence Active"
+              />
+            </div>
+
+            {/* Dynamic Welcome Heading */}
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white mt-1">
+              Welcome back,{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#EFFF00] via-[#A3E635] to-[#8B5CF6]">
+                {bannerDisplayName}
+              </span>
+              ! ✨
+            </h1>
+
+            {/* Subtitle Copy */}
+            <p className="text-xs sm:text-sm text-zinc-300 max-w-lg mt-2 leading-relaxed">
+              CampVion is ready to assist you with university policies, attendance inquiries, and campus workflows.
+            </p>
+
+            {/* Quick-Action Pills */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+              {[
+                {
+                  label: "Check my overall attendance",
+                  prompt: "Check my overall attendance",
+                  icon: Sparkles,
+                },
+                {
+                  label: "I want to apply for leave",
+                  prompt: "I want to apply for 3 days of medical leave starting tomorrow because of fever.",
+                  icon: Calendar,
+                },
+                {
+                  label: "University Attendance Policy (<75%)",
+                  prompt: "What happens if my attendance falls below 75%?",
+                  icon: BookOpen,
+                },
+                {
+                  label: "What can CampVion do?",
+                  prompt: "Hey CampVion! What can you help me with?",
+                  icon: Layers,
+                },
+              ].map((pill, pIdx) => {
+                const IconComp = pill.icon;
+                return (
+                  <button
+                    key={pIdx}
+                    type="button"
+                    onClick={() => {
+                      if (onSendMessage) {
+                        void onSendMessage(pill.prompt);
+                      }
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[#121215] hover:bg-[#1f1f26] border border-[#27272a] hover:border-[#8B5CF6]/50 text-xs font-medium text-zinc-200 hover:text-white transition cursor-pointer shadow-xs group/pill"
+                  >
+                    <IconComp className="h-3 w-3 text-cv-accent-ink group-hover/pill:text-[#8B5CF6] transition-colors shrink-0" />
+                    <span>{pill.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         {/* Feature Highlights Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mt-7 text-left">

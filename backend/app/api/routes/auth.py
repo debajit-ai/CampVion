@@ -35,6 +35,7 @@ from app.schemas.auth import (
     UserProfileResponse,
 )
 from app.services.email_service import EmailDeliveryService
+from app.services import student_service
 
 router = APIRouter()
 
@@ -179,22 +180,21 @@ def signup(
             detail="An account with this email address already exists. Please sign in instead.",
         )
 
-    # Link to existing Student record if email matches, otherwise default to S001 for workspace operations
-    matched_student = db.query(models.Student).filter(models.Student.email == email).first()
-    linked_student_id = matched_student.student_id if matched_student else "S001"
-
     new_user = models.UserAccount(
         email=email,
         full_name=full_name,
         password_hash=hash_password(payload.password),
         role="student",  # Strictly enforced default role
-        student_id=linked_student_id,
+        student_id=None,
         is_active=1,
         failed_login_attempts=0,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Link or dynamically create authentic Student profile record
+    student_service.ensure_student_for_user(db, new_user)
 
     return _create_session_for_user(
         db=db,
@@ -253,6 +253,9 @@ def login(
             detail="This account has been deactivated. Please contact campus administration.",
         )
 
+    if user.role == "student":
+        student_service.ensure_student_for_user(db, user)
+
     return _create_session_for_user(
         db=db,
         user=user,
@@ -283,10 +286,13 @@ def logout(
 @router.get("/me", response_model=UserProfileResponse)
 def get_current_user_profile(
     user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
 ):
     """
     Return the currently authenticated user's profile and role.
     """
+    if user.role == "student":
+        student_service.ensure_student_for_user(db, user)
     return _serialize_user(user)
 
 

@@ -57,3 +57,10 @@ frontend/.git-backup/
 *.db
 .env
 
+
+.venv/
+*.db
+.env
+.next/
+node_modules/
+

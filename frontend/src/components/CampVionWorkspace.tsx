@@ -51,7 +51,7 @@ interface CampVionWorkspaceProps {
 
 export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspaceProps) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout, preferredDisplayName } = useAuth();
   const { experienceMode, setExperienceMode } = useTheme();
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -103,6 +103,13 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       router.replace("/login");
     }
   }, [authLoading, isAuthenticated, router]);
+
+  // Synchronize active student context with authenticated user's profile
+  useEffect(() => {
+    if (user?.student_id && (!customStudentId || customStudentId === "S001")) {
+      setSelectedStudentId(user.student_id);
+    }
+  }, [user?.student_id, customStudentId]);
 
   // Load initial backend dependencies, student attendance/courses, and tool schemas
   const loadInitialData = useCallback(async () => {
@@ -404,6 +411,9 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
             : undefined,
         student_id: selectedStudentId,
         message: trimmed,
+        user_display_name:
+          preferredDisplayName?.trim() ||
+          (user?.full_name ? user.full_name.trim().split(" ")[0] : "Student"),
       });
 
       setConversation(sessionData);

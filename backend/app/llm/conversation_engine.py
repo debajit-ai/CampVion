@@ -313,11 +313,8 @@ class ConversationEngine:
                 total_cls += r.get("total", 0)
 
         overall_pct = round((total_att / total_cls) * 100, 1) if total_cls > 0 else 75.0
-        first_name = (
-            profile.get("name", "Student").split()[0]
-            if isinstance(profile, dict) and profile.get("name")
-            else "Student"
-        )
+        raw_name = profile.get("name", "Student") if isinstance(profile, dict) else "Student"
+        first_name = raw_name.strip().split()[0].title() if raw_name and raw_name.strip() else "Student"
 
         return {
             "student_id": student_id,
@@ -337,6 +334,7 @@ class ConversationEngine:
         session: models.ConversationSession,
         recent_messages: List[models.ConversationMessage],
         user_text: str,
+        user_display_name: str = "Student",
     ) -> Tuple[Optional[LLMConversationalTurnSchema], Dict[str, Any]]:
         """
         Invoke Groq cloud LLM for structured intent classification, slot extraction,
@@ -363,29 +361,32 @@ class ConversationEngine:
         missing_slots = json.loads(session.missing_slots_json or "[]")
         pending_conf = json.loads(session.pending_confirmation_json) if session.pending_confirmation_json else None
 
+        effective_display_name = (
+            user_display_name.strip()
+            if user_display_name and user_display_name.strip() and user_display_name.strip().lower() != "student"
+            else student_ctx.get("first_name", "Student")
+        )
+
         system_prompt = (
-            "You are CampVion, an intelligent, warm, and reliable university operations AI assistant.\n"
-            f"Current Student: {student_ctx['profile'].get('name', student_ctx['student_id'])} "
-            f"(ID: {student_ctx['student_id']}, Program: {student_ctx['profile'].get('program', 'B.Tech')}, "
-            f"Semester: {student_ctx['profile'].get('semester', 5)}, "
-            f"Overall Attendance: {student_ctx['overall_attendance_pct']}%).\n"
-            f"Active Conversation State:\n"
-            f"- active_intent: {session.active_intent or 'None'}\n"
-            f"- collected_slots: {json.dumps(collected_slots)}\n"
-            f"- missing_slots: {json.dumps(missing_slots)}\n"
-            f"- has_pending_confirmation: {bool(pending_conf)}\n\n"
-            "Classify the student's message into one of the 8 intent categories:\n"
-            "1. GENERAL_CONVERSATION: Greetings ('Hey CampVion!', 'Hello', 'Thanks'), asking what CampVion can do.\n"
-            "2. GENERAL_CAMPUS_INFO: General questions about university rules, leave process, attendance rules (<75%), hostel process, required documents.\n"
-            "3. STUDENT_RECORD_QUERY: Asking about their own attendance, courses, exam schedule, fees, hostel room, or leave application status.\n"
-            "4. NEW_OPERATIONAL_REQUEST: Starting a leave application, hostel service request, or support ticket.\n"
-            "5. FOLLOW_UP_ANSWER: Answering a clarification question or supplying missing details (e.g. 'Overall', 'Three days', 'Tomorrow', 'Medical reasons').\n"
-            "6. CONFIRMATION_RESPONSE: Saying 'Yes', 'Confirm', 'Submit it' to confirm a prepared request.\n"
-            "7. MODIFICATION_OR_CANCELLATION: Modifying details ('Change it to 2 days', 'Make it personal') or canceling ('Cancel', 'Never mind').\n"
-            "8. UNSUPPORTED_REQUEST: Anything outside university operations (ordering food, booking flights, writing essays, changing grades).\n\n"
-            "Important rules:\n"
-            "- Only populate `days`, `start_date`, `category`, or `reason` if the student explicitly stated them in this message.\n"
-            "- Keep `assistant_reply` warm, natural, concise, and helpful. Never invent attendance numbers or policy rules."
+            "You are CampVion, an intelligent, verified campus assistant.\n"
+            f'The student\'s preferred name is "{effective_display_name}".\n'
+            f'Always address the student warmly by this name naturally in your responses (e.g., "Hello {effective_display_name}, based on your attendance records...", "Certainly, {effective_display_name}...").\n'
+            "Keep your answers precise, professional, and policy-grounded while maintaining a friendly, supportive tone.\n"
+            f"Context: Student ID {student_ctx['student_id']}, Program {student_ctx['profile'].get('program', 'B.Tech')}, "
+            f"Attendance {student_ctx['overall_attendance_pct']}%, Intent: {session.active_intent or 'None'}, "
+            f"Slots: {json.dumps(collected_slots)}.\n\n"
+            "Classify intent into one of 8 categories:\n"
+            "1. GENERAL_CONVERSATION: Greetings, capabilities.\n"
+            "2. GENERAL_CAMPUS_INFO: Rules, leave process, attendance rules, hostel process, requirements.\n"
+            "3. STUDENT_RECORD_QUERY: Attendance, courses, exam schedule, fees, hostel room, leave status.\n"
+            "4. NEW_OPERATIONAL_REQUEST: Apply leave, hostel service, support ticket.\n"
+            "5. FOLLOW_UP_ANSWER: Clarification response (duration, date, reason).\n"
+            "6. CONFIRMATION_RESPONSE: Confirming prepared request ('Yes', 'Confirm', 'Submit it').\n"
+            "7. MODIFICATION_OR_CANCELLATION: Change details or cancel ('Cancel', 'Never mind').\n"
+            "8. UNSUPPORTED_REQUEST: Out-of-scope requests (food, flights, essays, grade changes).\n\n"
+            "Rules:\n"
+            "- Only populate slots explicitly stated by the student in this turn.\n"
+            f"- In assistant_reply, ALWAYS address the student as {effective_display_name} in a warm, helpful manner."
         )
 
         user_prompt = (
@@ -642,6 +643,7 @@ class ConversationEngine:
         self,
         session: models.ConversationSession,
         user_text: str,
+        user_display_name: str = "Student",
     ) -> Dict[str, Any]:
         """
         Process a student message within a persistent ConversationSession,
@@ -651,7 +653,12 @@ class ConversationEngine:
         clean_text = user_text.strip()
         student_id = session.student_id
         student_ctx = self._get_student_context(student_id)
-        first_name = student_ctx["first_name"]
+        effective_display_name = (
+            user_display_name.strip()
+            if user_display_name and user_display_name.strip() and user_display_name.strip().lower() != "student"
+            else student_ctx.get("first_name", "Student")
+        )
+        first_name = effective_display_name
 
         # 1. Persist incoming user message
         user_msg = models.ConversationMessage(
@@ -724,6 +731,7 @@ class ConversationEngine:
                 session=session,
                 recent_messages=recent_messages[:-1],
                 user_text=clean_text,
+                user_display_name=effective_display_name,
             )
 
         # 4. Determine authoritative intent category (combining deterministic guardrails + Groq)
@@ -778,7 +786,17 @@ class ConversationEngine:
             elif any(w in lower for w in ["thanks", "thank you", "thx"]):
                 reply_text = f"You're very welcome, {first_name}! 😊 Let me know if there's anything else I can help you with on campus."
             elif llm_turn and llm_turn.assistant_reply and len(llm_turn.assistant_reply.strip()) > 5:
-                reply_text = llm_turn.assistant_reply.strip()
+                reply_cand = llm_turn.assistant_reply.strip()
+                raw_fn = student_ctx.get("first_name", "")
+                if raw_fn and effective_display_name.lower() not in reply_cand.lower():
+                    reply_cand = re.sub(re.escape(raw_fn), effective_display_name, reply_cand, flags=re.IGNORECASE)
+                raw_full = student_ctx.get("profile", {}).get("name", "")
+                if raw_full and effective_display_name.lower() not in reply_cand.lower():
+                    reply_cand = re.sub(re.escape(raw_full), effective_display_name, reply_cand, flags=re.IGNORECASE)
+                if effective_display_name.lower() not in reply_cand.lower():
+                    # Ensure the student's preferred name is warmly present in the greeting
+                    reply_cand = f"Hello {effective_display_name}! " + re.sub(r'^(hello|hi|hey)\s+[^!.,]+[!.,]\s*', '', reply_cand, flags=re.IGNORECASE)
+                reply_text = reply_cand
             else:
                 reply_text = f"Hey {first_name}! 👋 What can I help you with today?"
 
@@ -803,7 +821,7 @@ class ConversationEngine:
         # ---------------------------------------------------------------------
         elif intent_category == "STUDENT_RECORD_QUERY":
             reply_text, record_meta = self._handle_student_record_query(
-                session, clean_text, student_ctx, llm_turn
+                session, clean_text, student_ctx, llm_turn, display_name=first_name
             )
             metadata.update(record_meta)
 
@@ -981,11 +999,12 @@ class ConversationEngine:
         user_text: str,
         student_ctx: Dict[str, Any],
         llm_turn: Optional[LLMConversationalTurnSchema],
+        display_name: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """Execute authorized read-only campus tools to answer student-specific enquiries."""
         lower = user_text.lower()
         student_id = student_ctx["student_id"]
-        first_name = student_ctx["first_name"]
+        first_name = display_name or student_ctx.get("first_name", "Student")
 
         # 1. Attendance Enquiry
         if "attendance" in lower:

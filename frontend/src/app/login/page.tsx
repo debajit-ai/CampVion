@@ -18,15 +18,22 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading, preferredDisplayName, setPreferredDisplayName } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayNameInput, setDisplayNameInput] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (preferredDisplayName) {
+      setDisplayNameInput(preferredDisplayName);
+    }
+  }, [preferredDisplayName]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -50,6 +57,9 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
+      if (displayNameInput.trim()) {
+        setPreferredDisplayName(displayNameInput.trim());
+      }
       await login({
         email: trimmedEmail,
         password,
@@ -174,6 +184,32 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+        </div>
+
+        {/* Preferred Display Name (Optional) */}
+        <div>
+          <label
+            htmlFor="login-display-name"
+            className="block text-xs font-semibold text-cv-fg mb-1.5"
+          >
+            What should CampVion call you?{" "}
+            <span className="text-[10px] text-cv-fg-3 font-normal">(Optional)</span>
+          </label>
+          <div className="relative">
+            <Sparkles className="h-4 w-4 text-cv-accent-ink absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              id="login-display-name"
+              name="displayName"
+              type="text"
+              value={displayNameInput}
+              onChange={(e) => setDisplayNameInput(e.target.value)}
+              placeholder="e.g., Alex, Dev, Champ"
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-cv-inset border border-cv-line text-xs text-cv-fg placeholder-cv-fg-3 focus:border-cv-accent-line focus:bg-cv-surface transition"
+            />
+          </div>
+          <p className="text-[11px] text-cv-fg-3 mt-1">
+            Leave empty to use your default student profile name.
+          </p>
         </div>
 
         {/* Remember Me */}

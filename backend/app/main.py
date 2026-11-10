@@ -8,6 +8,7 @@ from app.db.migrations import run_migrations
 from app.db.seed_engine import seed_campus_database
 from app.db import models
 from app.core.security import hash_password
+from app.services import student_service
 import app.tools  # Ensure all tools are registered in ToolRegistry
 
 # Initialize logging
@@ -42,6 +43,10 @@ try:
             ),
         ])
         db_init.commit()
+
+    # Ensure all registered student users have authentic linked Student records (not hijacked S001)
+    for student_acc in db_init.query(models.UserAccount).filter(models.UserAccount.role == "student").all():
+        student_service.ensure_student_for_user(db_init, student_acc)
 finally:
     db_init.close()
 

@@ -57,7 +57,7 @@ export function AdvancedComposer({
   textareaRef: externalRef,
 }: AdvancedComposerProps) {
   const { experienceMode } = useTheme();
-  const { user } = useAuth();
+  const { user, preferredDisplayName, setPreferredDisplayName } = useAuth();
   const [studentPickerOpen, setStudentPickerOpen] = useState<boolean>(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalRef || internalRef;
@@ -120,6 +120,12 @@ export function AdvancedComposer({
   };
 
   const currentStudent = students.find((s) => s.student_id === selectedStudentId);
+  const currentDisplayName =
+    (user?.student_id === selectedStudentId && preferredDisplayName?.trim()) ||
+    currentStudent?.name ||
+    (user?.student_id === selectedStudentId && user?.full_name
+      ? user.full_name
+      : selectedStudentId);
   const currentRecords = attendanceByStudent[selectedStudentId] || [];
   const currentCourses = coursesByStudent[selectedStudentId] || [];
   const currentTotalAttended = currentRecords.reduce(
@@ -222,7 +228,7 @@ export function AdvancedComposer({
               </div>
               <div className="flex items-center space-x-1.5">
                 <span className="text-xs font-bold text-cv-fg">
-                  {currentStudent?.name || selectedStudentId}
+                  {currentDisplayName}
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
                   {selectedStudentId}
@@ -264,7 +270,7 @@ export function AdvancedComposer({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-bold text-cv-fg">
-                        {currentStudent?.name || selectedStudentId}
+                        {currentDisplayName}
                       </div>
                       <div className="text-[11px] text-cv-fg-2 flex items-center space-x-1 mt-0.5">
                         <GraduationCap className="h-3.5 w-3.5 text-cv-accent-ink" />
@@ -298,6 +304,49 @@ export function AdvancedComposer({
                   )}
                 </div>
 
+                {/* Preferred Display Name Preference Input */}
+                <div className="p-3 rounded-xl bg-cv-inset border border-cv-line space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="composer-pref-display-name"
+                      className="text-[10px] font-mono font-bold uppercase tracking-wider text-cv-accent-ink"
+                    >
+                      What should CampVion call you?
+                    </label>
+                    <span className="text-[10px] text-cv-fg-3">
+                      {preferredDisplayName?.trim() ? "Custom Active" : "Default"}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <Sparkles className="h-3.5 w-3.5 text-cv-accent-ink absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="composer-pref-display-name"
+                      type="text"
+                      value={preferredDisplayName}
+                      onChange={(e) => setPreferredDisplayName(e.target.value)}
+                      placeholder="e.g., Alex, Dev, Champ"
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-cv-surface border border-cv-line text-xs text-cv-fg placeholder-cv-fg-3 focus:border-cv-accent-line focus:outline-none transition font-sans"
+                    />
+                  </div>
+                  <div className="text-[10px] text-cv-fg-3 flex items-center justify-between">
+                    <span>
+                      Fallback:{" "}
+                      <span className="font-semibold text-cv-fg">
+                        {currentStudent?.name || user?.full_name || "Student"}
+                      </span>
+                    </span>
+                    {preferredDisplayName?.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setPreferredDisplayName("")}
+                        className="text-[10px] text-cv-accent-ink hover:underline cursor-pointer"
+                      >
+                        Reset to default
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Switch Demonstration Profile List */}
                 <div>
                   <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-cv-line">
@@ -310,83 +359,95 @@ export function AdvancedComposer({
                   </div>
 
                   <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                    {students.slice(0, 6).map((student) => {
-                      const isSelected = selectedStudentId === student.student_id;
-                      const records = attendanceByStudent[student.student_id] || [];
-                      const attended = records.reduce(
-                        (acc, r) => acc + r.attended_classes,
-                        0
-                      );
-                      const total = records.reduce(
-                        (acc, r) => acc + r.total_classes,
-                        0
-                      );
-                      const pct =
-                        total > 0
-                          ? Math.round((attended / total) * 100)
-                          : student.student_id === "S001"
-                          ? 75
-                          : 50;
-                      const eligible = pct >= 75;
+                    {(() => {
+                      const sortedStudents = [...students].sort((a, b) => {
+                        if (user?.student_id && a.student_id === user.student_id) return -1;
+                        if (user?.student_id && b.student_id === user.student_id) return 1;
+                        return a.student_id.localeCompare(b.student_id);
+                      });
+                      return sortedStudents.slice(0, 8).map((student) => {
+                        const isSelected = selectedStudentId === student.student_id;
+                        const records = attendanceByStudent[student.student_id] || [];
+                        const attended = records.reduce(
+                          (acc, r) => acc + r.attended_classes,
+                          0
+                        );
+                        const total = records.reduce(
+                          (acc, r) => acc + r.total_classes,
+                          0
+                        );
+                        const pct =
+                          total > 0
+                            ? Math.round((attended / total) * 100)
+                            : student.student_id === "S001"
+                            ? 75
+                            : 50;
+                        const eligible = pct >= 75;
 
-                      return (
-                        <button
-                          key={student.student_id}
-                          type="button"
-                          onClick={() => {
-                            onSelectStudentId(student.student_id);
-                            setStudentPickerOpen(false);
-                          }}
-                          className={`w-full text-left p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 ${
-                            isSelected
-                              ? "bg-cv-accent-soft border-cv-accent-line"
-                              : "bg-cv-surface hover:bg-cv-raised border-cv-line"
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2.5 min-w-0">
-                            <div
-                              className={`p-1.5 rounded-lg border shrink-0 ${
-                                eligible
-                                  ? "bg-cv-success-soft border-cv-success-line text-cv-success"
-                                  : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
-                              }`}
-                            >
-                              {eligible ? (
-                                <UserCheck className="h-3.5 w-3.5" />
-                              ) : (
-                                <UserX className="h-3.5 w-3.5" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center space-x-1.5">
-                                <span className="text-xs font-bold text-cv-fg truncate">
-                                  {student.name}
-                                </span>
-                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cv-raised text-cv-fg-2">
-                                  {student.student_id}
-                                </span>
+                        return (
+                          <button
+                            key={student.student_id}
+                            type="button"
+                            onClick={() => {
+                              onSelectStudentId(student.student_id);
+                              setStudentPickerOpen(false);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? "bg-cv-accent-soft border-cv-accent-line"
+                                : "bg-cv-surface hover:bg-cv-raised border-cv-line"
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                              <div
+                                className={`p-1.5 rounded-lg border shrink-0 ${
+                                  eligible
+                                    ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                                    : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
+                                }`}
+                              >
+                                {eligible ? (
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                ) : (
+                                  <UserX className="h-3.5 w-3.5" />
+                                )}
                               </div>
-                              <div className="text-[11px] text-cv-fg-2 truncate">
-                                {student.program} &bull; Sem {student.semester}
+                              <div className="min-w-0">
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="text-xs font-bold text-cv-fg truncate">
+                                    {student.name}
+                                  </span>
+                                  {user?.student_id === student.student_id && (
+                                    <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-cv-accent-line/30 text-cv-accent-ink border border-cv-accent-line/50">
+                                      You
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cv-raised text-cv-fg-2">
+                                    {student.student_id}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-cv-fg-2 truncate">
+                                  {student.program} &bull; Sem {student.semester}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="text-right shrink-0">
-                            <span
-                              className={`text-xs font-bold font-mono block ${
-                                eligible ? "text-cv-success" : "text-cv-warning"
-                              }`}
-                            >
-                              {pct}%
-                            </span>
-                            <span className="text-[10px] text-cv-fg-3">
-                              {eligible ? "Eligible" : "Ineligible"}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`text-xs font-bold font-mono block ${
+                                  eligible ? "text-cv-success" : "text-cv-warning"
+                                }`}
+                              >
+                                {pct}%
+                              </span>
+                              <span className="text-[10px] text-cv-fg-3">
+                                {eligible ? "Eligible" : "Ineligible"}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>
