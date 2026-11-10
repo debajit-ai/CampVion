@@ -308,4 +308,63 @@ export interface ConversationSummaryItem {
   updated_at?: string | null;
 }
 
+// =============================================================================
+// Project 55 Baseline Benchmark Evaluation Types
+// =============================================================================
+
+export interface BenchmarkMetric {
+  agentic_pct: number;
+  baseline_pct: number;
+  delta_pct: number;
+  agentic_ratio?: string;
+  baseline_ratio?: string;
+}
+
+export interface BenchmarkLatencyMetric {
+  agentic_avg_ms: number;
+  baseline_avg_ms: number;
+}
+
+export interface BenchmarkSummary {
+  total_scenarios: number;
+  task_completion_rate: BenchmarkMetric;
+  tool_invocation_accuracy: BenchmarkMetric;
+  failure_recovery_rate: BenchmarkMetric;
+  execution_latency_ms: BenchmarkLatencyMetric;
+}
+
+export interface ScenarioComparisonItem {
+  scenario_id: string;
+  name: string;
+  category: string;
+  natural_language_request: string;
+  expected_state: string;
+  agentic: {
+    status: string;
+    success: boolean;
+    completed_tasks: number;
+    replanning_count: number;
+    tools_executed: string[];
+    latency_ms: number;
+  };
+  baseline: {
+    status: string;
+    success: boolean;
+    tools_executed: string[];
+    failure_recovered: boolean;
+    latency_ms: number;
+    error?: string;
+  };
+  delta: string;
+}
+
+export interface BenchmarkReportResponse {
+  timestamp: string;
+  database: string;
+  syllabus_requirement: string;
+  summary: BenchmarkSummary;
+  scenarios: ScenarioComparisonItem[];
+}
+
+
 

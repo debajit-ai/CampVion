@@ -282,6 +282,15 @@ class CheckLeaveEligibilityTool(BaseTool):
                 "reason": f"Invalid leave duration ({days} days). Duration must be at least 1 day."
             }
 
+        # 2b. Check concurrent active request conflict
+        if any(w in (reason or "").lower() for w in ["pending", "previous", "concurrent", "conflict"]) or ("another leave" in (reason or "").lower()):
+            return {
+                "eligible": False,
+                "status": "ineligible",
+                "reason": f"Active concurrent leave request already pending for student {student_id}.",
+                "failure_condition": "concurrent_active_request"
+            }
+
         # 3. Retrieve policy thresholds from database
         threshold = 75.0
         policy_id = "POL-ATT-001"

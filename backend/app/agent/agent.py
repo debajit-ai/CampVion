@@ -184,10 +184,16 @@ class AXORAAgent:
                 failure_mode = ""
                 if state.normalized_goal and "failure_mode" in state.normalized_goal.get("parameters", {}):
                     failure_mode = state.normalized_goal["parameters"]["failure_mode"]
+                elif "failure_mode=" in state.original_goal.lower():
+                    failure_mode = state.original_goal.lower().split("failure_mode=")[-1].strip().split()[0]
                 elif "FAILURE_MODE=" in state.original_goal:
                     failure_mode = state.original_goal.split("FAILURE_MODE=")[-1].strip().lower()
 
-                if "attendance_timeout" in failure_mode and tool_name == "get_attendance":
+                if failure_mode == "schema_validation_error":
+                    result = {"error": "schema_validation_error: Missing required parameters"}
+                    state.current_step += 1
+                    self._log_trace(state.request_id, state.current_step, "TOOL_FAILED", "executor", "execute", "failure", error_message="schema_validation_error")
+                elif ("attendance_timeout" in failure_mode or "persistent_timeout" in failure_mode or "transient_timeout" in failure_mode) and tool_name == "get_attendance":
                     # Transient simulated failure on attempt 1; persistent if requested
                     if "persistent" in failure_mode or state.replanning_count == 0:
                         result = {"error": "attendance_timeout"}
@@ -197,7 +203,7 @@ class AXORAAgent:
                         result = tool.execute(db=self.db, **kwargs)
                         state.current_step += 1
                         self._log_trace(state.request_id, state.current_step, "TOOL_COMPLETED", "executor", "execute", "success", output_data=json.dumps(result))
-                elif "unrecoverable" in failure_mode and tool_name == "get_student_profile":
+                elif ("unrecoverable" in failure_mode or "database_corrupted" in failure_mode) and tool_name == "get_student_profile":
                     result = {"error": "database_corrupted"}
                     state.current_step += 1
                     self._log_trace(state.request_id, state.current_step, "TOOL_FAILED", "executor", "execute", "failure", error_message="database_corrupted")

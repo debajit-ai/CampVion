@@ -1,12 +1,35 @@
 import json
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from app.db.database import get_db
 from app.db import models
 from app.agent.agent import AXORAAgent
+from app.evaluation.benchmark_runner import run_project_55_benchmark, REPORT_PATH
 
 router = APIRouter()
+
+@router.get("/report")
+def get_evaluation_report():
+    """
+    Retrieve the latest comparative Project 55 benchmark evaluation report.
+    Compares the Agentic Execution Engine (DAG + LLM) against the Scripted Rule-Based Baseline.
+    """
+    if os.path.exists(REPORT_PATH):
+        try:
+            with open(REPORT_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return run_project_55_benchmark()
+
+@router.post("/run-benchmark")
+def execute_benchmark():
+    """
+    Run the full Project 55 comparative benchmark suite across all 15 scenarios.
+    """
+    return run_project_55_benchmark()
 
 @router.get("/scenarios")
 def list_scenarios(db: Session = Depends(get_db)):

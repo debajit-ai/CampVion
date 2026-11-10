@@ -17,6 +17,7 @@ import {
   UserProfile,
   ConversationSessionData,
   ConversationSummaryItem,
+  BenchmarkReportResponse,
 } from "../types/api";
 
 export const DEFAULT_API_BASE_URL =
@@ -347,4 +348,21 @@ export const apiClient = {
       }
     );
   },
+
+  async getBenchmarkReport(): Promise<BenchmarkReportResponse> {
+    return fetchJson<BenchmarkReportResponse>("/evaluation/report", {
+      method: "GET",
+    });
+  },
+
+  async runBenchmarkSuite(): Promise<BenchmarkReportResponse> {
+    return fetchJson<BenchmarkReportResponse>("/evaluation/run-benchmark", {
+      method: "POST",
+    });
+  },
 };
+
+export const api = apiClient;
+export const getBenchmarkReport = apiClient.getBenchmarkReport;
+export const runBenchmarkSuite = apiClient.runBenchmarkSuite;
+

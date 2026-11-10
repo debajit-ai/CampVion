@@ -248,3 +248,19 @@ def test_new_student_domain_endpoints(client):
     res_tkt = client.get("/api/students/S001/tickets")
     assert res_tkt.status_code == 200
     assert isinstance(res_tkt.json(), list)
+
+def test_project_55_comparative_benchmark_api(client, db):
+    """
+    Verify Project 55 baseline comparison report endpoint and benchmark execution.
+    """
+    res = client.get("/api/evaluation/report")
+    assert res.status_code == 200
+    data = res.json()
+    assert "summary" in data
+    assert "task_completion_rate" in data["summary"]
+    assert data["summary"]["task_completion_rate"]["agentic_pct"] >= 90.0
+    assert data["summary"]["task_completion_rate"]["baseline_pct"] <= 60.0
+    assert data["summary"]["failure_recovery_rate"]["agentic_pct"] == 100.0
+    assert data["summary"]["failure_recovery_rate"]["baseline_pct"] == 0.0
+    assert len(data["scenarios"]) == 15
+

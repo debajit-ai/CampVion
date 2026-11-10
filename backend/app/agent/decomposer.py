@@ -5,6 +5,16 @@ from app.agent.state import Task
 class GoalDecomposer:
     def decompose(self, goal: Goal) -> List[Task]:
         if goal.goal_type == "LEAVE_APPLICATION":
+            if goal.parameters.get("includes_hostel"):
+                return [
+                    Task(task_id="t1", description="Identify student", candidate_tools=["get_student_profile"]),
+                    Task(task_id="t2", description="Retrieve attendance", dependencies=["t1"], candidate_tools=["get_attendance"]),
+                    Task(task_id="t3", description="Retrieve leave policy", candidate_tools=["get_leave_policy"]),
+                    Task(task_id="t4", description="Check leave eligibility", dependencies=["t2", "t3"], candidate_tools=["check_leave_eligibility"]),
+                    Task(task_id="t5", description="Verify hostel residency status", dependencies=["t1"], candidate_tools=["get_hostel_status"]),
+                    Task(task_id="t6", description="Create leave application", dependencies=["t4", "t5"], candidate_tools=["create_leave_application"], requires_human_approval=True),
+                    Task(task_id="t7", description="Verify application status", dependencies=["t6"], candidate_tools=["get_leave_application_status"])
+                ]
             return [
                 Task(task_id="t1", description="Identify student", candidate_tools=["get_student_profile"]),
                 Task(task_id="t2", description="Retrieve attendance", dependencies=["t1"], candidate_tools=["get_attendance"]),
