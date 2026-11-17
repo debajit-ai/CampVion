@@ -1,19 +1,21 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import React, { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Globe,
+  ChevronDown,
   Loader2,
   LogOut,
+  Menu,
+  Monitor,
+  Moon,
   RefreshCw,
+  Settings,
   ShieldAlert,
-  ShieldCheck,
-  Wrench,
+  Sun,
 } from "lucide-react";
 
+import { BrandLogo } from "./BrandLogo";
 import { Sidebar } from "./Sidebar";
 import { ConversationFeed } from "./ConversationFeed";
 import { AdvancedComposer } from "./AdvancedComposer";
@@ -44,8 +46,9 @@ import {
   WorkspaceSection,
 } from "../types/api";
 import { PRESET_GOALS } from "./NewRequestPanel";
-import { useTheme } from "../context/ThemeContext";
+import { ExperienceMode, useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { formatRoleLabel, getUserInitials, toTitleCase } from "../utils/language";
 
 interface CampVionWorkspaceProps {
   initialSection?: WorkspaceSection;
@@ -54,7 +57,13 @@ interface CampVionWorkspaceProps {
 export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspaceProps) {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading, logout, preferredDisplayName } = useAuth();
-  const { experienceMode, setExperienceMode } = useTheme();
+  const { theme, resolvedTheme, setTheme, experienceMode, setExperienceMode } = useTheme();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const isDark = mounted ? resolvedTheme === "dark" : true;
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState<boolean>(true);
@@ -69,14 +78,19 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const [tools, setTools] = useState<ToolSchema[]>([]);
 
   // Workspace layout and view states
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>(initialSection);
+  const [sectionOverride, setSectionOverride] = useState<WorkspaceSection | null>(
+    initialSection === "chat" ? null : initialSection
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState<boolean>(false);
+  const [isMainScrolled, setIsMainScrolled] = useState<boolean>(false);
   const [inspectorOpen, setInspectorOpen] = useState<boolean>(true);
   const [toolsMenuOpen, setToolsMenuOpen] = useState<boolean>(false);
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Workflow dispatch and execution states
   const [customStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const selectedStudentId = customStudentId || user?.student_id || "S001";
   const [goalText, setGoalText] = useState<string>("");
   const [conversation, setConversation] = useState<ConversationSessionData | null>(null);
 
@@ -94,10 +108,40 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   >({});
 
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalItem[]>([]);
-  const [approvalsLoading, setApprovalsLoading] = useState<boolean>(false);
 
   const roleStr = (user?.role || "").toLowerCase();
   const isAdmin = roleStr === "administrator" || roleStr === "system_administrator";
+  const isFaculty = roleStr === "faculty";
+  const canUseAdvanced = isAdmin || isFaculty;
+  const effectiveMode: ExperienceMode = canUseAdvanced ? experienceMode : "simple";
+  const activeSection: WorkspaceSection =
+    sectionOverride ?? (isAdmin && initialSection === "chat" ? "unified" : initialSection);
+  const setActiveSection = useCallback((next: WorkspaceSection) => {
+    setSectionOverride(next);
+  }, []);
+  const selectedStudentId =
+    customStudentId && customStudentId !== "S001"
+      ? customStudentId
+      : user?.student_id || customStudentId || "S001";
+
+  // Close header avatar menu when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target as Node)) {
+        setAvatarMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAvatarMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [avatarMenuOpen]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,20 +156,12 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Synchronize active student context with authenticated user's profile
-  useEffect(() => {
-    if (user?.student_id && (!customStudentId || customStudentId === "S001")) {
-      setSelectedStudentId(user.student_id);
-    }
-  }, [user?.student_id, customStudentId]);
-
   // Global pending approvals fetcher for administrators
   const fetchPendingApprovals = useCallback(async () => {
     if (!user) return;
     const role = (user.role || "").toLowerCase();
     if (role === "administrator" || role === "system_administrator") {
       try {
-        setApprovalsLoading(true);
         const list = await apiClient.listPendingApprovals();
         setPendingApprovals(list);
         if (list.length > 0) {
@@ -137,24 +173,35 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         }
       } catch (err: unknown) {
         console.error("Failed to load pending approvals:", err);
-      } finally {
-        setApprovalsLoading(false);
       }
     }
   }, [user]);
 
   useEffect(() => {
-    fetchPendingApprovals();
-  }, [fetchPendingApprovals]);
+    if (!user) return;
+    const role = (user.role || "").toLowerCase();
+    if (role !== "administrator" && role !== "system_administrator") return;
 
-  // When Administrator logs in, default view immediately to Operations Overview / Admin Queue
-  useEffect(() => {
-    if (user) {
-      const role = (user.role || "").toLowerCase();
-      if ((role === "administrator" || role === "system_administrator") && activeSection === "chat") {
-        setActiveSection("unified");
-      }
-    }
+    let active = true;
+    apiClient
+      .listPendingApprovals()
+      .then((list) => {
+        if (!active) return;
+        setPendingApprovals(list);
+        if (list.length > 0) {
+          setRecentRequestIds((prev) => {
+            const idsToAdd = list.slice(0, 10).map((i) => i.request_id);
+            const combined = Array.from(new Set([...idsToAdd, ...prev]));
+            return combined.slice(0, 15);
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to load pending approvals:", err);
+      });
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   // Load initial backend dependencies, student attendance/courses, and tool schemas
@@ -621,18 +668,27 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-cv-canvas text-cv-fg p-6">
-        <div className="h-14 w-14 rounded-2xl campvion-emblem-surface p-2 flex items-center justify-center mb-4">
-          <Image
-            src="/brand/campvion-symbol.png"
-            alt="CampVion Emblem"
-            width={40}
-            height={40}
-            priority
-            className="h-full w-full object-contain"
-          />
-        </div>
-        <div className="flex items-center space-x-2 text-xs font-medium text-cv-fg-2">
+      <div
+        data-theme={isDark ? "dark" : "light"}
+        className="cv-app min-h-screen w-full flex flex-col items-center justify-center bg-cv-canvas text-cv-fg p-6 relative overflow-hidden"
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full blur-3xl opacity-60"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, rgba(34, 211, 238, 0.05) 50%, transparent 75%)",
+          }}
+        />
+        <BrandLogo
+          variant="mark"
+          isDark={isDark}
+          size={40}
+          alt="CampVion Emblem"
+          priority
+          className="h-10 w-auto mb-4 relative z-10"
+        />
+        <div className="flex items-center space-x-2 text-xs font-medium text-cv-fg-2 relative z-10">
           <Loader2 className="h-4 w-4 animate-spin text-cv-accent-ink" />
           <span>Verifying authenticated session...</span>
         </div>
@@ -648,14 +704,73 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     .map((id) => sessionSummaries[id])
     .filter((s): s is WorkflowSessionSummary => Boolean(s));
 
+  const sectionTitle = (() => {
+    switch (activeSection) {
+      case "chat":
+        return "Assistant";
+      case "unified":
+        return "Overview";
+      case "approvals":
+        return "Approval Queue";
+      case "workspace":
+        return "Workflow Pipeline (DAG)";
+      case "observability":
+        return effectiveMode === "simple" ? "Request History" : "Decision Traces & Logs";
+      case "evaluation":
+        return "Evaluation & Reliability";
+      case "registry":
+        return "Tool Registry & Schemas";
+      case "settings":
+        return "Settings";
+      default:
+        return "Workspace";
+    }
+  })();
+
+  const userDisplayName = toTitleCase(user?.full_name) || "Campus User";
+  const userInitials = getUserInitials(user?.full_name, user?.email);
+  const userRoleLabel = formatRoleLabel(user?.role);
+
   return (
-    <div className="h-screen w-full flex flex-row overflow-hidden bg-cv-canvas text-cv-fg">
+    <div
+      data-theme={isDark ? "dark" : "light"}
+      className="cv-app h-screen w-full flex flex-row overflow-hidden bg-cv-canvas text-cv-fg relative"
+    >
+      {/* Subtle Ambient Background Layers (~6% radial glow + faint fading grid) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 overflow-hidden z-0"
+      >
+        <div
+          className="absolute -top-40 right-[12%] w-[680px] h-[520px] rounded-full blur-3xl"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, rgba(34, 211, 238, 0.05) 45%, transparent 72%)"
+              : "radial-gradient(circle, rgba(79, 70, 229, 0.06) 0%, rgba(8, 145, 178, 0.04) 45%, transparent 72%)",
+          }}
+        />
+        <div
+          className="absolute -bottom-48 left-[18%] w-[560px] h-[440px] rounded-full blur-3xl"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(34, 211, 238, 0.05) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(8, 145, 178, 0.045) 0%, transparent 70%)",
+          }}
+        />
+        <div className="absolute inset-0 cv-app-ambient-grid" />
+      </div>
+
       {/* 1. Unified Left Sidebar */}
       <Sidebar
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
         activeSection={activeSection}
-        onSelectSection={setActiveSection}
+        onSelectSection={(sec) => {
+          setActiveSection(sec);
+          setIsMainScrolled(false);
+        }}
         recentRequestIds={recentRequestIds}
         activeRequestId={activeRequestId}
         sessionSummaries={sessionSummaries}
@@ -665,175 +780,250 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         healthLoading={healthLoading}
         healthLatencyMs={healthLatencyMs}
         onRefreshHealth={loadInitialData}
-        apiBaseUrl={apiClient.getBaseUrl()}
-        state={agentState}
-        result={agentResult}
-        tasks={tasks}
-        tools={tools}
-        onInspectToolInTrace={handleInspectToolInTrace}
         user={user}
         onLogout={handleLogout}
         pendingApprovalsCount={pendingApprovals.length}
+        effectiveMode={effectiveMode}
       />
 
       {/* 2. Central Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
-        {/* Top Control Bar */}
-        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-cv-line bg-cv-surface/90 backdrop-blur-md z-20 shrink-0">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative z-10">
+        {/* Top Frosted Glass Header */}
+        <header
+          className={`h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 border-b transition-all duration-200 z-20 shrink-0 ${
+            isMainScrolled
+              ? "border-cv-line bg-cv-surface/85 backdrop-blur-xl shadow-xs"
+              : "border-cv-line/70 bg-transparent backdrop-blur-md"
+          }`}
+        >
           <div className="flex items-center space-x-3 min-w-0">
-            {/* Official CampVion Brand Lockup: Emblem + Wordmark */}
-            <div className="flex items-center space-x-2.5 shrink-0 select-none">
-              <div className="relative h-8 w-8 rounded-lg campvion-emblem-surface p-1 flex items-center justify-center shrink-0">
-                <Image
-                  src="/brand/campvion-symbol.png"
-                  alt="CampVion Emblem"
-                  width={24}
-                  height={24}
-                  priority
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <span className="text-base font-bold tracking-tight text-cv-fg font-sans">
-                Camp<span className="text-cv-accent-ink">Vion</span>
-              </span>
-            </div>
+            {/* Mobile Drawer Trigger */}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Open navigation menu"
+              className="lg:hidden p-2 -ml-1.5 rounded-xl text-cv-fg-2 hover:text-cv-fg hover:bg-cv-hover border border-transparent hover:border-cv-line transition cursor-pointer"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
 
-            {/* Contextual Workspace Label (shown when viewing dedicated workspaces) */}
-            {activeSection !== "chat" && (
-              <div className="hidden md:flex items-center space-x-2 pl-3 border-l border-cv-line text-xs text-cv-fg-2">
-                <span className="font-medium">
-                  {activeSection === "workspace" &&
-                    (experienceMode === "simple" ? "Request Progress" : "Workflow Pipeline (DAG)")}
-                  {activeSection === "observability" &&
-                    (experienceMode === "simple" ? "Activity History" : "Execution Traces & Logs")}
-                  {activeSection === "evaluation" &&
-                    (experienceMode === "simple" ? "System Performance" : "Evaluation & Reliability")}
-                  {activeSection === "registry" &&
-                    (experienceMode === "simple" ? "Campus Services" : "Tool Registry & Schemas")}
-                  {activeSection === "unified" &&
-                    (experienceMode === "simple" ? "Operations Overview" : "Unified Operations Overview")}
-                  {activeSection === "settings" && "Settings & Preferences"}
-                </span>
-              </div>
-            )}
+            {/* Mobile-only compact mark (desktop already has logo in Sidebar) */}
+            <BrandLogo
+              variant="mark"
+              isDark={isDark}
+              size={22}
+              alt="CampVion"
+              className="h-5 w-auto lg:hidden shrink-0"
+            />
 
-            {activeRequestId && (
-              <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-cv-raised border border-cv-line text-cv-accent-ink hidden sm:inline-flex items-center space-x-1.5">
+            <h1 className="text-sm sm:text-base font-semibold tracking-tight text-cv-fg truncate">
+              {sectionTitle}
+            </h1>
+
+            {activeRequestId && (effectiveMode === "advanced" || activeSection !== "chat") && (
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink hidden sm:inline-flex items-center space-x-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-cv-accent" />
-                <span>Request #{activeRequestId}</span>
+                <span>#{activeRequestId}</span>
               </span>
             )}
 
             {pendingApproval && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cv-warning-soft border border-cv-warning-line text-cv-warning animate-pulse">
-                Approval Required
+              <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-cv-warning-soft border border-cv-warning-line text-cv-warning hidden sm:inline-flex items-center space-x-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-cv-warning-solid animate-pulse" />
+                <span>Waiting for approval</span>
               </span>
             )}
 
-            {isAdmin && pendingApprovals.length > 0 && (
+            {canUseAdvanced && pendingApprovals.length > 0 && activeSection !== "approvals" && (
               <button
                 type="button"
-                onClick={() => setActiveSection("unified")}
-                className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-cv-warning-soft border border-cv-warning-line text-cv-warning hover:bg-cv-warning-soft/80 transition cursor-pointer"
-                title="View Admin Approval Queue"
+                onClick={() => setActiveSection("approvals")}
+                className="hidden md:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-cv-warning-soft border border-cv-warning-line text-cv-warning hover:brightness-105 transition cursor-pointer"
+                title="View Approval Queue"
               >
-                <ShieldAlert className="h-3 w-3 animate-pulse text-cv-warning" />
-                <span>{pendingApprovals.length} Approval{pendingApprovals.length > 1 ? "s" : ""} Pending</span>
+                <ShieldAlert className="h-3.5 w-3.5" />
+                <span>
+                  {pendingApprovals.length} pending approval
+                  {pendingApprovals.length > 1 ? "s" : ""}
+                </span>
               </button>
             )}
           </div>
 
           {/* Right Header Utilities */}
-          <div className="flex items-center space-x-2">
-            {/* Authenticated Role Indicator */}
-            {user && (
-              <div className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-cv-inset border border-cv-line text-[11px] text-cv-fg-2">
-                <ShieldCheck className="h-3.5 w-3.5 text-cv-accent-ink" />
-                <span className="font-medium text-cv-fg">{user.full_name}</span>
-                <span className="text-[10px] font-mono uppercase text-cv-accent-ink">
-                  ({user.role})
-                </span>
+          <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
+            {/* Simple / Advanced Segmented Control (Admin & Faculty only) */}
+            {canUseAdvanced && (
+              <div
+                role="group"
+                aria-label="Workspace View Mode"
+                className="flex items-center p-0.5 rounded-xl bg-cv-surface/80 border border-cv-line text-[11px] font-medium"
+              >
+                <button
+                  type="button"
+                  onClick={() => setExperienceMode("simple")}
+                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                    experienceMode === "simple"
+                      ? "bg-cv-accent-soft text-cv-accent-ink font-semibold"
+                      : "text-cv-fg-2 hover:text-cv-fg"
+                  }`}
+                >
+                  Simple
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExperienceMode("advanced")}
+                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                    experienceMode === "advanced"
+                      ? "bg-cv-accent-soft text-cv-accent-ink font-semibold"
+                      : "text-cv-fg-2 hover:text-cv-fg"
+                  }`}
+                >
+                  Advanced
+                </button>
               </div>
             )}
 
-            {/* Experience Mode Toggle Pill */}
-            <div className="flex items-center p-0.5 rounded-lg bg-cv-inset border border-cv-line text-[11px] font-medium">
+            {/* Theme Segmented Control (Shared with Landing: Light / Dark / System) */}
+            <div
+              role="group"
+              aria-label="Theme Switcher"
+              className="flex items-center p-0.5 rounded-xl bg-cv-surface/80 border border-cv-line"
+            >
               <button
                 type="button"
-                onClick={() => setExperienceMode("simple")}
-                className={`px-2 py-1 rounded-md transition cursor-pointer ${
-                  experienceMode === "simple"
-                    ? "bg-cv-surface text-cv-accent-ink font-semibold shadow-2xs"
-                    : "text-cv-fg-2 hover:text-cv-fg"
+                onClick={() => setTheme("light")}
+                aria-label="Light mode"
+                title="Light mode"
+                aria-pressed={mounted && theme === "light"}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  mounted && theme === "light"
+                    ? "bg-cv-accent-soft text-cv-accent-ink"
+                    : "text-cv-fg-3 hover:text-cv-fg"
                 }`}
-                title="Simple View: Student-friendly language and guidance"
               >
-                Simple
+                <Sun className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => setExperienceMode("advanced")}
-                className={`px-2 py-1 rounded-md transition cursor-pointer ${
-                  experienceMode === "advanced"
-                    ? "bg-cv-surface text-cv-accent-ink font-semibold shadow-2xs"
-                    : "text-cv-fg-2 hover:text-cv-fg"
+                onClick={() => setTheme("dark")}
+                aria-label="Dark mode"
+                title="Dark mode"
+                aria-pressed={mounted && theme === "dark"}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  mounted && theme === "dark"
+                    ? "bg-cv-accent-soft text-cv-accent-ink"
+                    : "text-cv-fg-3 hover:text-cv-fg"
                 }`}
-                title="Advanced View: Technical DAG pipeline, traces, and metrics"
               >
-                Advanced
+                <Moon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("system")}
+                aria-label="System theme"
+                title="System theme"
+                aria-pressed={mounted && theme === "system"}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  mounted && theme === "system"
+                    ? "bg-cv-accent-soft text-cv-accent-ink"
+                    : "text-cv-fg-3 hover:text-cv-fg"
+                }`}
+              >
+                <Monitor className="h-3.5 w-3.5" />
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setToolsMenuOpen(true)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cv-surface hover:bg-cv-raised text-cv-fg hover:text-cv-accent-ink border border-cv-line hover:border-cv-accent-line/40 transition cursor-pointer shadow-xs"
-              title="Open Request Options, Presets & Campus Services"
-            >
-              <Wrench className="h-3.5 w-3.5 text-cv-accent-ink" />
-              <span className="hidden sm:inline">
-                {experienceMode === "simple" ? "Request Options" : "Tools"}
-              </span>
-            </button>
-
-            <Link
-              href="/"
-              className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-cv-surface hover:bg-cv-raised text-cv-fg-2 hover:text-cv-fg border border-cv-line transition"
-              title="Return to Public Overview"
-            >
-              <Globe className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Overview</span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              aria-label="Sign Out"
-              title="Sign Out"
-              className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-cv-surface hover:bg-cv-error-soft text-cv-fg-2 hover:text-cv-error border border-cv-line hover:border-cv-error-line transition cursor-pointer"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Sign Out</span>
-            </button>
-
-            {activeRequestId && (
+            {activeRequestId && activeSection !== "chat" && (
               <button
                 type="button"
                 onClick={() => handleSelectRequestId(activeRequestId)}
                 disabled={isLoading}
-                aria-label="Refresh Active Request State"
-                className="p-1.5 rounded-lg bg-cv-surface hover:bg-cv-raised text-cv-fg-2 hover:text-cv-fg border border-cv-line transition cursor-pointer disabled:opacity-50"
-                title="Refresh Request State"
+                aria-label="Refresh active request"
+                title="Refresh request"
+                className="p-2 rounded-xl bg-cv-surface/80 hover:bg-cv-hover text-cv-fg-2 hover:text-cv-fg border border-cv-line transition cursor-pointer disabled:opacity-50"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-cv-accent-ink" : ""}`} />
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-cv-accent-ink" : ""}`}
+                />
               </button>
             )}
+
+            {/* Compact Avatar Menu (Settings + Sign Out) */}
+            <div className="relative" ref={avatarMenuRef}>
+              <button
+                type="button"
+                onClick={() => setAvatarMenuOpen((prev) => !prev)}
+                aria-expanded={avatarMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Account menu"
+                className="flex items-center space-x-1.5 pl-1 pr-2 py-1 rounded-xl bg-cv-surface/80 hover:bg-cv-hover border border-cv-line transition cursor-pointer"
+              >
+                <span className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#6366F1]/25 to-[#22D3EE]/25 border border-cv-accent-soft-line flex items-center justify-center text-[11px] font-semibold text-cv-fg">
+                  {userInitials}
+                </span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-cv-fg-3 transition-transform duration-150 ${
+                    avatarMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {avatarMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="Account actions"
+                  className="absolute right-0 mt-2 w-56 rounded-2xl bg-cv-surface border border-cv-line-strong shadow-xl p-1.5 z-50 backdrop-blur-xl"
+                >
+                  <div className="px-3 py-2 border-b border-cv-line mb-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-cv-fg truncate">
+                        {userDisplayName}
+                      </span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-cv-accent-soft text-cv-accent-ink">
+                        {userRoleLabel}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-cv-fg-3 block truncate mt-0.5">
+                      {user?.email}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      setActiveSection("settings");
+                    }}
+                    className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs text-cv-fg-2 hover:text-cv-fg hover:bg-cv-hover transition cursor-pointer text-left"
+                  >
+                    <Settings className="h-3.5 w-3.5 text-cv-accent-ink" />
+                    <span>Settings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      void handleLogout();
+                    }}
+                    className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs text-cv-fg-2 hover:text-cv-error hover:bg-cv-error-soft transition cursor-pointer text-left"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Sign out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
         {/* Dynamic Main Workspace Content */}
         <main
           tabIndex={-1}
+          onScroll={(e) => setIsMainScrolled(e.currentTarget.scrollTop > 8)}
           className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden relative outline-none"
         >
           {/* VIEW: Conversational Assistant (Chat-First Workspace) */}
@@ -882,128 +1072,159 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
             </div>
           )}
 
-          {/* VIEW: Workflow Pipeline (Dedicated Topological DAG) */}
-          {activeSection === "workspace" && (
-            <div className="p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
-              {pendingApproval && (
-                <HumanApprovalCenter
-                  state={agentState}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  isLoading={isLoading}
-                />
+          {/* Role-restricted route fallback for students attempting admin/developer views */}
+          {!canUseAdvanced &&
+          ["approvals", "workspace", "evaluation", "registry"].includes(activeSection) ? (
+            <section className="p-4 sm:p-6 max-w-2xl mx-auto w-full my-auto">
+              <div className="glass-panel rounded-2xl p-6 sm:p-8 text-center space-y-4">
+                <div className="mx-auto h-11 w-11 rounded-2xl bg-cv-warning-soft border border-cv-warning-line text-cv-warning flex items-center justify-center">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div className="space-y-1.5">
+                  <h2 className="text-base font-semibold text-cv-fg">
+                    Administrator Access Required
+                  </h2>
+                  <p className="text-xs text-cv-fg-2 max-w-md mx-auto leading-relaxed">
+                    This operational view is restricted to authorized faculty and university administrators. Return to your assistant or overview to manage your campus requests.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("chat")}
+                  className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-semibold cv-btn-gradient cursor-pointer"
+                >
+                  Back to Assistant
+                </button>
+              </div>
+            </section>
+          ) : (
+            <>
+              {/* VIEW: Workflow Pipeline (Dedicated Topological DAG) */}
+              {activeSection === "workspace" && (
+                <div className="p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+                  {pendingApproval && (
+                    <HumanApprovalCenter
+                      state={agentState}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      isLoading={isLoading}
+                    />
+                  )}
+
+                  <WorkflowStatus
+                    state={agentState}
+                    result={agentResult}
+                    tasks={tasks}
+                    onInspectToolInTrace={handleInspectToolInTrace}
+                  />
+                </div>
               )}
 
-              <WorkflowStatus
-                state={agentState}
-                result={agentResult}
-                tasks={tasks}
-                onInspectToolInTrace={handleInspectToolInTrace}
-              />
-            </div>
-          )}
-
-          {/* VIEW: Execution & Observability (Decision Traces) */}
-          {activeSection === "observability" && (
-            <section ref={traceSectionRef} className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
-              <ExecutionTrace
-                traces={traces}
-                requestId={activeRequestId}
-                searchQuery={traceSearchQuery}
-                onSearchQueryChange={setTraceSearchQuery}
-              />
-            </section>
-          )}
-
-          {/* VIEW: Evaluation & Reliability */}
-          {activeSection === "evaluation" && (
-            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
-              <EvaluationSection
-                state={agentState}
-                result={agentResult}
-                traces={traces}
-                sessionSummaries={orderedSessionSummaries}
-                activeRequestId={activeRequestId}
-                onSelectRequestId={handleSelectRequestId}
-                onRunScenario={(sId, goal) => handleLaunchAgent(sId, goal)}
-                isLoading={isLoading}
-              />
-            </section>
-          )}
-
-          {/* VIEW: Tool Registry & System Schemas */}
-          {activeSection === "registry" && (
-            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
-              <ToolRegistryPanel
-                tools={tools}
-                state={agentState}
-                traces={traces}
-                health={health}
-                healthLoading={healthLoading}
-                healthLatencyMs={healthLatencyMs}
-                apiBaseUrl={apiClient.getBaseUrl()}
-                onRefreshHealth={loadInitialData}
-                onInspectToolInTrace={handleInspectToolInTrace}
-              />
-            </section>
-          )}
-
-          {/* VIEW: Operations Overview (Unified Dashboard) */}
-          {activeSection === "unified" && (
-            <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
-              <OverviewDashboard
-                state={agentState}
-                result={agentResult}
-                tools={tools}
-                recentRequestIds={recentRequestIds}
-                activeRequestId={activeRequestId}
-                onSelectRequestId={handleSelectRequestId}
-                isLoading={isLoading}
-                sessionSummaries={sessionSummaries}
-                onRefreshActiveRequest={() => {
-                  if (activeRequestId) handleSelectRequestId(activeRequestId);
-                }}
-                onNavigateToSection={setActiveSection}
-                onFocusComposer={() => {
-                  setActiveSection("chat");
-                  setTimeout(() => composerTextareaRef.current?.focus(), 50);
-                }}
-                user={user}
-                onApproveWorkflow={handleApprove}
-                onRejectWorkflow={handleReject}
-                onRefreshPendingApprovals={fetchPendingApprovals}
-              />
-
-              {pendingApproval && (
-                <HumanApprovalCenter
-                  state={agentState}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  isLoading={isLoading}
-                />
+              {/* VIEW: Execution & Observability (Request History / Decision Traces) */}
+              {activeSection === "observability" && (
+                <section ref={traceSectionRef} className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+                  <ExecutionTrace
+                    traces={traces}
+                    requestId={activeRequestId}
+                    searchQuery={traceSearchQuery}
+                    onSearchQueryChange={setTraceSearchQuery}
+                  />
+                </section>
               )}
 
-              <WorkflowStatus
-                state={agentState}
-                result={agentResult}
-                tasks={tasks}
-                onInspectToolInTrace={handleInspectToolInTrace}
-              />
-            </section>
-          )}
+              {/* VIEW: Evaluation & Reliability */}
+              {activeSection === "evaluation" && (
+                <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+                  <EvaluationSection
+                    state={agentState}
+                    result={agentResult}
+                    traces={traces}
+                    sessionSummaries={orderedSessionSummaries}
+                    activeRequestId={activeRequestId}
+                    onSelectRequestId={handleSelectRequestId}
+                    onRunScenario={(sId, goal) => handleLaunchAgent(sId, goal)}
+                    isLoading={isLoading}
+                  />
+                </section>
+              )}
 
-          {/* VIEW: Settings & Appearance Center */}
-          {activeSection === "settings" && (
-            <section className="p-4 sm:p-6 max-w-5xl mx-auto w-full">
-              <SettingsView
-                health={health}
-                selectedStudentId={selectedStudentId}
-                onSelectStudentId={setSelectedStudentId}
-                inspectorOpen={inspectorOpen}
-                onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-                apiBaseUrl={apiClient.getBaseUrl()}
-              />
-            </section>
+              {/* VIEW: Tool Registry & System Schemas */}
+              {activeSection === "registry" && (
+                <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+                  <ToolRegistryPanel
+                    tools={tools}
+                    state={agentState}
+                    traces={traces}
+                    health={health}
+                    healthLoading={healthLoading}
+                    healthLatencyMs={healthLatencyMs}
+                    apiBaseUrl={apiClient.getBaseUrl()}
+                    onRefreshHealth={loadInitialData}
+                    onInspectToolInTrace={handleInspectToolInTrace}
+                  />
+                </section>
+              )}
+
+              {/* VIEW: Operations Overview & Admin Approval Queue */}
+              {(activeSection === "unified" || activeSection === "approvals") && (
+                <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+                  <OverviewDashboard
+                    state={agentState}
+                    result={agentResult}
+                    tools={tools}
+                    recentRequestIds={recentRequestIds}
+                    activeRequestId={activeRequestId}
+                    onSelectRequestId={handleSelectRequestId}
+                    isLoading={isLoading}
+                    sessionSummaries={sessionSummaries}
+                    onRefreshActiveRequest={() => {
+                      if (activeRequestId) handleSelectRequestId(activeRequestId);
+                    }}
+                    onNavigateToSection={setActiveSection}
+                    onFocusComposer={() => {
+                      setActiveSection("chat");
+                      setTimeout(() => composerTextareaRef.current?.focus(), 50);
+                    }}
+                    user={user}
+                    onApproveWorkflow={handleApprove}
+                    onRejectWorkflow={handleReject}
+                    onRefreshPendingApprovals={fetchPendingApprovals}
+                  />
+
+                  {pendingApproval && (
+                    <HumanApprovalCenter
+                      state={agentState}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      isLoading={isLoading}
+                    />
+                  )}
+
+                  {activeSection === "unified" && (
+                    <WorkflowStatus
+                      state={agentState}
+                      result={agentResult}
+                      tasks={tasks}
+                      onInspectToolInTrace={handleInspectToolInTrace}
+                    />
+                  )}
+                </section>
+              )}
+
+              {/* VIEW: Settings & Appearance Center */}
+              {activeSection === "settings" && (
+                <section className="p-4 sm:p-6 max-w-5xl mx-auto w-full">
+                  <SettingsView
+                    health={health}
+                    selectedStudentId={selectedStudentId}
+                    onSelectStudentId={setSelectedStudentId}
+                    inspectorOpen={inspectorOpen}
+                    onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+                    apiBaseUrl={apiClient.getBaseUrl()}
+                  />
+                </section>
+              )}
+            </>
           )}
         </main>
       </div>

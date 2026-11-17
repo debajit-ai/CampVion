@@ -148,12 +148,23 @@ interface SampledHeadCloud {
   normals: Float32Array;
   curvature: Float32Array;
   randoms: Float32Array;
+  crownY: number;
   groundY: number;
 }
 
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function hashGridKey(ix: number, iy: number, iz: number): number {
-  // Deterministic 3D integer grid hash (21 bits safe)
-  return ((ix + 512) * 1048576) + ((iy + 512) * 1024) + (iz + 512);
+  return (ix + 512) * 1048576 + (iy + 512) * 1024 + (iz + 512);
 }
 
 function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): SampledHeadCloud {
@@ -183,54 +194,80 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
   bb.getSize(size);
   bb.getCenter(center);
 
-  // Normalize uniformly to fit within [-1..+1] bounding cube centered cleanly at origin
+  // Normalize uniformly so model fits cleanly within [-1..+1] bounds centered at origin
   const maxDim = Math.max(size.x, size.y, size.z, 0.001);
   const scale = 2.0 / maxDim;
   bakedGeo.translate(-center.x, -center.y, -center.z);
   bakedGeo.scale(scale, scale, scale);
   bakedGeo.computeBoundingBox();
+
   const normMinY = bakedGeo.boundingBox ? bakedGeo.boundingBox.min.y : -0.93;
+  const normMaxY = bakedGeo.boundingBox ? bakedGeo.boundingBox.max.y : 0.93;
 
   const bakedMesh = new THREE.Mesh(bakedGeo);
   const sampler = new MeshSurfaceSampler(bakedMesh).build();
+  const rand = mulberry32(20261118);
 
   const positions = new Float32Array(targetCount * 3);
   const normals = new Float32Array(targetCount * 3);
   const curvature = new Float32Array(targetCount);
   const randoms = new Float32Array(targetCount);
 
-  // Spatial hash relaxation avoids clumping & guarantees uniform non-striped density
-  const cellSize = targetCount > 10000 ? 0.0155 : 0.024;
-  const minDist = targetCount > 10000 ? 0.0108 : 0.017;
-  const minDistSq = minDist * minDist;
+  const isDesktop = targetCount > 12000;
+  const cellSize = isDesktop ? 0.013 : 0.019;
+  const faceMinDistSq = Math.pow(isDesktop ? 0.0044 : 0.0068, 2);
+  const backMinDistSq = Math.pow(isDesktop ? 0.0125 : 0.019, 2);
   const grid = new Map<number, number[]>();
 
   const p = new THREE.Vector3();
   const n = new THREE.Vector3();
 
   for (let i = 0; i < targetCount; i++) {
-    let accepted = false;
     let bestPx = 0,
       bestPy = 0,
       bestPz = 0;
     let bestNx = 0,
       bestNy = 0,
       bestNz = 1;
+    let picked = false;
 
-    for (let attempt = 0; attempt < 6; attempt++) {
+    for (let attempt = 0; attempt < 18; attempt++) {
       sampler.sample(p, n);
-      if (attempt === 0) {
+
+      // Skip underside bottom cut rim & wide outer shoulder extremes
+      if (p.y < -0.74 && n.y < -0.68) continue;
+      if (Math.abs(p.x) > 0.70 && p.y < -0.25) continue;
+
+      // Drop mouth-interior pocket geometry & inward-facing mouth cavity walls (preserves outer lips cleanly)
+      const inMouthPocketDepth =
+        Math.abs(p.x) < 0.145 && p.y >= 0.095 && p.y <= 0.235 && p.z > 0.20 && p.z < 0.48;
+      const inMouthInwardNormal =
+        Math.abs(p.x) < 0.165 && p.y >= 0.095 && p.y <= 0.235 && p.z > 0.24 && n.z < 0.05;
+      if (inMouthPocketDepth || inMouthInwardNormal) continue;
+
+      // Smooth front-hemisphere facial importance weight (no rectangular boundary step)
+      const fxNorm = p.x / 0.44;
+      const fyNorm = (p.y - 0.28) / 0.36;
+      const faceWeight = p.z > 0.05 && fxNorm * fxNorm + fyNorm * fyNorm < 1.15;
+
+      if (!faceWeight && attempt < 12 && rand() > 0.4) {
+        continue;
+      }
+
+      if (!picked) {
         bestPx = p.x;
         bestPy = p.y;
         bestPz = p.z;
         bestNx = n.x;
         bestNy = n.y;
         bestNz = n.z;
+        picked = true;
       }
 
       const gx = Math.floor(p.x / cellSize);
       const gy = Math.floor(p.y / cellSize);
       const gz = Math.floor(p.z / cellSize);
+      const threshSq = faceWeight ? faceMinDistSq : backMinDistSq;
 
       let tooClose = false;
       for (let dx = -1; dx <= 1 && !tooClose; dx++) {
@@ -243,7 +280,7 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
               const vx = positions[j * 3] - p.x;
               const vy = positions[j * 3 + 1] - p.y;
               const vz = positions[j * 3 + 2] - p.z;
-              if (vx * vx + vy * vy + vz * vz < minDistSq) {
+              if (vx * vx + vy * vy + vz * vz < threshSq) {
                 tooClose = true;
                 break;
               }
@@ -259,7 +296,6 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
         bestNx = n.x;
         bestNy = n.y;
         bestNz = n.z;
-        accepted = true;
         break;
       }
     }
@@ -284,12 +320,11 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
       grid.set(finalKey, [i]);
     }
 
-    // Deterministic per-dot random value [0..1] derived from low-discrepancy golden fractional
-    randoms[i] = ((i * 0.61803398875 + (accepted ? 0.13 : 0.37)) % 1 + 1) % 1;
+    randoms[i] = ((i * 0.61803398875 + 0.17) % 1 + 1) % 1;
   }
 
-  // O(N) spatial-hash normal divergence estimate highlights high-curvature anatomy (eyes, nose, lips)
-  const curvRadiusSq = (cellSize * 2.1) * (cellSize * 2.1);
+  // O(N) spatial-hash normal divergence highlights subtle features (lips, nose ridge, brows)
+  const curvRadiusSq = Math.pow(cellSize * 2.2, 2);
   for (let i = 0; i < targetCount; i++) {
     const px = positions[i * 3];
     const py = positions[i * 3 + 1];
@@ -327,8 +362,7 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
     }
 
     const avgAlignment = neighborCount > 0 ? sumDot / neighborCount : 1;
-    // Scale normal variation cleanly into [0..1]
-    curvature[i] = Math.min(1, Math.max(0, (1 - avgAlignment) * 5.2));
+    curvature[i] = Math.min(1, Math.max(0, (1 - avgAlignment) * 4.5));
   }
 
   return {
@@ -337,7 +371,8 @@ function buildSampledHeadData(rootScene: THREE.Object3D, targetCount: number): S
     normals,
     curvature,
     randoms,
-    groundY: normMinY - 0.055,
+    crownY: normMaxY,
+    groundY: normMinY - 0.04,
   };
 }
 
@@ -358,37 +393,49 @@ const HEAD_POINTS_VERTEX = /* glsl */ `
     vec3 vNormal = normalize(normalMatrix * normal);
     vec3 vViewDir = normalize(-mvPos.xyz);
 
-    // (a) View-dependent diffuse from front-left key direction
-    vec3 keyDir = normalize(vec3(-0.45, 0.35, 0.82));
-    float diffuse = clamp(dot(vNormal, keyDir), 0.0, 1.0);
+    // Smooth wrapped front-left diffuse + soft frontal fill so eye/mouth folds stay softly shaded, never empty holes
+    vec3 keyDir = normalize(vec3(-0.42, 0.35, 0.84));
+    float halfLambert = dot(vNormal, keyDir) * 0.5 + 0.5;
+    float frontFill = clamp(dot(vNormal, vec3(0.0, 0.12, 1.0)) * 0.5 + 0.5, 0.0, 1.0);
+    float smoothDiffuse = mix(frontFill, halfLambert, 0.65);
 
-    // (b) Fresnel silhouette rim glow
+    // Subtle fresnel rim suppressed cleanly near the lower bust fade so bottom edge never glows bright
     float ndotv = dot(vNormal, vViewDir);
     float facing = clamp(ndotv, 0.0, 1.0);
-    float fresnel = pow(1.0 - facing, 2.35) * smoothstep(-0.28, 0.14, ndotv);
+    float bustHeightMask = smoothstep(-0.68, -0.15, position.y);
+    float fresnel = pow(1.0 - facing, 2.5) * smoothstep(-0.25, 0.2, ndotv) * bustHeightMask;
 
-    // (c) Depth fade so far/back points recede cleanly
-    float frontSide = smoothstep(-0.55, 0.25, ndotv);
-    float depthFade = smoothstep(-0.85, 0.65, position.z);
-    float backDim = mix(0.14, 1.0, frontSide * (0.45 + 0.55 * depthFade));
+    // Back-of-head & inward-facing normal attenuation so inward lip creases dim cleanly while outward lips highlight
+    float frontVisible = smoothstep(-0.25, 0.28, ndotv);
+    float depthFade = smoothstep(-0.85, 0.62, position.z);
+    float mouthInwardFade = (position.z > 0.25 && position.y > 0.09 && position.y < 0.24 && abs(position.x) < 0.17)
+      ? smoothstep(-0.08, 0.28, vNormal.z)
+      : 1.0;
+    float visibilityMask = mix(0.16, 1.0, frontVisible * (0.42 + 0.58 * depthFade)) * mix(0.28, 1.0, mouthInwardFade);
 
-    // Horizontal scan band (+brightness inside band + thin bright center line)
+    // Vertical fade over the lowest 25% of the bust ([-0.93 .. -0.46]) + shoulder lateral taper
+    float bottomFade = smoothstep(-0.89, -0.45, position.y);
+    float lowerBand = 1.0 - smoothstep(-0.52, -0.16, position.y);
+    float shoulderFade = 1.0 - smoothstep(0.46, 0.69, abs(position.x)) * lowerBand;
+    float edgeMask = bottomFade * shoulderFade;
+
+    // Subtle horizontal scan band on dots (slow ~6s full pass)
     float distScan = abs(position.y - uScanY);
-    float scanBand = smoothstep(0.22, 0.0, distScan);
-    float scanLine = smoothstep(0.026, 0.0, distScan);
+    float scanBand = smoothstep(0.20, 0.0, distScan);
+    float scanLine = smoothstep(0.022, 0.0, distScan);
 
-    // ~3% star dots with slow luminous twinkle
+    // ~3% soft star dots with slow twinkle
     float isStar = step(0.97, fract(aRandom * 31.73));
-    float twinkle = isStar * (0.5 + 0.5 * sin(uTime * 1.9 + aRandom * 19.0));
+    float twinkle = isStar * (0.5 + 0.5 * sin(uTime * 1.7 + aRandom * 19.0));
 
-    float shading = diffuse * 0.52 + fresnel * 0.58 + aCurvature * 0.34;
-    vTone = clamp(shading * backDim + scanBand * 0.48 + scanLine * 0.52 + twinkle * 0.55, 0.0, 1.15);
-    vAlpha = clamp((0.26 + shading * 0.62) * backDim + scanBand * 0.32 + scanLine * 0.45 + twinkle * 0.35, 0.06, 0.98);
-    vScanCore = clamp(scanLine + twinkle * 0.6, 0.0, 1.0);
+    float shading = smoothDiffuse * 0.62 + fresnel * 0.42 + aCurvature * 0.18;
+    vTone = clamp(shading * visibilityMask + scanBand * 0.24 + scanLine * 0.20 + twinkle * 0.40, 0.0, 1.05);
+    vAlpha = clamp((0.22 + shading * 0.56) * visibilityMask + scanBand * 0.18 + scanLine * 0.18 + twinkle * 0.22, 0.04, 0.90) * edgeMask;
+    vScanCore = clamp(scanLine * 0.72 + twinkle * 0.45, 0.0, 1.0);
 
-    // Crisp fine point sizes (~1.3 - 2.2 CSS px equivalent, slightly boosted on landmarks/stars)
-    float baseSize = 1.45 + aCurvature * 0.42 + scanBand * 0.35 + isStar * 0.65 + scanLine * 0.45;
-    gl_PointSize = baseSize * uPixelRatio * (4.95 / max(-mvPos.z, 1.2));
+    // Smaller, more uniform holographic point sizes (~1.1 - 1.65 px equivalent)
+    float baseSize = 1.12 + aCurvature * 0.14 + scanBand * 0.12 + isStar * 0.32;
+    gl_PointSize = baseSize * uPixelRatio * (3.82 / max(-mvPos.z, 1.2));
     gl_Position = projectionMatrix * mvPos;
   }
 `;
@@ -403,12 +450,13 @@ const HEAD_POINTS_FRAGMENT = /* glsl */ `
   varying float vScanCore;
 
   void main() {
+    if (vAlpha < 0.01) discard;
     float dist = length(gl_PointCoord - vec2(0.5));
     if (dist > 0.5) discard;
 
-    float sprite = smoothstep(0.5, 0.08, dist);
-    vec3 col = mix(uColorBase, uColorMid, smoothstep(0.12, 0.58, vTone));
-    col = mix(col, uColorHighlight, smoothstep(0.56, 1.02, vTone + vScanCore * 0.25));
+    float sprite = smoothstep(0.5, 0.10, dist);
+    vec3 col = mix(uColorBase, uColorMid, smoothstep(0.14, 0.58, vTone));
+    col = mix(col, uColorHighlight, smoothstep(0.58, 1.02, vTone + vScanCore * 0.22));
 
     gl_FragColor = vec4(col, sprite * vAlpha);
   }
@@ -417,8 +465,10 @@ const HEAD_POINTS_FRAGMENT = /* glsl */ `
 const HOLO_SHELL_VERTEX = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vViewDir;
+  varying vec3 vLocalPos;
 
   void main() {
+    vLocalPos = position;
     vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
     vNormal = normalize(normalMatrix * normal);
     vViewDir = normalize(-mvPos.xyz);
@@ -432,11 +482,15 @@ const HOLO_SHELL_FRAGMENT = /* glsl */ `
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
+  varying vec3 vLocalPos;
 
   void main() {
     float ndotv = clamp(dot(vNormal, vViewDir), 0.0, 1.0);
-    float fresnel = pow(1.0 - ndotv, 2.2);
-    gl_FragColor = vec4(uColor, fresnel * uOpacity);
+    float fresnel = pow(1.0 - ndotv, 2.3);
+    float bottomFade = smoothstep(-0.88, -0.44, vLocalPos.y);
+    float lowerBand = 1.0 - smoothstep(-0.52, -0.16, vLocalPos.y);
+    float shoulderFade = 1.0 - smoothstep(0.46, 0.69, abs(vLocalPos.x)) * lowerBand;
+    gl_FragColor = vec4(uColor, fresnel * uOpacity * bottomFade * shoulderFade);
   }
 `;
 
@@ -501,27 +555,25 @@ function SuspenseDottedCircle() {
 function HeadSilhouetteFallback({ reducedMotion }: { reducedMotion: boolean }) {
   const groupRef = useRef<THREE.Group>(null);
 
-  // Clean 2D profile/front bust silhouette outline rendered purely as soft cyan dots
   const positions = useMemo(() => {
     const outline: Array<[number, number]> = [
-      // Right jaw & cheek contour -> crown -> left cheek & jaw -> neck/shoulders
-      [-0.68, -0.82],
-      [-0.36, -0.68],
-      [-0.28, -0.44],
-      [-0.44, -0.22],
-      [-0.50, 0.06],
-      [-0.48, 0.34],
-      [-0.38, 0.62],
-      [-0.18, 0.80],
-      [0.0, 0.86],
-      [0.18, 0.80],
-      [0.38, 0.62],
-      [0.48, 0.34],
-      [0.50, 0.06],
-      [0.44, -0.22],
-      [0.28, -0.44],
-      [0.36, -0.68],
-      [0.68, -0.82],
+      [-0.48, -0.78],
+      [-0.32, -0.62],
+      [-0.26, -0.40],
+      [-0.42, -0.18],
+      [-0.48, 0.08],
+      [-0.46, 0.36],
+      [-0.36, 0.64],
+      [-0.18, 0.82],
+      [0.0, 0.88],
+      [0.18, 0.82],
+      [0.36, 0.64],
+      [0.46, 0.36],
+      [0.48, 0.08],
+      [0.42, -0.18],
+      [0.26, -0.40],
+      [0.32, -0.62],
+      [0.48, -0.78],
     ];
     const pts: number[] = [];
     for (let i = 0; i < outline.length - 1; i++) {
@@ -533,11 +585,10 @@ function HeadSilhouetteFallback({ reducedMotion }: { reducedMotion: boolean }) {
         pts.push(x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, 0);
       }
     }
-    // Minimal eye/nose/brow dot accents along horizontal midline
-    for (let x = -0.24; x <= -0.10; x += 0.035) pts.push(x, 0.14, 0.02);
-    for (let x = 0.10; x <= 0.24; x += 0.035) pts.push(x, 0.14, 0.02);
-    for (let y = -0.14; y <= 0.12; y += 0.04) pts.push(0, y, 0.03);
-    for (let x = -0.11; x <= 0.11; x += 0.035) pts.push(x, -0.26, 0.02);
+    for (let x = -0.22; x <= -0.10; x += 0.03) pts.push(x, 0.16, 0.02);
+    for (let x = 0.10; x <= 0.22; x += 0.03) pts.push(x, 0.16, 0.02);
+    for (let y = -0.10; y <= 0.14; y += 0.035) pts.push(0, y, 0.03);
+    for (let x = -0.11; x <= 0.11; x += 0.03) pts.push(x, -0.22, 0.02);
     return new Float32Array(pts);
   }, []);
 
@@ -554,7 +605,7 @@ function HeadSilhouetteFallback({ reducedMotion }: { reducedMotion: boolean }) {
         </bufferGeometry>
         <pointsMaterial
           color="#38BDF8"
-          size={0.045}
+          size={0.04}
           sizeAttenuation
           transparent
           opacity={0.85}
@@ -582,6 +633,21 @@ function ScannedHeadHologram({
     [gltf.scene, pointCount]
   );
 
+  // Thin vertical dotted tether line from crown (+0.93) to overhead beacon (+1.17)
+  const tetherPositions = useMemo(() => {
+    const dots = 6;
+    const arr = new Float32Array(dots * 3);
+    const yStart = headCloud.crownY + 0.025;
+    const yEnd = headCloud.crownY + 0.20;
+    for (let i = 0; i < dots; i++) {
+      const u = i / (dots - 1);
+      arr[i * 3] = 0;
+      arr[i * 3 + 1] = yStart + (yEnd - yStart) * u;
+      arr[i * 3 + 2] = 0;
+    }
+    return arr;
+  }, [headCloud.crownY]);
+
   useEffect(() => {
     return () => {
       headCloud.geometry.dispose();
@@ -590,10 +656,9 @@ function ScannedHeadHologram({
 
   const headGroupRef = useRef<THREE.Group>(null);
   const pointsMatRef = useRef<THREE.ShaderMaterial>(null);
-  const scanLineMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const scanLineMeshRef = useRef<THREE.Mesh>(null);
   const beaconMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const beaconHaloMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const tetherMatRef = useRef<THREE.PointsMaterial>(null);
   const beaconHaloMeshRef = useRef<THREE.Mesh>(null);
 
   const tiltRef = useRef({ x: 0, y: 0 });
@@ -603,7 +668,7 @@ function ScannedHeadHologram({
 
   const [pointUniforms] = useState(() => ({
     uTime: { value: 0 },
-    uScanY: { value: 0.12 },
+    uScanY: { value: 0.14 },
     uPixelRatio: { value: 1.25 },
     uColorBase: { value: new THREE.Color("#1E6FD9") },
     uColorMid: { value: new THREE.Color("#38BDF8") },
@@ -612,7 +677,7 @@ function ScannedHeadHologram({
 
   const [shellUniforms] = useState(() => ({
     uColor: { value: new THREE.Color("#38BDF8") },
-    uOpacity: { value: 0.055 },
+    uOpacity: { value: 0.048 },
   }));
 
   useFrame((state, delta) => {
@@ -624,7 +689,7 @@ function ScannedHeadHologram({
       pointsMatRef.current.uniforms.uPixelRatio.value = dpr;
     }
 
-    // Smooth amber -> emerald beacon transition on card hover
+    // Smooth amber -> emerald beacon & tether transition on card hover
     beaconBlendRef.current = THREE.MathUtils.lerp(
       beaconBlendRef.current,
       isCardHovered ? 1 : 0,
@@ -632,10 +697,13 @@ function ScannedHeadHologram({
     );
     if (beaconMatRef.current) {
       beaconMatRef.current.color.lerpColors(amberColor, emeraldColor, beaconBlendRef.current);
-      beaconMatRef.current.opacity = reducedMotion ? 0.9 : 0.7 + Math.sin(t * 3.4) * 0.25;
+      beaconMatRef.current.opacity = reducedMotion ? 0.92 : 0.72 + Math.sin(t * 3.2) * 0.24;
     }
     if (beaconHaloMatRef.current) {
       beaconHaloMatRef.current.color.lerpColors(amberColor, emeraldColor, beaconBlendRef.current);
+    }
+    if (tetherMatRef.current) {
+      tetherMatRef.current.color.lerpColors(amberColor, emeraldColor, beaconBlendRef.current);
     }
 
     if (reducedMotion) {
@@ -643,23 +711,20 @@ function ScannedHeadHologram({
         headGroupRef.current.position.y = 0;
         headGroupRef.current.rotation.set(0, 0, 0);
       }
-      if (scanLineMeshRef.current) {
-        scanLineMeshRef.current.position.y = 0.12;
-      }
       if (pointsMatRef.current) {
         pointsMatRef.current.uniforms.uTime.value = 0;
-        pointsMatRef.current.uniforms.uScanY.value = 0.12;
+        pointsMatRef.current.uniforms.uScanY.value = 0.14;
       }
       return;
     }
 
-    // Slow yaw sweep (+/- ~51 deg) + gentle float
+    // Slow yaw sweep (+/- ~51 deg) + gentle float; slower ~6s scan band cycle
     const sweepYaw = Math.sin(t * 0.3) * 0.9;
-    const floatY = Math.sin(t * 0.85) * 0.032;
-    const scanY = Math.sin(t * 0.65) * 0.84;
+    const floatY = Math.sin(t * 0.85) * 0.025;
+    const scanY = Math.sin(t * ((Math.PI * 2) / 6.0)) * 0.82;
 
     // Tiny damped pointer-following tilt (max 5 deg)
-    const targetTiltX = -state.pointer.y * 0.075;
+    const targetTiltX = -state.pointer.y * 0.07;
     const targetTiltY = state.pointer.x * 0.085;
     const alpha = 1 - Math.exp(-6 * dt);
     tiltRef.current.x = THREE.MathUtils.lerp(tiltRef.current.x, targetTiltX, alpha);
@@ -676,25 +741,19 @@ function ScannedHeadHologram({
       pointsMatRef.current.uniforms.uScanY.value = scanY;
     }
 
-    if (scanLineMeshRef.current) {
-      scanLineMeshRef.current.position.y = scanY;
-      const bandTaper = Math.max(0.5, 1.0 - Math.pow(scanY / 0.95, 2) * 0.36);
-      scanLineMeshRef.current.scale.set(bandTaper, bandTaper, 1);
-    }
-    if (scanLineMatRef.current) {
-      scanLineMatRef.current.opacity = 0.24 + Math.sin(t * 2.5) * 0.05;
-    }
-
     if (beaconHaloMeshRef.current) {
-      const pulseScale = 1 + (0.5 + 0.5 * Math.sin(t * 3.4)) * 0.45;
+      const pulseScale = 1 + (0.5 + 0.5 * Math.sin(t * 3.2)) * 0.42;
       beaconHaloMeshRef.current.scale.setScalar(pulseScale);
     }
   });
 
+  // Floating beacon sits cleanly above the crown
+  const beaconY = headCloud.crownY + 0.24;
+
   return (
     <group>
       <group ref={headGroupRef}>
-        {/* Uniform Random Sampled Holographic Point Cloud */}
+        {/* Front-Weighted Dense Holographic Point Cloud */}
         <points>
           <bufferGeometry>
             <bufferAttribute
@@ -725,7 +784,7 @@ function ScannedHeadHologram({
           />
         </points>
 
-        {/* Faint Additive Fresnel Surface Shell (opacity <= 0.06) */}
+        {/* Faint Additive Fresnel Surface Shell (fades cleanly at bust bottom & outer shoulders) */}
         <mesh geometry={headCloud.geometry}>
           <shaderMaterial
             vertexShader={HOLO_SHELL_VERTEX}
@@ -737,24 +796,40 @@ function ScannedHeadHologram({
           />
         </mesh>
 
-        {/* Forehead Approval Gate Beacon (Amber -> Emerald on Hover) */}
-        <group position={[0, 0.37, 0.58]}>
+        {/* Thin Vertical Dotted Tether Connecting Crown to Overhead Governance Beacon */}
+        <points>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[tetherPositions, 3]} />
+          </bufferGeometry>
+          <pointsMaterial
+            ref={tetherMatRef}
+            color="#FBBF24"
+            size={0.022}
+            sizeAttenuation
+            transparent
+            opacity={0.55}
+            depthWrite={false}
+          />
+        </points>
+
+        {/* Governance Approval Gate Beacon Floating Above Crown (Never Overlaps Face) */}
+        <group position={[0, beaconY, 0]}>
           <mesh>
-            <sphereGeometry args={[0.022, 12, 12]} />
+            <sphereGeometry args={[0.024, 12, 12]} />
             <meshBasicMaterial
               ref={beaconMatRef}
               color="#FBBF24"
               transparent
-              opacity={0.9}
+              opacity={0.92}
             />
           </mesh>
           <mesh ref={beaconHaloMeshRef}>
-            <ringGeometry args={[0.036, 0.049, 24]} />
+            <ringGeometry args={[0.04, 0.056, 28]} />
             <meshBasicMaterial
               ref={beaconHaloMatRef}
               color="#FBBF24"
               transparent
-              opacity={0.5}
+              opacity={0.55}
               side={THREE.DoubleSide}
               depthWrite={false}
             />
@@ -762,27 +837,13 @@ function ScannedHeadHologram({
         </group>
       </group>
 
-      {/* Thin Bright Horizontal Scan Line Ring */}
-      <mesh ref={scanLineMeshRef} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.12, 0]}>
-        <ringGeometry args={[0.82, 0.836, 72]} />
-        <meshBasicMaterial
-          ref={scanLineMatRef}
-          color="#E6F9FF"
-          transparent
-          opacity={0.26}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-
-      {/* Thin Dim Ground Ring Below Bust/Neck Cut */}
+      {/* One Thin Dim Ground Ring Centered Under Bust */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, headCloud.groundY, 0]}>
-        <ringGeometry args={[0.92, 0.945, 72]} />
+        <ringGeometry args={[0.70, 0.716, 64]} />
         <meshBasicMaterial
           color="#38BDF8"
           transparent
-          opacity={0.18}
+          opacity={0.075}
           side={THREE.DoubleSide}
           depthWrite={false}
         />
@@ -804,7 +865,7 @@ export function GovernanceGlassShieldCanvas({
     return window.matchMedia("(max-width: 767px)").matches;
   });
 
-  const pointCount = isMobile ? 6000 : 14000;
+  const pointCount = isMobile ? 8000 : 18000;
 
   return (
     <div
@@ -821,7 +882,7 @@ export function GovernanceGlassShieldCanvas({
       <Canvas
         dpr={[1, 1.5]}
         frameloop={prefersReducedMotion ? "demand" : inView ? "always" : "never"}
-        camera={{ position: [0, 0, 4.95], fov: 34 }}
+        camera={{ position: [0, 0.12, 3.82], fov: 34 }}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         className="w-full h-full block"
       >
@@ -838,7 +899,7 @@ export function GovernanceGlassShieldCanvas({
         </HeadErrorBoundary>
       </Canvas>
 
-      {/* Subtle Bottom-Left State Indicator Synced With Forehead Beacon */}
+      {/* Subtle Bottom-Left State Indicator Synced With Overhead Beacon */}
       <div className="pointer-events-none absolute bottom-2.5 left-3 flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md">
         <span
           className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${

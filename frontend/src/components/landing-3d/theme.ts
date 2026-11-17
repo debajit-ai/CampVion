@@ -46,6 +46,59 @@ export const LANDING_PALETTE: Record<LandingColorMode, LandingPaletteTokens> = {
   },
 };
 
+export interface WorkspaceThemeTokens {
+  bg: string;
+  surface: string;
+  elevated: string;
+  glass: string;
+  border: string;
+  text: string;
+  muted: string;
+  primaryFrom: string;
+  primaryTo: string;
+  accentCyan: string;
+  success: string;
+  amber: string;
+  danger: string;
+}
+
+/**
+ * Single-source workspace color palette synced with LandingPaletteTokens.
+ * Dark mode (#05070F / #0B1020 / #0F1629) is the default; light mode uses #F6F7FB.
+ */
+export const WORKSPACE_PALETTE: Record<LandingColorMode, WorkspaceThemeTokens> = {
+  dark: {
+    bg: "#05070F",
+    surface: "#0B1020",
+    elevated: "#0F1629",
+    glass: "rgba(255, 255, 255, 0.04)",
+    border: "rgba(255, 255, 255, 0.08)",
+    text: "#F5F7FF",
+    muted: "#B6C0D8",
+    primaryFrom: "#6366F1",
+    primaryTo: "#22D3EE",
+    accentCyan: "#38BDF8",
+    success: "#34D399",
+    amber: "#FBBF24",
+    danger: "#F87171",
+  },
+  light: {
+    bg: "#F6F7FB",
+    surface: "#FFFFFF",
+    elevated: "#FFFFFF",
+    glass: "rgba(255, 255, 255, 0.80)",
+    border: "rgba(11, 16, 32, 0.10)",
+    text: "#0B1020",
+    muted: "#475069",
+    primaryFrom: "#4F46E5",
+    primaryTo: "#0891B2",
+    accentCyan: "#0284C7",
+    success: "#047857",
+    amber: "#B45309",
+    danger: "#DC2626",
+  },
+};
+
 /**
  * Single accent in 3D (#38BDF8); emerald & amber reserved strictly for UI trace states.
  */

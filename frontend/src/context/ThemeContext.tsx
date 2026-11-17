@@ -27,11 +27,13 @@ export interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = "campvion_theme";
+const LANDING_THEME_STORAGE_KEY = "campvion_landing_theme";
 const MOTION_STORAGE_KEY = "campvion_reduced_motion";
 const CONTRAST_STORAGE_KEY = "campvion_high_contrast";
 const EXPERIENCE_MODE_KEY = "campvion_experience_mode";
 
 const EVENT_THEME_CHANGE = "campvion_theme_change";
+const EVENT_LANDING_THEME_CHANGE = "campvion_landing_theme_change";
 const EVENT_MODE_CHANGE = "campvion_mode_change";
 const EVENT_ACCESSIBILITY_CHANGE = "campvion_accessibility_change";
 
@@ -39,11 +41,13 @@ function subscribeStore(callback: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener("storage", callback);
   window.addEventListener(EVENT_THEME_CHANGE, callback);
+  window.addEventListener(EVENT_LANDING_THEME_CHANGE, callback);
   window.addEventListener(EVENT_MODE_CHANGE, callback);
   window.addEventListener(EVENT_ACCESSIBILITY_CHANGE, callback);
   return () => {
     window.removeEventListener("storage", callback);
     window.removeEventListener(EVENT_THEME_CHANGE, callback);
+    window.removeEventListener(EVENT_LANDING_THEME_CHANGE, callback);
     window.removeEventListener(EVENT_MODE_CHANGE, callback);
     window.removeEventListener(EVENT_ACCESSIBILITY_CHANGE, callback);
   };
@@ -53,23 +57,25 @@ function getSystemTheme(): ResolvedTheme {
   if (typeof window !== "undefined" && window.matchMedia) {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
-  return "light";
+  return "dark";
 }
 
 function getThemeSnapshot(): ThemeMode {
   try {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+    const saved =
+      (localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null) ||
+      (localStorage.getItem(LANDING_THEME_STORAGE_KEY) as ThemeMode | null);
     if (saved === "light" || saved === "dark" || saved === "system") {
       return saved;
     }
   } catch {
     // safe fallback
   }
-  return "system";
+  return "dark";
 }
 
 function getThemeServerSnapshot(): ThemeMode {
-  return "system";
+  return "dark";
 }
 
 function getExperienceModeSnapshot(): ExperienceMode {
@@ -132,7 +138,7 @@ function getResolvedThemeSnapshot(): ResolvedTheme {
 }
 
 function getResolvedThemeServerSnapshot(): ResolvedTheme {
-  return "light";
+  return "dark";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -214,7 +220,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       window.setTimeout(() => root.classList.remove("cv-theme-transition"), 260);
 
       localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+      localStorage.setItem(LANDING_THEME_STORAGE_KEY, newTheme);
       window.dispatchEvent(new Event(EVENT_THEME_CHANGE));
+      window.dispatchEvent(new Event(EVENT_LANDING_THEME_CHANGE));
     } catch {
       // safe fallback
     }

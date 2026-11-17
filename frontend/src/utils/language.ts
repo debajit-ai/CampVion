@@ -194,6 +194,65 @@ export function formatStudentFriendlyError(
   };
 }
 
+export function toTitleCase(input?: string | null): string {
+  if (!input) return "";
+  return input
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function getFirstNameTitleCase(input?: string | null, fallback = "Student"): string {
+  const formatted = toTitleCase(input);
+  if (!formatted) return fallback;
+  return formatted.split(/\s+/)[0] || fallback;
+}
+
+export function getUserInitials(name?: string | null, email?: string | null): string {
+  const clean = toTitleCase(name);
+  if (clean) {
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email) {
+    return email.slice(0, 2).toUpperCase();
+  }
+  return "CV";
+}
+
+export function formatRelativeTime(isoDate?: string | null): string {
+  if (!isoDate) return "just now";
+  const ts = Date.parse(isoDate);
+  if (Number.isNaN(ts)) return "just now";
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}d ago`;
+}
+
+export function getTimeBasedGreeting(date: Date = new Date()): string {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+export function formatRoleLabel(role?: string | null): string {
+  const r = (role || "student").toLowerCase();
+  if (r === "system_administrator" || r === "administrator") return "Admin";
+  if (r === "faculty") return "Faculty";
+  return "Student";
+}
+
 /**
  * Friendly task description map
  */
