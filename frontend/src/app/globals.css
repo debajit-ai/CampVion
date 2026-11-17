@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
 /* ==========================================================================
    CampVion Visual Identity — Design Tokens
@@ -16,8 +17,8 @@
   color-scheme: light;
 
   /* Base */
-  --background: #FFFFFF;
-  --foreground: #111111;
+  --background: #F6F7FB;
+  --foreground: #0B1020;
 
   /* Surfaces & elevation */
   --cv-canvas: #FFFFFF;          /* Primary background */
@@ -82,8 +83,8 @@
 .dark {
   color-scheme: dark;
 
-  --background: #050505;
-  --foreground: #F5F5F5;
+  --background: #05070F;
+  --foreground: #F5F7FF;
 
   --cv-canvas: #050505;
   --cv-sidebar: #070707;
@@ -549,6 +550,303 @@ select option {
    CampVion Landing Design Tokens (Obsidian + Indigo/Cyan, Light #F6F7FB)
    Centralized variables for the public landing page & glassmorphism surfaces.
    ============================================================================ */
+.cv-app {
+  --land-bg: #F6F7FB;
+  --land-surface: #FFFFFF;
+  --land-surface-glass: rgba(255, 255, 255, 0.82);
+  --land-surface-soft: rgba(241, 245, 255, 0.88);
+  --land-text: #0B1020;
+  --land-muted: #475069;
+  --land-border: rgba(11, 16, 32, 0.10);
+  --land-border-strong: rgba(2, 132, 199, 0.36);
+  --land-indigo: #4F46E5;
+  --land-cyan: #0891B2;
+  --land-emerald: #047857;
+  --land-amber: #B45309;
+  --land-gradient: linear-gradient(135deg, #4F46E5 0%, #0891B2 100%);
+
+  --app-bg: var(--land-bg);
+  --app-surface: var(--land-surface);
+  --app-elevated: #FFFFFF;
+  --app-glass: var(--land-surface-glass);
+  --app-border: var(--land-border);
+  --app-text: var(--land-text);
+  --app-muted: var(--land-muted);
+  --app-gradient: var(--land-gradient);
+
+  --background: var(--app-bg);
+  --foreground: var(--app-text);
+  --cv-canvas: var(--app-bg);
+  --cv-sidebar: #FFFFFF;
+  --cv-surface: var(--app-surface);
+  --cv-inset: #EEF2FA;
+  --cv-raised: #E7ECF6;
+  --cv-hover: #E0E7F4;
+  --cv-line: var(--app-border);
+  --cv-line-strong: rgba(11, 16, 32, 0.18);
+  --cv-fg: var(--app-text);
+  --cv-fg-2: var(--app-muted);
+  --cv-fg-3: #5B657E;
+
+  --cv-accent: #0369A1;
+  --cv-accent-hover: #0284C7;
+  --cv-on-accent: #FFFFFF;
+  --cv-accent-ink: #0369A1;
+  --cv-accent-ink-hover: #075985;
+  --cv-accent-line: rgba(2, 132, 199, 0.45);
+  --cv-accent-soft: rgba(2, 132, 199, 0.09);
+  --cv-accent-soft-line: rgba(2, 132, 199, 0.24);
+  --cv-accent-glow: rgba(99, 102, 241, 0.22);
+
+  --cv-success: #047857;
+  --cv-success-solid: #059669;
+  --cv-success-solid-hover: #047857;
+  --cv-success-soft: #ECFDF5;
+  --cv-success-line: #A7F3D0;
+
+  --cv-warning: #B45309;
+  --cv-warning-solid: #D97706;
+  --cv-warning-soft: #FFFBEB;
+  --cv-warning-line: #FCD34D;
+
+  --cv-error: #DC2626;
+  --cv-error-solid: #DC2626;
+  --cv-error-soft: #FEF2F2;
+  --cv-error-line: #FECACA;
+
+  --cv-overlay: #0B1020;
+  --cv-focus: #0284C7;
+  --cv-scrollbar-track: transparent;
+  --cv-scrollbar-thumb: rgba(11, 16, 32, 0.16);
+  --cv-scrollbar-thumb-hover: rgba(2, 132, 199, 0.55);
+
+  --cv-shadow-panel: 0 1px 2px 0 rgba(11, 16, 32, 0.04), 0 8px 24px -8px rgba(11, 16, 32, 0.08);
+  --cv-shadow-elevated: 0 6px 18px -4px rgba(11, 16, 32, 0.08), 0 18px 36px -10px rgba(79, 70, 229, 0.10);
+
+  background-color: var(--app-bg);
+  color: var(--app-text);
+}
+
+[data-theme="dark"] .cv-app,
+.dark .cv-app {
+  color-scheme: dark;
+
+  --land-bg: #05070F;
+  --land-surface: #0B1020;
+  --land-surface-glass: rgba(11, 16, 32, 0.78);
+  --land-surface-soft: rgba(17, 25, 52, 0.72);
+  --land-text: #F5F7FF;
+  --land-muted: #B6C0D8;
+  --land-border: rgba(255, 255, 255, 0.08);
+  --land-border-strong: rgba(56, 189, 248, 0.35);
+  --land-indigo: #6366F1;
+  --land-cyan: #22D3EE;
+  --land-emerald: #34D399;
+  --land-amber: #FBBF24;
+  --land-gradient: linear-gradient(135deg, #6366F1 0%, #22D3EE 100%);
+
+  --app-bg: var(--land-bg);
+  --app-surface: var(--land-surface);
+  --app-elevated: #0F1629;
+  --app-glass: rgba(255, 255, 255, 0.04);
+  --app-border: var(--land-border);
+  --app-text: var(--land-text);
+  --app-muted: var(--land-muted);
+  --app-gradient: var(--land-gradient);
+
+  --background: var(--app-bg);
+  --foreground: var(--app-text);
+  --cv-canvas: var(--app-bg);
+  --cv-sidebar: #070B18;
+  --cv-surface: var(--app-surface);
+  --cv-inset: var(--app-elevated);
+  --cv-raised: rgba(255, 255, 255, 0.045);
+  --cv-hover: rgba(255, 255, 255, 0.08);
+  --cv-line: var(--app-border);
+  --cv-line-strong: rgba(255, 255, 255, 0.14);
+  --cv-fg: var(--app-text);
+  --cv-fg-2: var(--app-muted);
+  --cv-fg-3: #94A0BD;
+
+  --cv-accent: #38BDF8;
+  --cv-accent-hover: #22D3EE;
+  --cv-on-accent: #05070F;
+  --cv-accent-ink: #38BDF8;
+  --cv-accent-ink-hover: #7DD3FC;
+  --cv-accent-line: rgba(56, 189, 248, 0.45);
+  --cv-accent-soft: rgba(56, 189, 248, 0.11);
+  --cv-accent-soft-line: rgba(56, 189, 248, 0.25);
+  --cv-accent-glow: rgba(56, 189, 248, 0.24);
+
+  --cv-success: #34D399;
+  --cv-success-solid: #10B981;
+  --cv-success-solid-hover: #059669;
+  --cv-success-soft: rgba(52, 211, 153, 0.10);
+  --cv-success-line: rgba(52, 211, 153, 0.28);
+
+  --cv-warning: #FBBF24;
+  --cv-warning-solid: #D97706;
+  --cv-warning-soft: rgba(251, 191, 36, 0.10);
+  --cv-warning-line: rgba(251, 191, 36, 0.30);
+
+  --cv-error: #F87171;
+  --cv-error-solid: #EF4444;
+  --cv-error-soft: rgba(248, 113, 113, 0.10);
+  --cv-error-line: rgba(248, 113, 113, 0.28);
+
+  --cv-overlay: #02040A;
+  --cv-focus: #38BDF8;
+  --cv-scrollbar-track: transparent;
+  --cv-scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --cv-scrollbar-thumb-hover: rgba(56, 189, 248, 0.50);
+
+  --cv-shadow-panel: 0 2px 6px 0 rgba(0, 0, 0, 0.45);
+  --cv-shadow-elevated: 0 18px 48px -14px rgba(2, 4, 10, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.cv-app[data-high-contrast="true"],
+[data-high-contrast="true"] .cv-app {
+  --cv-line: rgba(11, 16, 32, 0.24);
+  --cv-line-strong: rgba(11, 16, 32, 0.38);
+  --cv-fg-2: #334155;
+  --cv-fg-3: #475069;
+}
+
+.dark[data-high-contrast="true"] .cv-app,
+[data-theme="dark"][data-high-contrast="true"] .cv-app {
+  --cv-line: rgba(255, 255, 255, 0.18);
+  --cv-line-strong: rgba(255, 255, 255, 0.30);
+  --cv-fg-2: #D8E0F2;
+  --cv-fg-3: #B6C0D8;
+}
+
+.cv-btn-gradient {
+  background-image: linear-gradient(135deg, #4F46E5 0%, #0891B2 100%);
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px -8px rgba(79, 70, 229, 0.38);
+  transition: filter 160ms ease, box-shadow 200ms ease, transform 150ms ease;
+}
+
+.dark .cv-btn-gradient,
+[data-theme="dark"] .cv-btn-gradient {
+  background-image: linear-gradient(135deg, #6366F1 0%, #22D3EE 100%);
+  color: #FFFFFF;
+  box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.42);
+}
+
+.cv-btn-gradient:not(:disabled):hover {
+  filter: brightness(1.08);
+  box-shadow: 0 12px 30px -6px rgba(34, 211, 238, 0.38);
+}
+
+.cv-btn-gradient:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.cv-gradient-text {
+  background-image: linear-gradient(90deg, #4F46E5 0%, #0891B2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark .cv-gradient-text,
+[data-theme="dark"] .cv-gradient-text {
+  background-image: linear-gradient(90deg, #6366F1 0%, #22D3EE 100%);
+}
+
+.cv-app-ambient-grid {
+  background-image:
+    linear-gradient(to right, rgba(11, 16, 32, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(11, 16, 32, 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 25%, black 15%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 25%, black 15%, transparent 80%);
+}
+
+.dark .cv-app-ambient-grid,
+[data-theme="dark"] .cv-app-ambient-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.cv-app .glass-panel,
+.cv-app .cv-glass-card {
+  background-color: var(--app-glass);
+  border: 1px solid var(--cv-line);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--cv-shadow-panel);
+}
+
+.cv-app .cv-composer-shell {
+  background-color: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(11, 16, 32, 0.10);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 36px -14px rgba(11, 16, 32, 0.12);
+}
+
+.dark .cv-app .cv-composer-shell,
+[data-theme="dark"] .cv-app .cv-composer-shell {
+  background-color: rgba(11, 16, 32, 0.82);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 16px 40px -16px rgba(2, 4, 10, 0.85);
+}
+
+.cv-app .cv-composer-shell:focus-within {
+  border-color: rgba(2, 132, 199, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(79, 70, 229, 0.28),
+    0 0 28px -8px rgba(8, 145, 178, 0.25);
+}
+
+.dark .cv-app .cv-composer-shell:focus-within,
+[data-theme="dark"] .cv-app .cv-composer-shell:focus-within {
+  border-color: rgba(56, 189, 248, 0.50);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.35),
+    0 0 32px -8px rgba(34, 211, 238, 0.28);
+}
+
+.cv-app ::selection {
+  background-color: #6366F1;
+  color: #FFFFFF;
+}
+
+.cv-app button:focus-visible,
+.cv-app a:focus-visible,
+.cv-app input:focus-visible,
+.cv-app textarea:focus-visible,
+.cv-app select:focus-visible,
+.cv-app [role="button"]:focus-visible,
+.cv-app [role="radio"]:focus-visible,
+.cv-app [role="switch"]:focus-visible,
+.cv-app [role="tab"]:focus-visible {
+  outline: 2px solid var(--cv-focus);
+  outline-offset: 2px;
+}
+
+.cv-thin-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.cv-thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cv-thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--cv-scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+.cv-thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--cv-scrollbar-thumb-hover);
+}
+
 .cv-landing {
   --land-bg: #05070F;
   --land-surface: #0B1020;

@@ -59,11 +59,11 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-screen bg-cv-canvas text-cv-fg flex flex-col selection:bg-cv-accent selection:text-cv-on-accent overflow-x-hidden max-w-full"
       >
-        <Script id="campvion-theme-init" strategy="afterInteractive">
+        <Script id="campvion-theme-init" strategy="beforeInteractive">
           {`
             (function() {
               try {
-                var savedTheme = localStorage.getItem('campvion_theme') || 'system';
+                var savedTheme = localStorage.getItem('campvion_theme') || localStorage.getItem('campvion_landing_theme') || 'dark';
                 var isDark = savedTheme === 'dark' || (savedTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                 var root = document.documentElement;
                 root.setAttribute('data-theme', isDark ? 'dark' : 'light');
