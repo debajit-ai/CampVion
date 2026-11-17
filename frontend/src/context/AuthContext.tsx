@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { apiClient } from "../lib/api";
 import { LoginPayload, SignupPayload, UserProfile } from "../types/api";
@@ -24,32 +25,51 @@ export interface AuthContextType {
 }
 
 const DISPLAY_NAME_STORAGE_KEY = "campvion_user_display_name";
+const DISPLAY_NAME_EVENT = "campvion_display_name_change";
+
+function subscribeDisplayName(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => onStoreChange();
+  window.addEventListener("storage", handler);
+  window.addEventListener(DISPLAY_NAME_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(DISPLAY_NAME_EVENT, handler);
+  };
+}
+
+function getDisplayNameSnapshot(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return (window.localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [preferredDisplayName, setPreferredDisplayNameState] = useState<string>("");
-
-  // Initialize preferred display name from localStorage if present
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(DISPLAY_NAME_STORAGE_KEY);
-      if (stored && stored.trim()) {
-        setPreferredDisplayNameState(stored.trim());
-      }
-    }
-  }, []);
+  const preferredDisplayName = useSyncExternalStore(
+    subscribeDisplayName,
+    getDisplayNameSnapshot,
+    () => ""
+  );
 
   const setPreferredDisplayName = useCallback((name: string) => {
     const trimmed = name.trim();
-    setPreferredDisplayNameState(trimmed);
     if (typeof window !== "undefined") {
-      if (trimmed) {
-        localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, trimmed);
-      } else {
-        localStorage.removeItem(DISPLAY_NAME_STORAGE_KEY);
+      try {
+        if (trimmed) {
+          window.localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, trimmed);
+        } else {
+          window.localStorage.removeItem(DISPLAY_NAME_STORAGE_KEY);
+        }
+        window.dispatchEvent(new Event(DISPLAY_NAME_EVENT));
+      } catch {
+        // Ignore storage errors
       }
     }
   }, []);

@@ -21,19 +21,28 @@ import {
   PendingApprovalItem,
 } from "../types/api";
 
-const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(
+const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "/api").replace(
   /\/+$/,
   ""
 );
 
-export const DEFAULT_API_BASE_URL = RAW_API_URL.endsWith("/api")
-  ? RAW_API_URL
-  : `${RAW_API_URL}/api`;
+export const DEFAULT_API_BASE_URL =
+  RAW_API_URL === "/api" || RAW_API_URL.endsWith("/api")
+    ? RAW_API_URL
+    : `${RAW_API_URL}/api`;
 
-let _activeBaseUrl: string = DEFAULT_API_BASE_URL;
+let _activeBaseUrl: string =
+  typeof window !== "undefined" ? "/api" : DEFAULT_API_BASE_URL;
 
 function getCandidateBaseUrls(): string[] {
-  const candidates: string[] = [_activeBaseUrl, DEFAULT_API_BASE_URL];
+  const candidates: string[] = [];
+
+  if (typeof window !== "undefined") {
+    // Prefer same-origin Next.js rewrite proxy first so HttpOnly cookies remain first-party on :3000
+    candidates.push("/api");
+  }
+
+  candidates.push(_activeBaseUrl, DEFAULT_API_BASE_URL);
 
   if (DEFAULT_API_BASE_URL.includes("://localhost:")) {
     candidates.push(DEFAULT_API_BASE_URL.replace("://localhost:", "://127.0.0.1:"));
@@ -41,11 +50,7 @@ function getCandidateBaseUrls(): string[] {
     candidates.push(DEFAULT_API_BASE_URL.replace("://127.0.0.1:", "://localhost:"));
   }
 
-  if (typeof window !== "undefined") {
-    candidates.push("/api");
-  }
-
-  return Array.from(new Set(candidates));
+  return Array.from(new Set(candidates.filter(Boolean)));
 }
 
 const SESSION_TOKEN_KEY = "campvion_session_token";
