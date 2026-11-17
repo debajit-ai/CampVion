@@ -231,19 +231,20 @@ html.cv-theme-transition *::after {
     0 8px 20px -4px rgba(0, 0, 0, 0.75);
 }
 
-/* Dark presentation stage used behind the white CampVion emblem in both themes
-   so the white emblem has dramatic contrast in light mode and elevated depth in dark mode. */
+/* Architectural presentation stage used behind the CampVion emblem
+   Luminous, elevated enterprise light aesthetic in light mode; high-contrast deep cybernetic in dark mode. */
 .cv-emblem-stage {
   background: radial-gradient(
-    circle at 50% 38%,
-    #191922 0%,
-    #0C0C10 58%,
-    #060608 100%
+    circle at 50% 30%,
+    #FFFFFF 0%,
+    #F8FAFC 55%,
+    #F1F5F9 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(226, 232, 240, 0.95);
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
-    0 20px 50px -12px rgba(0, 0, 0, 0.45);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9),
+    0 10px 30px -10px rgba(15, 23, 42, 0.08),
+    0 24px 60px -15px rgba(15, 23, 42, 0.06);
 }
 
 .dark .cv-emblem-stage {
@@ -260,8 +261,17 @@ html.cv-theme-transition *::after {
     0 24px 64px -12px rgba(0, 0, 0, 0.9);
 }
 
-/* Hero 3D pedestal wrapping the enlarged central white CampVion emblem */
+/* Hero 3D pedestal wrapping the central white CampVion emblem */
 .cv-hero-emblem-core {
+  background-color: #FFFFFF;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(226, 232, 240, 0.8),
+    0 8px 20px -4px rgba(245, 158, 11, 0.18),
+    0 16px 36px -8px rgba(15, 23, 42, 0.12);
+}
+
+.dark .cv-hero-emblem-core {
   background-color: #FFFFFF;
   border: 2px solid rgba(255, 255, 255, 0.95);
   box-shadow:
@@ -509,3 +519,118 @@ select option {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Luminous Architectural Grid & Glow Utilities */
+.cv-bg-grid {
+  background-image: 
+    linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.cv-bg-dots {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.dark .cv-bg-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.dark .cv-bg-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ============================================================================
+   CampVion Landing Design Tokens (Obsidian + Indigo/Cyan, Light #F6F7FB)
+   Centralized variables for the public landing page & glassmorphism surfaces.
+   ============================================================================ */
+.cv-landing {
+  --land-bg: #05070F;
+  --land-surface: #0B1020;
+  --land-surface-glass: rgba(11, 16, 32, 0.78);
+  --land-surface-soft: rgba(17, 25, 52, 0.72);
+  --land-text: #F5F7FF;
+  --land-muted: #8B95B0;
+  --land-border: rgba(255, 255, 255, 0.10);
+  --land-border-strong: rgba(34, 211, 238, 0.35);
+  --land-indigo: #6366F1;
+  --land-cyan: #22D3EE;
+  --land-emerald: #34D399;
+  --land-amber: #FBBF24;
+  --land-card-shadow: 0 24px 64px -18px rgba(34, 211, 238, 0.14);
+  --land-cta-shadow: 0 10px 32px -6px rgba(99, 102, 241, 0.45);
+  --land-gradient: linear-gradient(135deg, #6366F1 0%, #22D3EE 100%);
+  background-color: var(--land-bg);
+  color: var(--land-text);
+}
+
+.cv-landing[data-land-theme="light"] {
+  --land-bg: #F6F7FB;
+  --land-surface: #FFFFFF;
+  --land-surface-glass: rgba(255, 255, 255, 0.88);
+  --land-surface-soft: rgba(241, 245, 255, 0.86);
+  --land-text: #0F172A;
+  --land-muted: #475569;
+  --land-border: rgba(15, 23, 42, 0.09);
+  --land-border-strong: rgba(99, 102, 241, 0.34);
+  --land-indigo: #4338CA;
+  --land-cyan: #0E7490;
+  --land-emerald: #047857;
+  --land-amber: #B45309;
+  --land-card-shadow: 0 20px 52px -18px rgba(79, 70, 229, 0.14);
+  --land-cta-shadow: 0 10px 30px -6px rgba(79, 70, 229, 0.32);
+  --land-gradient: linear-gradient(135deg, #4338CA 0%, #0E7490 100%);
+}
+
+@keyframes cv-gradient-flow {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.cv-land-gradient-text {
+  background-image: linear-gradient(90deg, #6366F1 0%, #22D3EE 50%, #6366F1 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: cv-gradient-flow 7s ease-in-out infinite;
+}
+
+.cv-landing[data-land-theme="light"] .cv-land-gradient-text {
+  background-image: linear-gradient(90deg, #4F46E5 0%, #0891B2 50%, #4F46E5 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-land-gradient-text {
+    animation: none;
+  }
+}
+
+.cv-land-btn-primary {
+  background-image: var(--land-gradient);
+  color: #FFFFFF;
+  box-shadow: var(--land-cta-shadow);
+}
+
+.cv-land-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 14px 36px -6px rgba(34, 211, 238, 0.42);
+}
+
+.cv-land-glass {
+  background-color: var(--land-surface-glass);
+  border: 1px solid var(--land-border);
+  box-shadow: var(--land-card-shadow);
+  backdrop-filter: blur(20px);
+}
+
+

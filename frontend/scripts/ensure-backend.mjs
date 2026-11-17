@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,17 +36,30 @@ function resolvePythonExecutable() {
   return "python";
 }
 
-async function main() {
-  if (await isBackendHealthy()) {
-    console.log("[CampVion] FastAPI backend is active at http://127.0.0.1:8000/api");
-    return;
+function ensureDemoUsersSeeded(pythonExe) {
+  try {
+    spawnSync(pythonExe, ["-m", "app.db.seed_users"], {
+      cwd: backendDir,
+      stdio: "inherit",
+    });
+  } catch {
+    // Non-fatal
   }
+}
 
+async function main() {
   if (!fs.existsSync(backendDir)) {
     return;
   }
 
   const pythonExe = resolvePythonExecutable();
+  ensureDemoUsersSeeded(pythonExe);
+
+  if (await isBackendHealthy()) {
+    console.log("[CampVion] FastAPI backend is active at http://127.0.0.1:8000/api");
+    return;
+  }
+
   console.log("[CampVion] Starting FastAPI backend on http://127.0.0.1:8000...");
 
   const child = spawn(
@@ -77,4 +90,3 @@ async function main() {
 main().catch(() => {
   process.exit(0);
 });
-
