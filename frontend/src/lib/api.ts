@@ -440,12 +440,14 @@ export const apiClient = {
   // Leave Requests & Institutional Approval Queue API
   async listLeaveRequests(params?: {
     status?: string;
+    request_type?: string;
     q?: string;
     sort?: "oldest" | "newest";
     student_id?: string;
   }): Promise<LeaveListResponse> {
     const sp = new URLSearchParams();
     if (params?.status) sp.set("status", params.status);
+    if (params?.request_type) sp.set("request_type", params.request_type);
     if (params?.q) sp.set("q", params.q);
     if (params?.sort) sp.set("sort", params.sort);
     if (params?.student_id) sp.set("student_id", params.student_id);

@@ -109,7 +109,10 @@ export default function SignupPage() {
     setSubmitting(true);
     try {
       if (displayNameInput.trim()) {
-        setPreferredDisplayName(displayNameInput.trim());
+        setPreferredDisplayName(
+          displayNameInput.trim(),
+          trimmedEmail.toLowerCase()
+        );
       }
       const newUser = await signup({
         full_name: trimmedName,

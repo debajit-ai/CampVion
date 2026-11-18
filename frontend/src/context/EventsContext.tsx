@@ -64,7 +64,6 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     if (item.workflow_run_id) {
       setLiveLeaveByWorkflowId((prev) => ({ ...prev, [item.workflow_run_id!]: item }));
     }
-    setLastEventTick(Date.now());
   }, []);
 
   const dismissToast = useCallback((toastId: string) => {
@@ -332,7 +331,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, user?.id, user?.role, pushToast, refreshNotifications, upsertLiveLeave]);
 
-  // Graceful 10s fallback polling when SSE stream is unavailable
+  // Graceful 5s fallback polling when SSE stream is unavailable
   useEffect(() => {
     if (!isAuthenticated || sseConnected) return;
     const interval = setInterval(() => {
@@ -344,7 +343,8 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
           for (const req of res.items) upsertLiveLeave(req);
         })
         .catch(() => {});
-    }, 10000);
+      setLastEventTick(Date.now());
+    }, 5000);
     return () => clearInterval(interval);
   }, [isAuthenticated, sseConnected, refreshNotifications, upsertLiveLeave]);
 

@@ -231,8 +231,28 @@ export function RequestStatusCard({
           <span className="font-mono text-xs font-bold text-cv-fg">
             {req.leave_code}
           </span>
-          <span className="text-xs text-cv-fg-2 capitalize">
-            &bull; {req.category.replace("_", " ")} Leave
+          <span
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+              req.request_type === "library_room"
+                ? "bg-sky-500/10 border-sky-500/30 text-sky-400"
+                : req.request_type === "hostel_allocation"
+                ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                : req.request_type === "certificate"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink"
+            }`}
+          >
+            {req.request_type_label ||
+              (req.request_type === "library_room"
+                ? "Library Room"
+                : req.request_type === "hostel_allocation"
+                ? "Hostel Allocation"
+                : req.request_type === "certificate"
+                ? "Certificate"
+                : "Leave")}
+          </span>
+          <span className="text-xs text-cv-fg-2 truncate">
+            {req.title || `${req.category.replace("_", " ")} Leave`}
           </span>
         </div>
 
@@ -265,24 +285,29 @@ export function RequestStatusCard({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div className="p-2 rounded-xl bg-cv-surface border border-cv-line">
           <span className="text-[10px] uppercase tracking-wider text-cv-fg-3 block">
-            Dates
+            {req.request_type && req.request_type !== "leave" ? "Schedule / Target" : "Dates"}
           </span>
           <span className="font-medium text-cv-fg flex items-center gap-1 mt-0.5">
             <Calendar className="h-3 w-3 text-cv-accent-ink shrink-0" />
-            <span>
-              {req.start_date === req.end_date
-                ? req.start_date
-                : `${req.start_date} \u2192 ${req.end_date}`}
+            <span className="truncate">
+              {(req.details && typeof req.details.time_slot === "string" && req.details.time_slot) ||
+                (req.details && typeof req.details.requested_block === "string" && req.details.requested_block) ||
+                (req.start_date === req.end_date
+                  ? req.start_date
+                  : `${req.start_date} \u2192 ${req.end_date}`)}
             </span>
           </span>
         </div>
 
         <div className="p-2 rounded-xl bg-cv-surface border border-cv-line">
           <span className="text-[10px] uppercase tracking-wider text-cv-fg-3 block">
-            Duration
+            {req.request_type && req.request_type !== "leave" ? "Detail" : "Duration"}
           </span>
-          <span className="font-medium text-cv-fg mt-0.5 block">
-            {req.days_count} {req.days_count === 1 ? "day" : "days"}
+          <span className="font-medium text-cv-fg mt-0.5 block truncate">
+            {(req.details && typeof req.details.room === "string" && req.details.room) ||
+              (req.details && typeof req.details.certificate_type === "string" && req.details.certificate_type) ||
+              (req.details && typeof req.details.current_room === "string" && req.details.current_room) ||
+              `${req.days_count} ${req.days_count === 1 ? "day" : "days"}`}
           </span>
         </div>
 
@@ -311,7 +336,10 @@ export function RequestStatusCard({
 
       {/* Reason */}
       <div className="text-xs text-cv-fg-2">
-        <span className="font-semibold text-cv-fg">Reason:</span> {req.reason}
+        <span className="font-semibold text-cv-fg">
+          {req.request_type && req.request_type !== "leave" ? "Summary:" : "Reason:"}
+        </span>{" "}
+        {req.reason}
       </div>
 
       {/* Status-specific outcome panel */}
@@ -369,7 +397,7 @@ export function RequestStatusCard({
           {isPending
             ? "You will see an automatic live update here once reviewed."
             : isApproved
-            ? "Leave authorization recorded in university registry."
+            ? "Approval recorded in university registry."
             : isRejected
             ? "Zero leave balance was consumed."
             : "This request was withdrawn before review."}

@@ -205,7 +205,29 @@ async function run() {
     queueJson.items.some((r) => r.id === leave1.id),
     "Admin queue must contain new PENDING_APPROVAL leave"
   );
-  console.log("  PASS 2: Admin approval queue lists pending request");
+  assert.ok(
+    /Dr\.\s*Rajesh\s*Rao/i.test(replyText) && /Awaiting approval/i.test(replyText),
+    "Paused chat reply must mention 'Awaiting approval from Dr. Rajesh Rao (Warden)'"
+  );
+
+  // Also verify lowercase ?status=pending returns 200 with multi-type requests
+  const pendingLowerRes = await fetch(`${apiBase}/requests?status=pending`, {
+    headers: { Cookie: admin.cookie },
+  });
+  assert.equal(pendingLowerRes.status, 200, "GET /api/requests?status=pending must return 200");
+  const pendingLowerJson = await pendingLowerRes.json();
+  assert.ok(
+    pendingLowerJson.items.some((r) => r.id === leave1.id),
+    "GET /api/requests?status=pending must contain Alice's leave"
+  );
+  const seededTypes = new Set(pendingLowerJson.items.map((r) => r.request_type));
+  assert.ok(
+    seededTypes.has("library_room") &&
+      seededTypes.has("hostel_allocation") &&
+      seededTypes.has("certificate"),
+    `Admin queue should contain multi-type seeded requests, got: ${Array.from(seededTypes).join(", ")}`
+  );
+  console.log("  PASS 2: Admin approval queue (?status=pending & multi-type) lists pending requests");
 
   // 3. RBAC / IDOR: Student calling approve must get 403
   const stuApproveRes = await fetch(`${apiBase}/requests/${leave1.id}/approve`, {
@@ -390,8 +412,66 @@ async function run() {
   assert.equal(badAdminRes.status, 403, "Wrong admin invite code must return 403");
   console.log("  PASS 9: Admin signup with wrong invite code blocked cleanly (403)");
 
+  // 10. Admin review-only guard + Student multi-type chat booking (library_room)
+  const admCreateLeaveRes = await fetch(`${apiBase}/requests/leave`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: admin.cookie },
+    body: JSON.stringify({
+      days: 1,
+      start_date: futureIsoDate(90),
+      category: "personal",
+      reason: "Admin must not create student leave",
+    }),
+  });
+  assert.equal(admCreateLeaveRes.status, 403, "Admin POST /api/requests/leave must be blocked (403)");
+
+  const admReadOnlyChat = await fetch(`${apiBase}/conversations/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: admin.cookie },
+    body: JSON.stringify({
+      message: "I want to apply for leave tomorrow",
+    }),
+  });
+  assert.equal(admReadOnlyChat.status, 200);
+  const admChatJson = await admReadOnlyChat.json();
+  assert.equal(admChatJson.latest_reply?.intent_category, "ADMIN_READONLY_GUARD");
+
+  const libChatRes = await fetch(`${apiBase}/conversations/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: student.cookie },
+    body: JSON.stringify({
+      student_id: student.user.student_id,
+      message: "Book a library room tomorrow 15:00 to 17:00 for team study",
+    }),
+  });
+  assert.equal(libChatRes.status, 200);
+  const libChatJson = await libChatRes.json();
+  assert.equal(libChatJson.status, "awaiting_confirmation");
+
+  const libConfirmRes = await fetch(
+    `${apiBase}/conversations/${encodeURIComponent(libChatJson.conversation_id)}/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: student.cookie },
+      body: JSON.stringify({ action: "confirm" }),
+    }
+  );
+  assert.equal(libConfirmRes.status, 200);
+  const libConfirmJson = await libConfirmRes.json();
+  const libReq = libConfirmJson.latest_reply?.metadata?.leave_request;
+  assert.ok(libReq && libReq.request_type === "library_room" && libReq.status === "PENDING_APPROVAL");
+
+  const libApproveRes = await fetch(`${apiBase}/requests/${libReq.id}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: admin.cookie },
+    body: JSON.stringify({ comment: "Library room reserved", version: libReq.version }),
+  });
+  assert.equal(libApproveRes.status, 200);
+  assert.equal((await libApproveRes.json()).request.status, "APPROVED");
+  console.log(`  PASS 10: Admin read-only guard enforced (403); student library booking ${libReq.leave_code} approved`);
+
   await studentSse.close();
-  console.log("[test:flow] ALL 9 END-TO-END FLOW ASSERTIONS PASSED.");
+  console.log("[test:flow] ALL 10 END-TO-END FLOW ASSERTIONS PASSED.");
 }
 
 run().catch((err) => {

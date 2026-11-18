@@ -53,6 +53,7 @@ interface SidebarProps {
   user?: UserProfile | null;
   onLogout?: () => void;
   pendingApprovalsCount?: number;
+  unreadNotificationsCount?: number;
   effectiveMode?: ExperienceMode;
 }
 
@@ -81,6 +82,7 @@ export function Sidebar({
   user,
   onLogout,
   pendingApprovalsCount = 0,
+  unreadNotificationsCount = 0,
   effectiveMode,
 }: SidebarProps) {
   const { resolvedTheme, reducedMotion: contextReducedMotion, experienceMode } = useTheme();
@@ -110,7 +112,7 @@ export function Sidebar({
         },
         {
           id: "chat",
-          label: "Assistant",
+          label: "Ask CampVion",
           icon: <MessageSquare className="h-4 w-4" />,
         },
         {
@@ -154,9 +156,10 @@ export function Sidebar({
         id: "observability",
         label: "Request History",
         icon: <Clock className="h-4 w-4" />,
+        badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined,
       },
     ];
-  }, [activeMode, isAdmin, isFaculty, pendingApprovalsCount]);
+  }, [activeMode, isAdmin, isFaculty, pendingApprovalsCount, unreadNotificationsCount]);
 
   const handleNavKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (e.key === "ArrowDown") {
@@ -251,24 +254,26 @@ export function Sidebar({
         </div>
       )}
 
-      {/* 2. Primary CTA: New Request */}
-      <div className={`shrink-0 ${collapsed ? "p-2.5" : "px-3.5 pt-3.5 pb-2"}`}>
-        <button
-          type="button"
-          onClick={() => {
-            onNewRequest();
-            onCloseMobile?.();
-          }}
-          aria-label="New Request"
-          title="New Request"
-          className={`w-full flex items-center justify-center rounded-xl text-xs font-semibold cv-btn-gradient cursor-pointer group ${
-            collapsed ? "h-10 px-0" : "h-10 px-3.5 space-x-2"
-          }`}
-        >
-          <Plus className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
-          {!collapsed && <span>New Request</span>}
-        </button>
-      </div>
+      {/* 2. Primary CTA: New Request (Students only — Admins only review and decide) */}
+      {!(isAdmin || isFaculty) && (
+        <div className={`shrink-0 ${collapsed ? "p-2.5" : "px-3.5 pt-3.5 pb-2"}`}>
+          <button
+            type="button"
+            onClick={() => {
+              onNewRequest();
+              onCloseMobile?.();
+            }}
+            aria-label="New Request"
+            title="New Request"
+            className={`w-full flex items-center justify-center rounded-xl text-xs font-semibold cv-btn-gradient cursor-pointer group ${
+              collapsed ? "h-10 px-0" : "h-10 px-3.5 space-x-2"
+            }`}
+          >
+            <Plus className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
+            {!collapsed && <span>New Request</span>}
+          </button>
+        </div>
+      )}
 
       {/* 3. Navigation Links (fixed top block, never scrolls off) */}
       <nav

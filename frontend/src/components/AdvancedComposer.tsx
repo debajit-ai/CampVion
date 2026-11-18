@@ -21,7 +21,7 @@ import {
 import { AttendanceRecord, CourseRecord, Student } from "../types/api";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
-import { IS_DEMO_MODE, isAdminRole } from "../lib/authRedirect";
+import { isAdminRole } from "../lib/authRedirect";
 
 interface AdvancedComposerProps {
   students: Student[];
@@ -60,7 +60,7 @@ export function AdvancedComposer({
   const { experienceMode } = useTheme();
   const { user, preferredDisplayName, setPreferredDisplayName } = useAuth();
   const isAdmin = isAdminRole(user?.role);
-  const showDemoSelector = IS_DEMO_MODE && isAdmin;
+  const showDemoSelector = false;
   const [studentPickerOpen, setStudentPickerOpen] = useState<boolean>(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalRef || internalRef;
@@ -461,13 +461,13 @@ export function AdvancedComposer({
               <Sparkles className="h-3.5 w-3.5 text-cv-accent-ink shrink-0" />
               <span>
                 {isAdmin
-                  ? `${user?.authority_title || "Administrator"} Workspace`
+                  ? `${user?.authority_title || "Administrator"} Read-Only Q&A`
                   : "Campus Assistant"}
               </span>
             </div>
           )}
 
-          {/* Right Bar Actions: New Chat & Request Options */}
+          {/* Right Bar Actions: New Chat & Request Options (hide student request tools for Admins) */}
           <div className="flex items-center space-x-2">
             {onNewConversation && (
               <button
@@ -482,17 +482,19 @@ export function AdvancedComposer({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={onOpenTools}
-              className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-cv-surface hover:bg-cv-accent-soft text-cv-fg hover:text-cv-accent-ink border border-cv-line hover:border-cv-accent-line/40 transition cursor-pointer shadow-2xs group"
-              title="Open Request Options, Presets & Campus Services"
-            >
-              <Wrench className="h-3.5 w-3.5 text-cv-accent-ink group-hover:rotate-45 transition-transform" />
-              <span className="font-medium text-[11px] sm:text-xs">
-                {experienceMode === "simple" ? "Campus Services" : "Tools & Presets"}
-              </span>
-            </button>
+            {!isAdmin && (
+              <button
+                type="button"
+                onClick={onOpenTools}
+                className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-cv-surface hover:bg-cv-accent-soft text-cv-fg hover:text-cv-accent-ink border border-cv-line hover:border-cv-accent-line/40 transition cursor-pointer shadow-2xs group"
+                title="Open Request Options, Presets & Campus Services"
+              >
+                <Wrench className="h-3.5 w-3.5 text-cv-accent-ink group-hover:rotate-45 transition-transform" />
+                <span className="font-medium text-[11px] sm:text-xs">
+                  {experienceMode === "simple" ? "Campus Services" : "Tools & Presets"}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -505,7 +507,11 @@ export function AdvancedComposer({
             disabled={isLoading}
             onChange={(e) => onGoalTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask CampVion anything or tell it what you need..."
+            placeholder={
+              isAdmin
+                ? "Ask CampVion about pending approvals, student requests, or campus policies..."
+                : "Ask CampVion anything or tell it what you need..."
+            }
             aria-label="Message CampVion Assistant"
             className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-cv-fg placeholder-cv-fg-3 focus:outline-none resize-none leading-relaxed font-sans disabled:opacity-60"
           />
@@ -536,7 +542,9 @@ export function AdvancedComposer({
           <div className="flex items-center space-x-1.5 truncate">
             <CheckCircle2 className="h-3 w-3 text-cv-accent-ink shrink-0" />
             <span className="truncate">
-              CampVion verifies university policies and requests authorization before submission.
+              {isAdmin
+                ? "Read-only Ask CampVion mode: review and decide student requests in Approval Queue."
+                : "CampVion verifies university policies and requests authorization before submission."}
             </span>
           </div>
 
