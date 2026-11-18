@@ -147,6 +147,30 @@ export interface CampusGateItem {
   is_default_hostel?: boolean;
 }
 
+export interface DiscussionRoomItem {
+  id: number;
+  room_code: string;
+  name: string;
+  floor: string;
+  capacity: number;
+  amenities: string;
+  fits_capacity: boolean;
+  available: boolean;
+  conflict_reason?: string | null;
+}
+
+export interface AvailableRoomsResponse {
+  items: DiscussionRoomItem[];
+  window_valid: boolean;
+  window_error?: string | null;
+  library_hours: {
+    open_hour: number;
+    close_hour: number;
+    max_hours: number;
+    campus_tz: string;
+  };
+}
+
 export interface LeaveSlipVerifyResponse {
   status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
   verification_status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";

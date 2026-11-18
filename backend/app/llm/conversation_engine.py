@@ -1736,6 +1736,30 @@ class ConversationEngine:
             user_text,
             re.IGNORECASE,
         )
+        if is_library and not time_match:
+            parsed_lib = timezone_utils.parse_free_text_leave_window(user_text)
+            ppl_m = re.search(r"\b(\d{1,2})\s*(?:people|persons|students|members)\b", lower)
+            session.status = "awaiting_clarification"
+            session.active_intent = "LIBRARY_ROOM_BOOKING"
+            prefill_room = {
+                "date": parsed_lib.get("from_date") or "",
+                "start_time": parsed_lib.get("from_time") or "",
+                "end_time": parsed_lib.get("to_time") or "",
+                "people": int(ppl_m.group(1)) if ppl_m else 2,
+                "purpose": parsed_lib.get("reason") or "",
+            }
+            return (
+                "Let's reserve a library discussion room. Choose your date, time slot (08:00–20:00 IST, max 2 hours), group size, and room below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "LIBRARY_ROOM_BOOKING",
+                    "guided_card": {
+                        "type": "room_booking",
+                        "prefill": prefill_room,
+                    },
+                    "quick_replies": ["Show available rooms", "Tomorrow 14:00 to 16:00"],
+                },
+            )
         fields_dict: Dict[str, Any] = {
             "service_type": (
                 "Library Room Booking"

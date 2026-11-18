@@ -19,7 +19,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { apiClient, ApiError } from "../lib/api";
-import { CampusGateItem, LeaveQueueStats, LeaveRequestItem } from "../types/api";
+import {
+  CampusGateItem,
+  DiscussionRoomItem,
+  LeaveQueueStats,
+  LeaveRequestItem,
+} from "../types/api";
 import { useEvents } from "../context/EventsContext";
 
 const FALLBACK_GATES: CampusGateItem[] = [
@@ -87,10 +92,12 @@ export function AdminApprovalsDashboard({
   const [drawerLoading, setDrawerLoading] = useState<boolean>(false);
 
   const [gates, setGates] = useState<CampusGateItem[]>(FALLBACK_GATES);
+  const [discussionRooms, setDiscussionRooms] = useState<DiscussionRoomItem[]>([]);
   const [approveModalItem, setApproveModalItem] = useState<LeaveRequestItem | null>(null);
   const [approveComment, setApproveComment] = useState<string>("");
   const [approveExitGate, setApproveExitGate] = useState<string>("");
   const [approveEntryGate, setApproveEntryGate] = useState<string>("");
+  const [approveRoomId, setApproveRoomId] = useState<string>("");
   const [rejectModalItem, setRejectModalItem] = useState<LeaveRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState<string>("");
   const [rejectNote, setRejectNote] = useState<string>("");
@@ -105,6 +112,14 @@ export function AdminApprovalsDashboard({
       })
       .catch(() => {
         // fallback gates remain active
+      });
+    apiClient
+      .listAvailableRooms()
+      .then((res) => {
+        if (active && res.items?.length > 0) setDiscussionRooms(res.items);
+      })
+      .catch(() => {
+        // optional
       });
     return () => {
       active = false;
@@ -125,9 +140,15 @@ export function AdminApprovalsDashboard({
           (isHosteller ? "Gate 2 - Hostel Gate" : "Gate 1 - Main Gate");
         setApproveExitGate(preferred);
         setApproveEntryGate(preferred);
+      } else if ((item.request_type || "").toLowerCase() === "library_room") {
+        const curRoomId = item.details?.room_id;
+        setApproveRoomId(curRoomId ? String(curRoomId) : "");
+        setApproveExitGate("");
+        setApproveEntryGate("");
       } else {
         setApproveExitGate("");
         setApproveEntryGate("");
+        setApproveRoomId("");
       }
       setApproveComment("");
       setApproveModalItem(item);
@@ -245,11 +266,14 @@ export function AdminApprovalsDashboard({
     setItems((prev) => prev.filter((item) => item.id !== target.id || tab !== "PENDING_APPROVAL"));
 
     try {
+      const isLibrary = (target.request_type || "").toLowerCase() === "library_room";
+      const parsedRoomId = isLibrary && approveRoomId ? Number(approveRoomId) : undefined;
       const res = await apiClient.approveLeaveRequest(target.id, {
         comment: approveComment.trim() || undefined,
         version: target.version,
         exit_gate: isLeaveType ? approveExitGate.trim() : undefined,
         entry_gate: isLeaveType ? (approveEntryGate.trim() || approveExitGate.trim()) : undefined,
+        room_id: parsedRoomId,
       });
       upsertLiveLeave(res.request);
       if (drawerItem?.id === target.id) {
@@ -1017,6 +1041,36 @@ export function AdminApprovalsDashboard({
                 </div>
               </div>
             )}
+
+            {(approveModalItem.request_type || "").toLowerCase() === "library_room" &&
+              discussionRooms.length > 0 && (
+                <div className="space-y-1 rounded-xl bg-cv-inset border border-cv-line p-3">
+                  <label className="text-[11px] font-medium text-cv-fg block">
+                    Confirm / Reassign Discussion Room <span className="text-cv-fg-3">(optional)</span>
+                  </label>
+                  <select
+                    value={approveRoomId}
+                    onChange={(e) => setApproveRoomId(e.target.value)}
+                    aria-label="Discussion Room"
+                    className="w-full rounded-lg bg-cv-surface border border-cv-line px-2.5 py-2 text-xs text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                  >
+                    <option value="">
+                      Keep requested room (
+                      {String(
+                        approveModalItem.details?.room_name ||
+                          approveModalItem.details?.room ||
+                          "Requested Room"
+                      )}
+                      )
+                    </option>
+                    {discussionRooms.map((rm) => (
+                      <option key={rm.id} value={String(rm.id)}>
+                        {rm.name} ({rm.floor}, {rm.capacity} seats)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-cv-fg">

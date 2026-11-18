@@ -502,7 +502,7 @@ export function RequestStatusCard({
               ) : (
                 <XCircle className="h-3.5 w-3.5" />
               )}
-              <span>{isApproved ? "Cancel Leave" : "Cancel Request"}</span>
+              <span>{isApproved ? (req.request_type === "leave" ? "Cancel Leave" : "Cancel Booking") : "Cancel Request"}</span>
             </button>
           )}
 
@@ -519,7 +519,11 @@ export function RequestStatusCard({
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
-                <span>Download leave slip (PDF)</span>
+                <span>
+                  {req.request_type === "leave"
+                    ? "Download leave slip (PDF)"
+                    : "Download confirmation (PDF)"}
+                </span>
               </button>
               <button
                 type="button"

@@ -275,6 +275,181 @@ def validate_leave_window_v2(
                 )
 
 
+def validate_library_time_window(from_utc: datetime, to_utc: datetime) -> None:
+    now_utc = datetime.now(timezone.utc)
+    f_utc = timezone_utils.ensure_utc(from_utc)
+    t_utc = timezone_utils.ensure_utc(to_utc)
+    if f_utc is None or t_utc is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide booking date, start time, and end time.",
+        )
+    if f_utc < now_utc - timedelta(minutes=2):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Room booking start time cannot be in the past.",
+        )
+    if t_utc <= f_utc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Booking end time must be after start time.",
+        )
+    if (t_utc - f_utc) > timedelta(hours=2):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Discussion rooms can be reserved for at most 2 hours per session.",
+        )
+    f_c = timezone_utils.to_campus(f_utc)
+    t_c = timezone_utils.to_campus(t_utc)
+    if f_c.date() != t_c.date():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Discussion room booking must start and end on the same calendar day.",
+        )
+    open_hr = int(settings.LIBRARY_OPEN_HOUR or 8)
+    close_hr = int(settings.LIBRARY_CLOSE_HOUR or 20)
+    if f_c.hour < open_hr or t_c.hour > close_hr or (t_c.hour == close_hr and t_c.minute > 0):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Library discussion rooms are open from {open_hr:02d}:00 to {close_hr:02d}:00 IST.",
+        )
+
+
+def find_occupied_library_rooms(
+    db: Session,
+    *,
+    from_utc: datetime,
+    to_utc: datetime,
+    exclude_leave_id: Optional[int] = None,
+) -> Dict[str, str]:
+    f_utc = timezone_utils.ensure_utc(from_utc)
+    t_utc = timezone_utils.ensure_utc(to_utc)
+    occupied: Dict[str, str] = {}
+    rows = (
+        db.query(models.LeaveRequest)
+        .filter(models.LeaveRequest.request_type == "library_room")
+        .all()
+    )
+    for r in rows:
+        if exclude_leave_id is not None and r.id == exclude_leave_id:
+            continue
+        if normalize_leave_status(r.status) not in {STATUS_PENDING_APPROVAL, STATUS_APPROVED}:
+            continue
+        if not r.from_at or not r.to_at:
+            continue
+        r_from = timezone_utils.ensure_utc(r.from_at)
+        r_to = timezone_utils.ensure_utc(r.to_at)
+        if r_from < t_utc and r_to > f_utc:
+            try:
+                det = json.loads(r.details_json) if r.details_json else {}
+            except Exception:
+                det = {}
+            msg = (
+                f"Booked ({r.leave_code}: {timezone_utils.format_campus_time_12h(r_from)} - "
+                f"{timezone_utils.format_campus_time_12h(r_to)})"
+            )
+            if det.get("room_id") is not None:
+                occupied[f"id:{det['room_id']}"] = msg
+            if det.get("room_code"):
+                occupied[f"code:{str(det['room_code']).lower()}"] = msg
+            if det.get("room_name") or det.get("room"):
+                occupied[f"name:{str(det.get('room_name') or det.get('room')).lower()}"] = msg
+    return occupied
+
+
+def validate_library_booking_v2(
+    db: Session,
+    *,
+    student_id: str,
+    from_utc: datetime,
+    to_utc: datetime,
+    room_id: Optional[int] = None,
+    room_name: Optional[str] = None,
+    room_code: Optional[str] = None,
+    people: int = 2,
+    exclude_leave_id: Optional[int] = None,
+) -> models.DiscussionRoom:
+    validate_library_time_window(from_utc, to_utc)
+
+    from app.db.seed_v2 import seed_discussion_rooms
+    if db.query(models.DiscussionRoom).count() == 0:
+        seed_discussion_rooms(db)
+
+    room: Optional[models.DiscussionRoom] = None
+    if room_id is not None:
+        room = db.query(models.DiscussionRoom).filter(models.DiscussionRoom.id == int(room_id)).first()
+    if not room and room_code:
+        room = (
+            db.query(models.DiscussionRoom)
+            .filter(func.lower(models.DiscussionRoom.room_code) == room_code.strip().lower())
+            .first()
+        )
+    if not room and room_name:
+        room = (
+            db.query(models.DiscussionRoom)
+            .filter(func.lower(models.DiscussionRoom.name) == room_name.strip().lower())
+            .first()
+        )
+    if not room or not room.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Selected discussion room was not found or is inactive.",
+        )
+
+    if int(people or 1) > room.capacity:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{room.name} seats up to {room.capacity} people, which is smaller than your group of {people}.",
+        )
+
+    target_day = timezone_utils.to_campus(from_utc).date().isoformat()
+    student_bookings = (
+        db.query(models.LeaveRequest)
+        .filter(
+            models.LeaveRequest.student_id == student_id,
+            models.LeaveRequest.request_type == "library_room",
+        )
+        .all()
+    )
+    for b in student_bookings:
+        if exclude_leave_id is not None and b.id == exclude_leave_id:
+            continue
+        if normalize_leave_status(b.status) not in {STATUS_PENDING_APPROVAL, STATUS_APPROVED}:
+            continue
+        b_day = (
+            timezone_utils.to_campus(b.from_at).date().isoformat()
+            if b.from_at
+            else (b.start_date or "")
+        )
+        if b_day == target_day:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You already have an active library room booking ({b.leave_code}) on {target_day}. "
+                    "Only 1 active discussion room booking per day is allowed."
+                ),
+            )
+
+    occupied = find_occupied_library_rooms(
+        db,
+        from_utc=from_utc,
+        to_utc=to_utc,
+        exclude_leave_id=exclude_leave_id,
+    )
+    conflict = (
+        occupied.get(f"id:{room.id}")
+        or occupied.get(f"code:{room.room_code.lower()}")
+        or occupied.get(f"name:{room.name.lower()}")
+    )
+    if conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{room.name} is already reserved during that time ({conflict}). Please choose another room or time slot.",
+        )
+
+    return room
+
+
 def get_authority_contact(
     db: Session,
     assigned_approver_user_id: Optional[int] = None,
@@ -512,11 +687,12 @@ def serialize_leave_request(db: Session, leave: models.LeaveRequest, include_wor
         residence_label = "Registered Student"
 
     has_slip = bool(
-        req_type == "leave"
-        and from_at_val is not None
-        and to_at_val is not None
-        and status_norm == STATUS_APPROVED
+        status_norm == STATUS_APPROVED
         and getattr(leave, "slip_no", None)
+        and (
+            (req_type == "leave" and from_at_val is not None and to_at_val is not None)
+            or req_type in {"library_room", "hostel_allocation"}
+        )
     )
     now_utc = datetime.now(timezone.utc)
     can_cancel = bool(
@@ -871,6 +1047,8 @@ def approve_leave_request(
     expected_version: Optional[int] = None,
     exit_gate: Optional[str] = None,
     entry_gate: Optional[str] = None,
+    room_id: Optional[int] = None,
+    room_name: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> Tuple[models.LeaveRequest, Dict[str, Any], Optional[Any]]:
     leave = None
@@ -910,6 +1088,49 @@ def approve_leave_request(
         extra_fields["entry_gate"] = chosen_entry
         audit_extra["exit_gate"] = chosen_exit
         audit_extra["entry_gate"] = chosen_entry
+        if getattr(leave, "from_at", None) and getattr(leave, "to_at", None):
+            extra_fields["slip_no"] = generate_unique_slip_no(db)
+            extra_fields["verify_code"] = generate_unique_verify_code(db)
+            audit_extra["slip_no"] = extra_fields["slip_no"]
+    elif req_type_pre == "library_room":
+        try:
+            det_lib = json.loads(leave.details_json) if getattr(leave, "details_json", None) else {}
+            if not isinstance(det_lib, dict):
+                det_lib = {}
+        except Exception:
+            det_lib = {}
+        if room_id is not None or (room_name and room_name.strip()):
+            target_rm = None
+            if room_id is not None:
+                target_rm = db.query(models.DiscussionRoom).filter(models.DiscussionRoom.id == room_id).first()
+            if not target_rm and room_name:
+                target_rm = (
+                    db.query(models.DiscussionRoom)
+                    .filter(func.lower(models.DiscussionRoom.name) == room_name.strip().lower())
+                    .first()
+                )
+            if target_rm and leave.from_at and leave.to_at:
+                occupied = find_occupied_library_rooms(
+                    db,
+                    from_utc=leave.from_at,
+                    to_utc=leave.to_at,
+                    exclude_leave_id=leave.id,
+                )
+                conflict = occupied.get(f"id:{target_rm.id}") or occupied.get(f"name:{target_rm.name.lower()}")
+                if conflict:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Cannot reassign to {target_rm.name}: {conflict}",
+                    )
+                det_lib["room_id"] = target_rm.id
+                det_lib["room_code"] = target_rm.room_code
+                det_lib["room_name"] = target_rm.name
+                det_lib["room"] = target_rm.name
+                det_lib["floor"] = target_rm.floor
+                det_lib["capacity"] = target_rm.capacity
+                extra_fields["details_json"] = json.dumps(det_lib)
+                extra_fields["title"] = f"{target_rm.name} ({det_lib.get('time_slot') or leave.start_date})"
+                audit_extra["room_name"] = target_rm.name
         if getattr(leave, "from_at", None) and getattr(leave, "to_at", None):
             extra_fields["slip_no"] = generate_unique_slip_no(db)
             extra_fields["verify_code"] = generate_unique_verify_code(db)
@@ -1306,6 +1527,9 @@ def create_campus_request_at_gate(
     category: Optional[str] = None,
     start_date_hint: Optional[str] = None,
     days_count: int = 1,
+    from_at: Optional[datetime] = None,
+    to_at: Optional[datetime] = None,
+    college_snapshot: Optional[str] = None,
     reason: str = "",
     details: Optional[Dict[str, Any]] = None,
     actor_user: Optional[models.UserAccount] = None,
@@ -1323,7 +1547,13 @@ def create_campus_request_at_gate(
 
     type_label = get_request_type_label(req_type)
     code = generate_unique_leave_code(db, request_type=req_type)
-    start_date, end_date = compute_date_range(start_date_hint, days_count)
+    from_utc = timezone_utils.ensure_utc(from_at) if from_at else None
+    to_utc = timezone_utils.ensure_utc(to_at) if to_at else None
+    if from_utc and to_utc:
+        start_date = timezone_utils.to_campus(from_utc).date().isoformat()
+        end_date = timezone_utils.to_campus(to_utc).date().isoformat()
+    else:
+        start_date, end_date = compute_date_range(start_date_hint, days_count)
 
     # Snapshot student attendance for reviewer visibility
     elig_tool = CheckLeaveEligibilityTool()
@@ -1342,6 +1572,11 @@ def create_campus_request_at_gate(
     clean_title = (title or "").strip() or f"{type_label} Request"
     clean_reason = (reason or "").strip() or clean_title
     details_payload = details or {}
+    resolved_college = (
+        (college_snapshot or "").strip()
+        or (getattr(student, "college", None) or "").strip()
+        or "Lovely Professional University"
+    )
     now = datetime.now(timezone.utc)
 
     record = models.LeaveRequest(
@@ -1355,6 +1590,9 @@ def create_campus_request_at_gate(
         start_date=start_date,
         end_date=end_date,
         days_count=max(1, int(days_count or 1)),
+        from_at=from_utc,
+        to_at=to_utc,
+        college_snapshot=resolved_college,
         reason=clean_reason,
         doc_required=0,
         status=STATUS_PENDING_APPROVAL,

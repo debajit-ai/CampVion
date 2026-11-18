@@ -50,6 +50,8 @@ class ApproveBody(BaseModel):
     version: Optional[int] = Field(default=None, ge=1)
     exit_gate: Optional[str] = Field(default=None, max_length=120)
     entry_gate: Optional[str] = Field(default=None, max_length=120)
+    room_id: Optional[int] = Field(default=None, ge=1)
+    room_name: Optional[str] = Field(default=None, max_length=120)
 
 
 class RejectBody(BaseModel):
@@ -292,6 +294,9 @@ class CreateCampusRequestBody(BaseModel):
     to_time: Optional[str] = Field(default=None, max_length=32)
     destination: Optional[str] = Field(default=None, max_length=200)
     college: Optional[str] = Field(default=None, max_length=120)
+    room_id: Optional[int] = Field(default=None, ge=1)
+    room_name: Optional[str] = Field(default=None, max_length=120)
+    people: Optional[int] = Field(default=None, ge=1, le=20)
     idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
@@ -343,16 +348,82 @@ def submit_generic_campus_request(
     if not student:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
 
+    det = dict(payload.details or {})
+    from_utc_val = None
+    to_utc_val = None
+    eff_title = payload.title
+
+    if req_type == "library_room":
+        r_id = payload.room_id or det.get("room_id")
+        r_code = det.get("room_code")
+        r_name = payload.room_name or det.get("room_name") or det.get("room")
+        d_date = payload.from_date or payload.start_date or det.get("date")
+        d_start = payload.from_time or det.get("start_time")
+        d_end = payload.to_time or det.get("end_time")
+        has_room_v2 = bool(r_id or r_code or payload.from_at or (d_date and d_start and d_end))
+        if has_room_v2:
+            from_utc_val = timezone_utils.parse_iso_or_parts_to_utc(
+                iso_value=payload.from_at or det.get("from_at"),
+                date_value=d_date,
+                time_value=d_start,
+            )
+            to_utc_val = timezone_utils.parse_iso_or_parts_to_utc(
+                iso_value=payload.to_at or det.get("to_at"),
+                date_value=payload.to_date or d_date,
+                time_value=d_end,
+            )
+            if not from_utc_val or not to_utc_val:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Please select valid date, start time, and end time for the discussion room.",
+                )
+            people_cnt = int(payload.people or det.get("people") or 2)
+            room_obj = leave_service.validate_library_booking_v2(
+                db,
+                student_id=student.student_id,
+                from_utc=from_utc_val,
+                to_utc=to_utc_val,
+                room_id=int(r_id) if r_id is not None else None,
+                room_code=str(r_code) if r_code else None,
+                room_name=str(r_name) if r_name else None,
+                people=people_cnt,
+            )
+            slot_label = (
+                f"{timezone_utils.format_campus_time_12h(from_utc_val)} - "
+                f"{timezone_utils.format_campus_time_12h(to_utc_val)}"
+            )
+            det.update(
+                {
+                    "room_id": room_obj.id,
+                    "room_code": room_obj.room_code,
+                    "room_name": room_obj.name,
+                    "room": room_obj.name,
+                    "floor": room_obj.floor,
+                    "capacity": room_obj.capacity,
+                    "amenities": room_obj.amenities or "",
+                    "people": people_cnt,
+                    "date": timezone_utils.to_campus(from_utc_val).date().isoformat(),
+                    "start_time": timezone_utils.to_campus(from_utc_val).strftime("%H:%M"),
+                    "end_time": timezone_utils.to_campus(to_utc_val).strftime("%H:%M"),
+                    "time_slot": slot_label,
+                    "purpose": payload.reason.strip(),
+                }
+            )
+            eff_title = payload.title or f"{room_obj.name} ({slot_label})"
+
     created = leave_service.create_campus_request_at_gate(
         db,
         student=student,
         request_type=req_type,
-        title=payload.title,
+        title=eff_title,
         category=payload.category or req_type,
-        start_date_hint=payload.start_date,
+        start_date_hint=payload.start_date or det.get("date"),
         days_count=payload.days,
+        from_at=from_utc_val,
+        to_at=to_utc_val,
+        college_snapshot=payload.college or det.get("college"),
         reason=payload.reason.strip(),
-        details=payload.details or {},
+        details=det,
         actor_user=user,
         ip_address=_client_ip(request),
     )
@@ -491,6 +562,8 @@ def approve_leave(
         expected_version=payload.version if payload else None,
         exit_gate=payload.exit_gate if payload else None,
         entry_gate=payload.entry_gate if payload else None,
+        room_id=payload.room_id if payload else None,
+        room_name=payload.room_name if payload else None,
         ip_address=_client_ip(request) if request else None,
     )
     return {

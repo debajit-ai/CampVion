@@ -509,6 +509,53 @@ export const apiClient = {
     return fetchJson<{ items: import("../types/api").CampusGateItem[] }>("/gates");
   },
 
+  async listAvailableRooms(params?: {
+    date?: string;
+    start_time?: string;
+    end_time?: string;
+    people?: number;
+  }): Promise<import("../types/api").AvailableRoomsResponse> {
+    const sp = new URLSearchParams();
+    if (params?.date) sp.set("date", params.date);
+    if (params?.start_time) sp.set("start_time", params.start_time);
+    if (params?.end_time) sp.set("end_time", params.end_time);
+    if (params?.people) sp.set("people", String(params.people));
+    const qs = sp.toString();
+    return fetchJson<import("../types/api").AvailableRoomsResponse>(
+      `/rooms/available${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  async submitCampusRequest(payload: {
+    request_type: "leave" | "library_room" | "hostel_allocation" | "certificate";
+    title?: string;
+    category?: string;
+    start_date?: string;
+    days?: number;
+    reason: string;
+    from_at?: string;
+    to_at?: string;
+    from_date?: string;
+    from_time?: string;
+    to_date?: string;
+    to_time?: string;
+    destination?: string;
+    college?: string;
+    room_id?: number;
+    room_name?: string;
+    people?: number;
+    details?: Record<string, unknown>;
+    idempotency_key?: string;
+  }): Promise<{ request: LeaveRequestItem; workflow?: AgentResult | null }> {
+    return fetchJson<{ request: LeaveRequestItem; workflow?: AgentResult | null }>(
+      "/requests/submit",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
   async verifyLeaveSlip(verifyCode: string): Promise<import("../types/api").LeaveSlipVerifyResponse> {
     return fetchJson<import("../types/api").LeaveSlipVerifyResponse>(
       `/verify/${encodeURIComponent(verifyCode)}`
@@ -517,7 +564,14 @@ export const apiClient = {
 
   async approveLeaveRequest(
     leaveId: number,
-    payload?: { comment?: string; version?: number; exit_gate?: string; entry_gate?: string }
+    payload?: {
+      comment?: string;
+      version?: number;
+      exit_gate?: string;
+      entry_gate?: string;
+      room_id?: number;
+      room_name?: string;
+    }
   ): Promise<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }> {
     return fetchJson<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }>(
       `/requests/${leaveId}/approve`,

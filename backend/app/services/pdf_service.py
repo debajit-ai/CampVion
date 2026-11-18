@@ -251,8 +251,28 @@ def generate_leave_slip_pdf(
         _kv(col2_x, y - 72, "Destination", destination, 9.8)
         reason_y = y - 106
     else:
-        _kv(col1_x, y - 72, "Service Type", str(leave_data.get("request_type_label") or req_type.title()), 9.8)
-        _kv(col2_x, y - 72, "Booking Reference", str(leave_data.get("title") or req_code), 9.8)
+        det_map = leave_data.get("details") if isinstance(leave_data.get("details"), dict) else {}
+        room_or_detail = str(
+            det_map.get("room_name")
+            or det_map.get("room")
+            or det_map.get("allotted_room")
+            or leave_data.get("title")
+            or req_code
+        )
+        floor_or_block = str(
+            det_map.get("floor")
+            or det_map.get("allotted_block")
+            or det_map.get("requested_block")
+            or leave_data.get("request_type_label")
+            or req_type.title()
+        )
+        _kv(col1_x, y - 72, "Venue / Allocation", f"{room_or_detail} ({floor_or_block})", 9.8)
+        extra_meta = (
+            f"Group Size: {det_map['people']} people"
+            if det_map.get("people")
+            else str(leave_data.get("request_type_label") or req_type.title())
+        )
+        _kv(col2_x, y - 72, "Booking Ref / Group", extra_meta, 9.8)
         reason_y = y - 106
 
     c.setFillColor(muted)

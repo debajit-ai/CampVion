@@ -573,4 +573,17 @@ class CampusGate(Base):
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
 
 
+class DiscussionRoom(Base):
+    __tablename__ = "discussion_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, unique=True, nullable=False)
+    floor = Column(String, nullable=False)
+    capacity = Column(Integer, nullable=False)
+    amenities = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+
+
 
