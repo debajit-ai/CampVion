@@ -18,8 +18,10 @@ import {
   Zap,
 } from "lucide-react";
 import { HealthResponse } from "../types/api";
-import { DEFAULT_API_BASE_URL } from "../lib/api";
+import { DEFAULT_API_BASE_URL, apiClient } from "../lib/api";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import { IS_DEMO_MODE, isAdminRole } from "../lib/authRedirect";
 
 const ENTER_STORAGE_KEY = "campvion_enter_to_send";
 const EVENT_ENTER_CHANGE = "campvion_enter_change";
@@ -97,8 +99,43 @@ export function SettingsView({
     experienceMode,
     setExperienceMode,
   } = useTheme();
+  const { user, updateLocalUser } = useAuth();
+  const isAdmin = isAdminRole(user?.role);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
+  const [adminFullName, setAdminFullName] = useState(user?.full_name || "");
+  const [authorityTitle, setAuthorityTitle] = useState(user?.authority_title || "Warden");
+  const [contactEmail, setContactEmail] = useState(user?.contact_email || user?.email || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [office, setOffice] = useState(user?.office || "");
+  const [officeHours, setOfficeHours] = useState(user?.office_hours || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileNotice, setProfileNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  const handleSaveAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    setProfileNotice(null);
+    try {
+      const updated = await apiClient.updateAdminProfile({
+        full_name: adminFullName.trim() || undefined,
+        authority_title: authorityTitle,
+        contact_email: contactEmail.trim() || undefined,
+        phone: phone.trim() || undefined,
+        office: office.trim() || undefined,
+        office_hours: officeHours.trim() || undefined,
+      });
+      updateLocalUser(updated);
+      setProfileNotice({ type: "ok", text: "Authority contact details updated." });
+    } catch (err: unknown) {
+      setProfileNotice({
+        type: "err",
+        text: err instanceof Error ? err.message : "Failed to save profile.",
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const enterToSend = useSyncExternalStore(
     subscribeEnterToSend,
@@ -197,21 +234,21 @@ export function SettingsView({
             >
               <div>
                 {/* Visual Preview Illustration: Light Mode */}
-                <div className="w-full h-28 rounded-lg bg-[#FFFFFF] border border-[#E5E5E5] p-2 flex flex-col justify-between overflow-hidden relative shadow-inner mb-3">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-[#E5E5E5]">
+                <div className="w-full h-28 rounded-lg bg-[#F6F7FB] border border-[#E2E8F0] p-2 flex flex-col justify-between overflow-hidden relative shadow-inner mb-3">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-[#E2E8F0]">
                     <div className="flex items-center space-x-1">
-                      <span className="h-2 w-2 rounded-full bg-[#EFFF00] ring-1 ring-[#8A9300]/40" />
-                      <span className="h-1.5 w-10 rounded bg-[#111111]/30" />
+                      <span className="h-2 w-2 rounded-full bg-[#6366F1]" />
+                      <span className="h-1.5 w-10 rounded bg-[#111827]/30" />
                     </div>
-                    <span className="h-1.5 w-6 rounded bg-[#15803D]/40" />
+                    <span className="h-1.5 w-6 rounded bg-[#10B981]/45" />
                   </div>
                   <div className="space-y-1.5 py-1">
-                    <div className="h-4 w-3/4 rounded bg-[#FFFFFF] border border-[#E5E5E5] shadow-2xs" />
-                    <div className="h-3 w-1/2 rounded bg-[#F5F5F0]" />
+                    <div className="h-4 w-3/4 rounded bg-[#FFFFFF] border border-[#E2E8F0] shadow-2xs" />
+                    <div className="h-3 w-1/2 rounded bg-[#EEF2FF]" />
                   </div>
-                  <div className="h-5 w-full rounded bg-[#FAFAFA] border border-[#E5E5E5] flex items-center justify-between px-1.5">
-                    <span className="h-1.5 w-12 rounded bg-[#666666]/40" />
-                    <span className="h-3 w-8 rounded bg-[#EFFF00]" />
+                  <div className="h-5 w-full rounded bg-[#FFFFFF] border border-[#E2E8F0] flex items-center justify-between px-1.5">
+                    <span className="h-1.5 w-12 rounded bg-[#64748B]/40" />
+                    <span className="h-3 w-8 rounded bg-[#6366F1]" />
                   </div>
                 </div>
 
@@ -228,17 +265,17 @@ export function SettingsView({
                   )}
                 </div>
                 <p className="text-xs text-cv-fg-2 mt-1">
-                  A crisp, bright workspace in pure white with neon-yellow highlights.
+                  Clean high-clarity daylight surface with indigo &amp; cyan accents.
                 </p>
               </div>
 
               {/* Palette tokens preview */}
               <div className="mt-4 pt-3 border-t border-cv-line flex items-center space-x-1.5">
-                <span title="#FFFFFF (Canvas)" className="h-4 w-4 rounded-full bg-[#FFFFFF] border border-[#D4D4D4]" />
-                <span title="#F5F5F0 (Surface)" className="h-4 w-4 rounded-full bg-[#F5F5F0] border border-[#D4D4D4]" />
-                <span title="#EFFF00 (Neon Yellow)" className="h-4 w-4 rounded-full bg-[#EFFF00] border border-[#8A9300]/40" />
-                <span title="#111111 (Ink)" className="h-4 w-4 rounded-full bg-[#111111]" />
-                <span className="text-[10px] text-cv-fg-2 ml-1 font-mono">Pure White</span>
+                <span title="#F6F7FB (Canvas)" className="h-4 w-4 rounded-full bg-[#F6F7FB] border border-[#D4D4D4]" />
+                <span title="#FFFFFF (Surface)" className="h-4 w-4 rounded-full bg-[#FFFFFF] border border-[#D4D4D4]" />
+                <span title="#6366F1 (Indigo Accent)" className="h-4 w-4 rounded-full bg-[#6366F1]" />
+                <span title="#0F172A (Ink)" className="h-4 w-4 rounded-full bg-[#0F172A]" />
+                <span className="text-[10px] text-cv-fg-2 ml-1 font-mono">Daylight</span>
               </div>
             </div>
 
@@ -432,77 +469,191 @@ export function SettingsView({
           </div>
 
           <div className="bg-cv-surface border border-cv-line rounded-xl divide-y divide-cv-line shadow-xs">
-            {/* Experience Mode (Information Presentation) */}
-            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-xs font-semibold text-cv-fg block">
-                  Information Presentation Mode
-                </span>
-                <span className="text-xs text-cv-fg-2 block mt-0.5">
-                  Choose between student-friendly language and advanced developer diagnostics.
-                </span>
+            {/* Experience Mode (Only shown to Admins/Faculty; students always stay on clear mode) */}
+            {isAdmin && (
+              <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-semibold text-cv-fg block">
+                    Workspace View Mode
+                  </span>
+                  <span className="text-xs text-cv-fg-2 block mt-0.5">
+                    Switch between streamlined operations and expanded audit controls.
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setExperienceMode("simple")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                      experienceMode === "simple"
+                        ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
+                        : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
+                    }`}
+                  >
+                    Streamlined
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExperienceMode("advanced")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                      experienceMode === "advanced"
+                        ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
+                        : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
+                    }`}
+                  >
+                    Audit &amp; Tools
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setExperienceMode("simple")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                    experienceMode === "simple"
-                      ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
-                      : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
-                  }`}
-                >
-                  Simple View (Students)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExperienceMode("advanced")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                    experienceMode === "advanced"
-                      ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
-                      : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
-                  }`}
-                >
-                  Advanced View (Developers)
-                </button>
-              </div>
-            </div>
+            )}
 
-            {/* Student Context Preference */}
-            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-xs font-semibold text-cv-fg block">
-                  Default Demo Student Context
-                </span>
-                <span className="text-xs text-cv-fg-2 block mt-0.5">
-                  Pre-selects student profile when launching new natural language requests.
-                </span>
+            {/* Demo Student Selector — ONLY visible when NEXT_PUBLIC_DEMO_MODE=true & Admin */}
+            {IS_DEMO_MODE && isAdmin && (
+              <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-semibold text-cv-fg block">
+                    Demo Student Switcher
+                  </span>
+                  <span className="text-xs text-cv-fg-2 block mt-0.5">
+                    Pre-selects a simulated student profile in Demo Mode.
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onSelectStudentId("S001")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                      selectedStudentId === "S001"
+                        ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
+                        : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
+                    }`}
+                  >
+                    Alice Sharma (S001)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelectStudentId("S002")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                      selectedStudentId === "S002"
+                        ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
+                        : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
+                    }`}
+                  >
+                    Bob Verma (S002)
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onSelectStudentId("S001")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                    selectedStudentId === "S001"
-                      ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
-                      : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
-                  }`}
-                >
-                  Alice Sharma (S001 &bull; 75%)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectStudentId("S002")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                    selectedStudentId === "S002"
-                      ? "bg-cv-accent-soft border-cv-accent-line text-cv-accent-ink font-semibold"
-                      : "bg-cv-inset border-cv-line text-cv-fg-2 hover:bg-cv-raised"
-                  }`}
-                >
-                  Bob Verma (S002 &bull; 50%)
-                </button>
-              </div>
-            </div>
+            )}
+
+            {/* Admin Authority Profile Editor */}
+            {isAdmin && (
+              <form onSubmit={handleSaveAdminProfile} className="p-4 space-y-4">
+                <div>
+                  <span className="text-xs font-semibold text-cv-fg block">
+                    Authority Profile &amp; Contact Information
+                  </span>
+                  <span className="text-xs text-cv-fg-2 block mt-0.5">
+                    Displayed to students inside request details and declined request notices.
+                  </span>
+                </div>
+
+                {profileNotice && (
+                  <div
+                    className={`text-xs px-3 py-2 rounded-lg border ${
+                      profileNotice.type === "ok"
+                        ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                        : "bg-cv-error-soft border-cv-error-line text-cv-error"
+                    }`}
+                  >
+                    {profileNotice.text}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFullName}
+                      onChange={(e) => setAdminFullName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Authority Title
+                    </label>
+                    <select
+                      value={authorityTitle}
+                      onChange={(e) => setAuthorityTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    >
+                      <option value="Warden">Warden</option>
+                      <option value="Dean">Dean</option>
+                      <option value="Registrar">Registrar</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Contact Email
+                    </label>
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Office Location
+                    </label>
+                    <input
+                      type="text"
+                      value={office}
+                      onChange={(e) => setOffice(e.target.value)}
+                      placeholder="e.g., Hostel Block A, Warden Office"
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-cv-fg-2 block mb-1">
+                      Office Hours
+                    </label>
+                    <input
+                      type="text"
+                      value={officeHours}
+                      onChange={(e) => setOfficeHours(e.target.value)}
+                      placeholder="e.g., Mon-Fri 10:00-16:00"
+                      className="w-full px-3 py-2 rounded-lg bg-cv-inset border border-cv-line text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={savingProfile}
+                    className="px-4 py-2 rounded-xl bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent text-xs font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </button>
+                </div>
+              </form>
+            )}
 
             {/* Request Details Visibility */}
             <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -716,37 +867,39 @@ export function SettingsView({
               <div className="p-3 rounded-lg bg-cv-inset border border-cv-line">
                 <div className="flex items-center space-x-2 text-cv-fg font-semibold mb-1">
                   <CheckCircle2 className="h-3.5 w-3.5 text-cv-accent-ink" />
-                  <span>Observability &amp; Traces</span>
+                  <span>Transparent Activity History</span>
                 </div>
                 <p className="text-cv-fg-2">
-                  Monotonic SQLite audit ledger capturing every understanding, planning, execution, and replanning step with full JSON payloads.
+                  Complete decision audit trail recording submission timestamps, policy checks, and reviewer feedback.
                 </p>
               </div>
 
               <div className="p-3 rounded-lg bg-cv-inset border border-cv-line">
                 <div className="flex items-center space-x-2 text-cv-fg font-semibold mb-1">
                   <RefreshCw className="h-3.5 w-3.5 text-cv-accent-ink" />
-                  <span>Backend Connectivity</span>
+                  <span>Live Status Sync</span>
                 </div>
                 <p className="text-cv-fg-2">
-                  FastAPI service active at <span className="font-mono text-[11px] text-cv-fg">{apiBaseUrl}</span>.
+                  Real-time event notifications keep students and university authorities synchronized automatically.
                 </p>
               </div>
             </div>
 
             <div className="pt-3 border-t border-cv-line flex items-center justify-between">
               <span className="text-[11px] text-cv-fg-2">
-                CampVion Operations Console &bull; Production Enterprise SaaS
+                CampVion Campus Portal
               </span>
-              <a
-                href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-cv-accent-soft text-cv-accent-ink hover:bg-cv-accent hover:text-cv-on-accent transition cursor-pointer"
-              >
-                <span>Interactive Swagger API Docs</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+              {isAdmin && (
+                <a
+                  href={`${apiBaseUrl.replace(/\/api$/, "")}/docs`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-cv-accent-soft text-cv-accent-ink hover:bg-cv-accent hover:text-cv-on-accent transition cursor-pointer"
+                >
+                  <span>System API Reference</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
             </div>
           </div>
         </div>

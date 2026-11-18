@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle,
   ArrowRight,
+  BadgeCheck,
   Check,
   CheckCircle2,
   Eye,
@@ -14,6 +15,8 @@ import {
   KeyRound,
   Loader2,
   Mail,
+  Phone,
+  ShieldCheck,
   Sparkles,
   User,
 } from "lucide-react";
@@ -35,8 +38,13 @@ export default function SignupPage() {
     setPreferredDisplayName,
   } = useAuth();
 
+  const [roleChoice, setRoleChoice] = useState<"student" | "administrator">("student");
   const [fullName, setFullName] = useState("");
   const [displayNameInput, setDisplayNameInput] = useState("");
+  const [studentIdInput, setStudentIdInput] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [authorityTitle, setAuthorityTitle] = useState<"Warden" | "Dean" | "Registrar">("Warden");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -89,6 +97,10 @@ export default function SignupPage() {
       setError("Passwords do not match.");
       return;
     }
+    if (roleChoice === "administrator" && !inviteCode.trim()) {
+      setError("Administrator registration requires a valid invite code.");
+      return;
+    }
     if (!acceptTerms) {
       setError("Please accept the Terms of Service and Privacy Policy to continue.");
       return;
@@ -105,6 +117,17 @@ export default function SignupPage() {
         password,
         confirm_password: confirmPassword,
         accept_terms: acceptTerms,
+        role: roleChoice,
+        ...(roleChoice === "student" && studentIdInput.trim()
+          ? { student_id: studentIdInput.trim().toUpperCase() }
+          : {}),
+        ...(roleChoice === "administrator"
+          ? {
+              invite_code: inviteCode.trim(),
+              authority_title: authorityTitle,
+              phone: phone.trim() || undefined,
+            }
+          : {}),
       });
       setSuccessMsg(`Welcome, ${newUser.full_name}. Preparing your campus workspace...`);
       const destination = getWorkspaceRedirectPath(newUser.role);
@@ -194,6 +217,59 @@ export default function SignupPage() {
           </AnimatePresence>
         </div>
 
+        {/* Account Role Selector (Student default | Administrator) */}
+        <div>
+          <span className={labelClass}>Account Type</span>
+          <div
+            role="radiogroup"
+            aria-label="Account role"
+            className={`grid grid-cols-2 p-1 rounded-2xl border ${
+              isDark ? "bg-white/[0.03] border-white/10" : "bg-slate-100 border-slate-200"
+            }`}
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={roleChoice === "student"}
+              onClick={() => {
+                setRoleChoice("student");
+                if (error) setError(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                roleChoice === "student"
+                  ? isDark
+                    ? "bg-[#6366F1] text-white shadow-xs"
+                    : "bg-white text-slate-900 shadow-xs"
+                  : isDark
+                  ? "text-[#8B95B0] hover:text-white"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Student
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={roleChoice === "administrator"}
+              onClick={() => {
+                setRoleChoice("administrator");
+                if (error) setError(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                roleChoice === "administrator"
+                  ? isDark
+                    ? "bg-[#6366F1] text-white shadow-xs"
+                    : "bg-white text-slate-900 shadow-xs"
+                  : isDark
+                  ? "text-[#8B95B0] hover:text-white"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Administrator
+            </button>
+          </div>
+        </div>
+
         {/* Full Name */}
         <div>
           <label htmlFor="signup-name" className={labelClass}>
@@ -212,37 +288,137 @@ export default function SignupPage() {
                 setFullName(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="Alice Sharma"
+              placeholder={roleChoice === "administrator" ? "Dr. Rajesh Rao" : "Alice Sharma"}
               className={`${inputClass} pr-3.5`}
             />
           </div>
         </div>
 
-        {/* Preferred Display Name (kept strictly on sign-up) */}
-        <div>
-          <label htmlFor="signup-display-name" className={labelClass}>
-            What should CampVion call you?{" "}
-            <span
-              className={`text-[10px] font-normal ${
-                isDark ? "text-[#8B95B0]" : "text-slate-400"
-              }`}
-            >
-              (Optional)
-            </span>
-          </label>
-          <div className="relative">
-            <Sparkles className="h-4 w-4 text-[#38BDF8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              id="signup-display-name"
-              name="displayName"
-              type="text"
-              value={displayNameInput}
-              onChange={(e) => setDisplayNameInput(e.target.value)}
-              placeholder="e.g., Alex, Dev, Champ"
-              className={`${inputClass} pr-3.5`}
-            />
-          </div>
-        </div>
+        {roleChoice === "student" ? (
+          <>
+            {/* Student ID (Optional unique university ID) */}
+            <div>
+              <label htmlFor="signup-student-id" className={labelClass}>
+                Student ID{" "}
+                <span
+                  className={`text-[10px] font-normal ${
+                    isDark ? "text-[#8B95B0]" : "text-slate-400"
+                  }`}
+                >
+                  (Optional — auto-assigned if blank)
+                </span>
+              </label>
+              <div className="relative">
+                <BadgeCheck className={iconClass} />
+                <input
+                  id="signup-student-id"
+                  name="student_id"
+                  type="text"
+                  value={studentIdInput}
+                  onChange={(e) => {
+                    setStudentIdInput(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="e.g., S104"
+                  className={`${inputClass} pr-3.5`}
+                />
+              </div>
+            </div>
+
+            {/* Preferred Display Name */}
+            <div>
+              <label htmlFor="signup-display-name" className={labelClass}>
+                What should CampVion call you?{" "}
+                <span
+                  className={`text-[10px] font-normal ${
+                    isDark ? "text-[#8B95B0]" : "text-slate-400"
+                  }`}
+                >
+                  (Optional)
+                </span>
+              </label>
+              <div className="relative">
+                <Sparkles className="h-4 w-4 text-[#38BDF8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="signup-display-name"
+                  name="displayName"
+                  type="text"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  placeholder="e.g., Alex"
+                  className={`${inputClass} pr-3.5`}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Administrator Invite Code */}
+            <div>
+              <label htmlFor="signup-invite-code" className={labelClass}>
+                Administrator Invite Code
+              </label>
+              <div className="relative">
+                <ShieldCheck className={iconClass} />
+                <input
+                  id="signup-invite-code"
+                  name="invite_code"
+                  type="password"
+                  required
+                  value={inviteCode}
+                  onChange={(e) => {
+                    setInviteCode(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="Enter institutional invite code"
+                  className={`${inputClass} pr-3.5`}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="signup-authority-title" className={labelClass}>
+                  Authority Title
+                </label>
+                <select
+                  id="signup-authority-title"
+                  value={authorityTitle}
+                  onChange={(e) =>
+                    setAuthorityTitle(e.target.value as "Warden" | "Dean" | "Registrar")
+                  }
+                  className={`w-full px-3 py-2.5 rounded-2xl border text-xs font-medium transition focus:outline-none focus:ring-4 ${
+                    isDark
+                      ? "bg-white/[0.04] border-white/10 text-[#F5F7FF] focus:bg-[#0B1020] focus:border-[#38BDF8]"
+                      : "bg-slate-50/90 border-slate-200 text-[#0F172A] focus:bg-white focus:border-[#0E7490]"
+                  }`}
+                >
+                  <option value="Warden">Warden</option>
+                  <option value="Dean">Dean</option>
+                  <option value="Registrar">Registrar</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="signup-phone" className={labelClass}>
+                  Office Phone
+                </label>
+                <div className="relative">
+                  <Phone className={iconClass} />
+                  <input
+                    id="signup-phone"
+                    name="phone"
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+91 98765 00000"
+                    className={`${inputClass} pr-3.5`}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* University Email */}
         <div>

@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "../context/ThemeContext";
 import { AuthProvider } from "../context/AuthContext";
+import { EventsProvider } from "../context/EventsContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,7 +87,9 @@ export default function RootLayout({
         </Script>
         <ThemeProvider>
           <AuthProvider>
-            <div className="flex-1 flex flex-col overflow-x-hidden max-w-full">{children}</div>
+            <EventsProvider>
+              <div className="flex-1 flex flex-col overflow-x-hidden max-w-full">{children}</div>
+            </EventsProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

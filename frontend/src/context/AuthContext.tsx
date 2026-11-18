@@ -22,6 +22,7 @@ export interface AuthContextType {
   signup: (payload: SignupPayload) => Promise<UserProfile>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<UserProfile | null>;
+  updateLocalUser: (profile: UserProfile) => void;
 }
 
 const DISPLAY_NAME_STORAGE_KEY = "campvion_user_display_name";
@@ -121,6 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateLocalUser = useCallback((profile: UserProfile) => {
+    setUser(profile);
+  }, []);
+
   const value = useMemo<AuthContextType>(
     () => ({
       user,
@@ -132,8 +137,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signup,
       logout,
       refreshSession,
+      updateLocalUser,
     }),
-    [user, isLoading, preferredDisplayName, setPreferredDisplayName, login, signup, logout, refreshSession]
+    [user, isLoading, preferredDisplayName, setPreferredDisplayName, login, signup, logout, refreshSession, updateLocalUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

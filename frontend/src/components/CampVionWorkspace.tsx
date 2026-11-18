@@ -3,6 +3,9 @@
 import React, { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bell,
+  CheckCheck,
+  CheckCircle2,
   ChevronDown,
   Loader2,
   LogOut,
@@ -13,6 +16,8 @@ import {
   Settings,
   ShieldAlert,
   Sun,
+  X,
+  XCircle,
 } from "lucide-react";
 
 import { BrandLogo } from "./BrandLogo";
@@ -28,6 +33,8 @@ import { ExecutionTrace } from "./ExecutionTrace";
 import { EvaluationSection } from "./EvaluationSection";
 import { ToolRegistryPanel } from "./ToolRegistryPanel";
 import { SettingsView } from "./SettingsView";
+import { AdminApprovalsDashboard } from "./AdminApprovalsDashboard";
+import { RequestHistoryView } from "./RequestHistoryView";
 
 import { apiClient } from "../lib/api";
 import {
@@ -48,8 +55,9 @@ import {
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { ExperienceMode, useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useEvents } from "../context/EventsContext";
 import { useAssistantUi } from "../store/assistantUiStore";
-import { formatRoleLabel, getUserInitials, toTitleCase } from "../utils/language";
+import { formatRelativeTime, formatRoleLabel, getUserInitials, toTitleCase } from "../utils/language";
 
 interface CampVionWorkspaceProps {
   initialSection?: WorkspaceSection;
@@ -92,6 +100,21 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const [tools, setTools] = useState<ToolSchema[]>([]);
 
   // Workspace layout and view states
+  const {
+    notifications,
+    unreadCount,
+    toasts,
+    liveLeaveById,
+    lastEventTick,
+    dismissToast,
+    markNotificationRead,
+    markAllNotificationsRead,
+    sseConnected,
+  } = useEvents();
+  const [notifOpen, setNotifOpen] = useState<boolean>(false);
+  const [focusedLeaveId, setFocusedLeaveId] = useState<number | null>(null);
+  const notifRef = useRef<HTMLDivElement | null>(null);
+
   const [sectionOverride, setSectionOverride] = useState<WorkspaceSection | null>(
     initialSection === "chat" ? null : initialSection
   );
@@ -129,14 +152,32 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const canUseAdvanced = isAdmin || isFaculty;
   const effectiveMode: ExperienceMode = canUseAdvanced ? experienceMode : "simple";
   const activeSection: WorkspaceSection =
-    sectionOverride ?? (isAdmin && initialSection === "chat" ? "unified" : initialSection);
+    sectionOverride ?? (isAdmin && initialSection === "chat" ? "approvals" : initialSection);
   const setActiveSection = useCallback((next: WorkspaceSection) => {
     setSectionOverride(next);
   }, []);
-  const selectedStudentId =
-    customStudentId && customStudentId !== "S001"
-      ? customStudentId
-      : user?.student_id || customStudentId || "S001";
+  const selectedStudentId = isAdmin
+    ? customStudentId || ""
+    : user?.student_id || customStudentId || "S001";
+
+  // Close header notification dropdown when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNotifOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [notifOpen]);
 
   // Close header avatar menu when clicking outside or pressing Escape
   useEffect(() => {
@@ -216,7 +257,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [user, lastEventTick]);
 
   // Load initial backend dependencies, student attendance/courses, and tool schemas
   const loadInitialData = useCallback(async () => {
@@ -518,11 +559,12 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const handleSendMessage = async (overrideText?: string) => {
     const rawText = overrideText !== undefined ? overrideText : goalText;
     const trimmed = rawText.trim();
-    if (!selectedStudentId.trim() || !trimmed || isLoading) return;
+    const targetStudentCtx = selectedStudentId.trim() || (isAdmin ? "S001" : "");
+    if (!targetStudentCtx || !trimmed || isLoading) return;
 
     // Direct fault-injection directives bypass conversation engine to test deterministic DAG self-healing
     if (trimmed.toUpperCase().includes("FAILURE_MODE=")) {
-      await handleLaunchAgent(selectedStudentId, trimmed);
+      await handleLaunchAgent(targetStudentCtx, trimmed);
       return;
     }
 
@@ -540,14 +582,14 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     try {
       const sessionData = await apiClient.sendConversationMessage({
         conversation_id:
-          conversation && conversation.student_id === selectedStudentId
+          conversation && conversation.student_id === targetStudentCtx
             ? conversation.conversation_id
             : undefined,
-        student_id: selectedStudentId,
+        student_id: targetStudentCtx,
         message: trimmed,
         user_display_name:
           preferredDisplayName?.trim() ||
-          (user?.full_name ? user.full_name.trim().split(" ")[0] : "Student"),
+          (user?.full_name ? user.full_name.trim().split(" ")[0] : isAdmin ? "Admin" : "Student"),
       });
 
       setConversation(sessionData);
@@ -747,6 +789,11 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     agentState?.current_status === "WAITING_FOR_HUMAN" &&
     agentState?.human_approval_status === "PENDING";
 
+  const livePendingFromEvents = Object.values(liveLeaveById).filter(
+    (item) => item.status === "PENDING_APPROVAL"
+  ).length;
+  const effectivePendingCount = Math.max(livePendingFromEvents, pendingApprovals.length);
+
   const orderedSessionSummaries = recentRequestIds
     .map((id) => sessionSummaries[id])
     .filter((s): s is WorkflowSessionSummary => Boolean(s));
@@ -824,7 +871,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         onRefreshHealth={loadInitialData}
         user={user}
         onLogout={handleLogout}
-        pendingApprovalsCount={pendingApprovals.length}
+        pendingApprovalsCount={effectivePendingCount}
         effectiveMode={effectiveMode}
       />
 
@@ -862,7 +909,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
               {sectionTitle}
             </h1>
 
-            {activeRequestId && (effectiveMode === "advanced" || activeSection !== "chat") && (
+            {activeRequestId && (effectiveMode === "advanced" && isAdmin) && (
               <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cv-accent-soft border border-cv-accent-soft-line text-cv-accent-ink hidden sm:inline-flex items-center space-x-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-cv-accent" />
                 <span>#{activeRequestId}</span>
@@ -872,7 +919,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
             {pendingApproval && (
               <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-cv-warning-soft border border-cv-warning-line text-cv-warning hidden sm:inline-flex items-center space-x-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-cv-warning-solid animate-pulse" />
-                <span>Waiting for approval</span>
+                <span>Pending approval</span>
               </span>
             )}
 
@@ -991,6 +1038,100 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
               </button>
             )}
 
+            {/* Live Notification Bell & Dropdown */}
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                onClick={() => setNotifOpen((prev) => !prev)}
+                aria-label="Notifications"
+                aria-expanded={notifOpen}
+                title={sseConnected ? "Live Notifications (Connected)" : "Notifications (Syncing)"}
+                className="relative p-2 rounded-xl bg-cv-surface/80 hover:bg-cv-hover border border-cv-line text-cv-fg-2 hover:text-cv-fg transition cursor-pointer"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-cv-accent text-cv-on-accent text-[10px] font-bold flex items-center justify-center shadow-xs">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Notification Center"
+                  className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-cv-surface border border-cv-line-strong shadow-2xl z-50 overflow-hidden"
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-cv-line bg-cv-inset">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cv-fg">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-cv-accent-soft text-cv-accent-ink">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => void markAllNotificationsRead()}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-cv-accent-ink hover:underline cursor-pointer"
+                      >
+                        <CheckCheck className="h-3 w-3" />
+                        <span>Mark all read</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-cv-line">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-cv-fg-3">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.map((n) => {
+                        const isUnread = !n.read_at;
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => {
+                              setNotifOpen(false);
+                              if (isUnread) void markNotificationRead(n.id);
+                              if (n.leave_request_id) {
+                                setFocusedLeaveId(n.leave_request_id);
+                                setActiveSection(isAdmin ? "approvals" : "observability");
+                              }
+                            }}
+                            className={`w-full text-left px-4 py-3 hover:bg-cv-inset/80 transition cursor-pointer flex items-start gap-2.5 ${
+                              isUnread ? "bg-cv-accent-soft/20" : ""
+                            }`}
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${
+                                isUnread ? "bg-cv-accent" : "bg-cv-line-strong"
+                              }`}
+                            />
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-cv-fg truncate">
+                                  {n.title}
+                                </span>
+                                <span className="text-[10px] text-cv-fg-3 shrink-0">
+                                  {formatRelativeTime(n.created_at)}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-cv-fg-2 line-clamp-2">{n.body}</p>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Compact Avatar Menu (Settings + Sign Out) */}
             <div className="relative" ref={avatarMenuRef}>
               <button
@@ -1079,13 +1220,18 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                   tasks={tasks}
                   activeRequestId={activeRequestId}
                   isLoading={isLoading}
-                  hasPreviousRequests={recentRequestIds.length > 0}
+                  hasPreviousRequests={recentRequestIds.length > 0 || Object.keys(liveLeaveById).length > 0}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onSelectPreset={handleSelectPreset}
                   onSendMessage={handleSendMessage}
                   onConfirmAction={handleConfirmAction}
                   onInspectToolInTrace={handleInspectToolInTrace}
+                  onPrefillComposer={(prompt) => {
+                    setGoalText(prompt);
+                    setActiveSection("chat");
+                    setTimeout(() => composerTextareaRef.current?.focus(), 50);
+                  }}
                 />
               </div>
 
@@ -1169,15 +1315,30 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                 </div>
               )}
 
-              {/* VIEW: Execution & Observability (Request History / Decision Traces) */}
+              {/* VIEW: Execution & Observability (Request History for Students & Admins) */}
               {activeSection === "observability" && (
-                <section ref={traceSectionRef} className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
-                  <ExecutionTrace
-                    traces={traces}
-                    requestId={activeRequestId}
-                    searchQuery={traceSearchQuery}
-                    onSearchQueryChange={setTraceSearchQuery}
+                <section ref={traceSectionRef} className="w-full space-y-6">
+                  <RequestHistoryView
+                    selectedLeaveId={focusedLeaveId}
+                    onClearSelectedLeave={() => setFocusedLeaveId(null)}
+                    isAdmin={isAdmin}
+                    onPrefillNewRequest={(prompt) => {
+                      setGoalText(prompt);
+                      setActiveSection("chat");
+                      setTimeout(() => composerTextareaRef.current?.focus(), 60);
+                    }}
                   />
+
+                  {isAdmin && effectiveMode === "advanced" && traces.length > 0 && (
+                    <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full">
+                      <ExecutionTrace
+                        traces={traces}
+                        requestId={activeRequestId}
+                        searchQuery={traceSearchQuery}
+                        onSearchQueryChange={setTraceSearchQuery}
+                      />
+                    </div>
+                  )}
                 </section>
               )}
 
@@ -1214,8 +1375,18 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                 </section>
               )}
 
-              {/* VIEW: Operations Overview & Admin Approval Queue */}
-              {(activeSection === "unified" || activeSection === "approvals") && (
+              {/* VIEW: Dedicated Admin Approval Queue (/app/approvals & Approvals tab) */}
+              {activeSection === "approvals" && (
+                <section className="w-full">
+                  <AdminApprovalsDashboard
+                    focusLeaveId={focusedLeaveId}
+                    onClearFocusLeave={() => setFocusedLeaveId(null)}
+                  />
+                </section>
+              )}
+
+              {/* VIEW: Operations Overview */}
+              {activeSection === "unified" && (
                 <section className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
                   <OverviewDashboard
                     state={agentState}
@@ -1249,14 +1420,12 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                     />
                   )}
 
-                  {activeSection === "unified" && (
-                    <WorkflowStatus
-                      state={agentState}
-                      result={agentResult}
-                      tasks={tasks}
-                      onInspectToolInTrace={handleInspectToolInTrace}
-                    />
-                  )}
+                  <WorkflowStatus
+                    state={agentState}
+                    result={agentResult}
+                    tasks={tasks}
+                    onInspectToolInTrace={handleInspectToolInTrace}
+                  />
                 </section>
               )}
 
@@ -1288,6 +1457,62 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         onInspectTool={handleInspectToolInTrace}
         pendingApproval={pendingApproval}
       />
+
+      {/* 4. Real-Time Notification Toasts (Top Right) */}
+      {toasts.length > 0 && (
+        <div
+          aria-live="polite"
+          className="fixed top-20 right-4 sm:right-6 z-50 flex flex-col gap-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)]"
+        >
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`rounded-2xl border p-3.5 shadow-2xl backdrop-blur-xl bg-cv-surface/95 flex items-start gap-3 transition-all ${
+                toast.tone === "approved"
+                  ? "border-cv-success-line"
+                  : toast.tone === "rejected"
+                  ? "border-cv-error-line"
+                  : "border-cv-warning-line"
+              }`}
+            >
+              {toast.tone === "approved" ? (
+                <CheckCircle2 className="h-4 w-4 text-cv-success shrink-0 mt-0.5" />
+              ) : toast.tone === "rejected" ? (
+                <XCircle className="h-4 w-4 text-cv-error shrink-0 mt-0.5" />
+              ) : (
+                <ShieldAlert className="h-4 w-4 text-cv-warning shrink-0 mt-0.5" />
+              )}
+
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="text-xs font-semibold text-cv-fg">{toast.title}</div>
+                <p className="text-[11px] text-cv-fg-2 line-clamp-2">{toast.body}</p>
+                {toast.leaveRequestId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dismissToast(toast.id);
+                      setFocusedLeaveId(toast.leaveRequestId!);
+                      setActiveSection(isAdmin ? "approvals" : "observability");
+                    }}
+                    className="text-[11px] font-semibold text-cv-accent-ink hover:underline cursor-pointer"
+                  >
+                    View details &rarr;
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => dismissToast(toast.id)}
+                aria-label="Dismiss notification"
+                className="p-1 rounded-lg text-cv-fg-3 hover:text-cv-fg cursor-pointer shrink-0"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

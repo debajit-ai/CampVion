@@ -7,9 +7,128 @@ export type WorkflowStatus =
   | "REPLANNING"
   | "WAITING_FOR_HUMAN"
   | "COMPLETED"
-  | "FAILED";
+  | "FAILED"
+  | "ENDED_REJECTED"
+  | "CANCELLED";
 
-export type HumanApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+export type HumanApprovalStatus =
+  | "NONE"
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED";
+
+export type LeaveRequestStatus =
+  | "DRAFT"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED";
+
+export interface AuthorityContact {
+  user_id?: number | null;
+  name: string;
+  title: string;
+  email: string;
+  phone?: string | null;
+  office?: string | null;
+  office_hours?: string | null;
+}
+
+export interface LeavePolicyResult {
+  eligible?: boolean;
+  status?: string;
+  reason?: string;
+  attendance_percentage?: number;
+  required_threshold?: number;
+  policy_applied?: string;
+  policy_provenance?: string;
+  assigned_approver?: string;
+  approver_role?: string;
+  requires_documentation?: boolean;
+  checked_at?: string;
+}
+
+export interface LeaveTraceEvent {
+  id: number;
+  step_number: number;
+  event_type: string;
+  component: string;
+  action: string;
+  status: string;
+  error_message?: string | null;
+  timestamp?: string | null;
+}
+
+export interface LeaveRequestItem {
+  id: number;
+  leave_code: string;
+  workflow_run_id?: number | null;
+  student_id: string;
+  student_name: string;
+  student_email?: string | null;
+  student_program?: string | null;
+  student_semester?: number | null;
+  student_department?: string | null;
+  category: string;
+  start_date: string;
+  end_date: string;
+  days_count: number;
+  reason: string;
+  doc_required?: boolean;
+  status: LeaveRequestStatus;
+  attendance_snapshot?: number | null;
+  policy_result?: LeavePolicyResult;
+  routed_to_role: string;
+  assigned_approver: string;
+  approver_role: string;
+  authority_contact?: AuthorityContact;
+  decided_by?: number | null;
+  decided_by_name?: string | null;
+  decision_comment?: string | null;
+  rejection_reason?: string | null;
+  submitted_at?: string | null;
+  decided_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  version: number;
+  workflow?: {
+    request_id: number;
+    current_status: WorkflowStatus;
+    human_approval_status: HumanApprovalStatus;
+    completed_tasks: string[];
+    pending_tasks: string[];
+    failed_tasks: string[];
+    plan: Task[];
+  } | null;
+  traces?: LeaveTraceEvent[];
+}
+
+export interface LeaveQueueStats {
+  pending_count: number;
+  approved_today_count: number;
+  rejected_today_count: number;
+  avg_response_minutes: number;
+  approval_rate_pct: number;
+}
+
+export interface LeaveListResponse {
+  items: LeaveRequestItem[];
+  total: number;
+  stats: LeaveQueueStats;
+}
+
+export interface NotificationItem {
+  id: number;
+  user_id?: number;
+  leave_request_id?: number | null;
+  event_type: string;
+  title: string;
+  body: string;
+  request?: LeaveRequestItem | null;
+  read_at?: string | null;
+  created_at?: string | null;
+}
 
 export type WorkspaceSection =
   | "chat"
@@ -155,9 +274,23 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   student_id?: string | null;
+  authority_title?: string | null;
+  phone?: string | null;
+  office?: string | null;
+  office_hours?: string | null;
+  contact_email?: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at?: string | null;
+}
+
+export interface AdminProfileUpdatePayload {
+  full_name?: string;
+  authority_title?: string;
+  phone?: string;
+  office?: string;
+  office_hours?: string;
+  contact_email?: string;
 }
 
 export interface AuthSessionResponse {
@@ -174,6 +307,11 @@ export interface SignupPayload {
   password: string;
   confirm_password: string;
   accept_terms: boolean;
+  role?: "student" | "administrator";
+  student_id?: string;
+  invite_code?: string;
+  authority_title?: string;
+  phone?: string;
 }
 
 export interface LoginPayload {
@@ -269,9 +407,12 @@ export interface ConversationMessageMetadata {
   missing_slots?: string[];
   workflow_executed?: boolean;
   request_id?: number;
+  leave_request?: LeaveRequestItem | null;
   workflow_result?: AgentResult;
   workflow_state?: AgentState;
   ambiguous_confirmation_blocked?: boolean;
+  duplicate_blocked?: boolean;
+  existing_leave_code?: string;
   request_canceled?: boolean;
 }
 
@@ -369,11 +510,15 @@ export interface BenchmarkReportResponse {
 
 export interface PendingApprovalItem {
   request_id: number;
+  leave_id?: number | null;
+  leave_code?: string | null;
   student_id: string;
   student_name: string;
   student_email?: string | null;
   goal: string;
   days?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
   category?: string | null;
   reason?: string | null;
   attendance_percentage?: number | null;
@@ -381,6 +526,7 @@ export interface PendingApprovalItem {
   current_status: WorkflowStatus;
   human_approval_status: HumanApprovalStatus;
   pending_task_description?: string | null;
+  version?: number | null;
   created_at?: string | null;
 }
 
