@@ -184,6 +184,16 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         if (req) {
           upsertLiveLeave(req);
         }
+        if (
+          rawType === "request.created" ||
+          rawType === "request.updated" ||
+          rawType === "notification.created"
+        ) {
+          setLastEventTick(Date.now());
+          if (rawType === "request.created" || rawType === "request.updated") {
+            void refreshNotifications();
+          }
+        }
 
         if (rawType === "notification.created" && payload.notification) {
           const n = payload.notification;

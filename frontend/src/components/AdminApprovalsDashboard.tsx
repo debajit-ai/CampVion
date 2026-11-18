@@ -69,7 +69,12 @@ export function AdminApprovalsDashboard({
     approval_rate_pct: 0,
   });
   const [loading, setLoading] = useState<boolean>(true);
-  const [banner, setBanner] = useState<{ type: "info" | "error" | "success"; text: string } | null>(null);
+  const [banner, setBanner] = useState<{
+    type: "info" | "error" | "success";
+    text: string;
+    details?: string;
+  } | null>(null);
+  const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
 
   const [drawerItem, setDrawerItem] = useState<LeaveRequestItem | null>(null);
   const [drawerLoading, setDrawerLoading] = useState<boolean>(false);
@@ -88,29 +93,49 @@ export function AdminApprovalsDashboard({
   }, []);
 
   const fetchQueue = useCallback(async () => {
-    try {
-      const effectiveSort = tab === "PENDING_APPROVAL" ? sortOrder : "newest";
-      const res = await apiClient.listLeaveRequests({
+    const effectiveSort = tab === "PENDING_APPROVAL" ? sortOrder : "newest";
+    const [listRes, statsRes] = await Promise.allSettled([
+      apiClient.listLeaveRequests({
         status: tab,
         request_type: typeFilter === "ALL" ? undefined : typeFilter,
         q: search.trim() || undefined,
         sort: effectiveSort,
-      });
-      setItems(res.items);
-      setStats(res.stats);
+      }),
+      apiClient.getLeaveRequestStats(),
+    ]);
+
+    if (statsRes.status === "fulfilled") {
+      setStats(statsRes.value);
+    } else if (listRes.status === "fulfilled" && listRes.value?.stats) {
+      setStats(listRes.value.stats);
+    } else {
+      console.error("[AdminApprovalsDashboard] Failed to load queue stats:", statsRes.reason);
+    }
+
+    if (listRes.status === "fulfilled") {
+      setItems(listRes.value.items);
+      if (statsRes.status !== "fulfilled" && listRes.value?.stats) {
+        setStats(listRes.value.stats);
+      }
       setBanner((prev) => (prev?.type === "error" ? null : prev));
-      for (const req of res.items) {
+      setShowErrorDetails(false);
+      for (const req of listRes.value.items) {
         upsertLiveLeave(req);
       }
-    } catch (err: unknown) {
+    } else {
+      const err = listRes.reason;
       console.error("[AdminApprovalsDashboard] Failed to load approval queue:", err);
+      const errStatus = err instanceof ApiError ? err.status : 0;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const reqId = err instanceof ApiError && err.requestId ? ` (request_id=${err.requestId})` : "";
       setBanner({
         type: "error",
         text: "Unable to load approval queue right now. Please retry.",
+        details: `HTTP ${errStatus}: ${errMsg}${reqId}`,
       });
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   }, [tab, typeFilter, sortOrder, search, upsertLiveLeave]);
 
   useEffect(() => {
@@ -311,7 +336,7 @@ export function AdminApprovalsDashboard({
       {/* Feedback Banner */}
       {banner && (
         <div
-          className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-xs ${
+          className={`flex flex-col gap-2 px-4 py-3 rounded-xl border text-xs ${
             banner.type === "error"
               ? "bg-cv-error-soft border-cv-error-line text-cv-error"
               : banner.type === "success"
@@ -319,29 +344,49 @@ export function AdminApprovalsDashboard({
               : "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink"
           }`}
         >
-          <span>{banner.text}</span>
-          <div className="flex items-center gap-2 shrink-0">
-            {banner.type === "error" && (
+          <div className="flex items-center justify-between gap-3">
+            <span>{banner.text}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {banner.type === "error" && banner.details && (
+                <button
+                  type="button"
+                  onClick={() => setShowErrorDetails((v) => !v)}
+                  className="px-2 py-1 rounded-lg bg-cv-surface/70 border border-cv-error-line/60 text-[11px] font-medium text-cv-fg-2 hover:text-cv-fg cursor-pointer"
+                >
+                  {showErrorDetails ? "Hide details" : "Details"}
+                </button>
+              )}
+              {banner.type === "error" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBanner(null);
+                    setShowErrorDetails(false);
+                    setLoading(true);
+                    void fetchQueue();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-cv-surface border border-cv-error-line text-[11px] font-semibold text-cv-fg hover:bg-cv-raised cursor-pointer"
+                >
+                  Retry
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setBanner(null);
-                  setLoading(true);
-                  void fetchQueue();
+                  setShowErrorDetails(false);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-cv-surface border border-cv-error-line text-[11px] font-semibold text-cv-fg hover:bg-cv-raised cursor-pointer"
+                className="opacity-70 hover:opacity-100 cursor-pointer"
               >
-                Retry
+                <X className="h-3.5 w-3.5" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setBanner(null)}
-              className="opacity-70 hover:opacity-100 cursor-pointer"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            </div>
           </div>
+          {banner.type === "error" && showErrorDetails && banner.details && (
+            <div className="px-2.5 py-1.5 rounded-lg bg-cv-surface/80 border border-cv-error-line/50 font-mono text-[11px] text-cv-fg-2 break-all">
+              {banner.details}
+            </div>
+          )}
         </div>
       )}
 

@@ -8,6 +8,7 @@ import {
   ForgotPasswordResponse,
   HealthResponse,
   LeaveListResponse,
+  LeaveQueueStats,
   LeaveRequestItem,
   LoginPayload,
   NotificationItem,
@@ -119,12 +120,14 @@ function readCsrfCookie(): string | null {
 export class ApiError extends Error {
   status: number;
   data?: unknown;
+  requestId?: string;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(message: string, status: number, data?: unknown, requestId?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.data = data;
+    this.requestId = requestId;
   }
 }
 
@@ -168,6 +171,9 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
       _activeBaseUrl = base;
 
       if (!res.ok) {
+        if (res.status === 401 && normalizedEndpoint !== "/auth/login") {
+          setSessionTokens(null, null);
+        }
         let errorBody: unknown;
         try {
           errorBody = await res.json();
@@ -175,11 +181,15 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
           errorBody = await res.text();
         }
 
+        let requestId: string | undefined = res.headers.get("x-request-id") || undefined;
         let message = `API request failed: ${res.status} ${res.statusText}`;
         if (typeof errorBody === "object" && errorBody !== null && "detail" in errorBody) {
           const detail = (errorBody as { detail: unknown }).detail;
           if (typeof detail === "object" && detail !== null && "message" in detail) {
             message = String((detail as { message: unknown }).message);
+            if ("request_id" in detail && (detail as { request_id?: unknown }).request_id) {
+              requestId = String((detail as { request_id?: unknown }).request_id);
+            }
           } else if (Array.isArray(detail) && detail.length > 0) {
             const first = detail[0] as { msg?: string };
             message = first?.msg || "Validation error in submitted fields.";
@@ -187,7 +197,7 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
             message = String(detail);
           }
         }
-        throw new ApiError(message, res.status, errorBody);
+        throw new ApiError(message, res.status, errorBody, requestId);
       }
 
       return (await res.json()) as T;
@@ -453,6 +463,10 @@ export const apiClient = {
     if (params?.student_id) sp.set("student_id", params.student_id);
     const qs = sp.toString();
     return fetchJson<LeaveListResponse>(`/requests${qs ? `?${qs}` : ""}`);
+  },
+
+  async getLeaveRequestStats(): Promise<LeaveQueueStats> {
+    return fetchJson<LeaveQueueStats>("/requests/stats");
   },
 
   async getLeaveRequestDetail(leaveId: number): Promise<LeaveRequestItem> {
