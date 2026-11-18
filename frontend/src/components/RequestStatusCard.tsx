@@ -435,6 +435,14 @@ export function RequestStatusCard({
                   {req.entry_gate && <span>&bull; Entry: {req.entry_gate}</span>}
                 </span>
               )}
+              {req.request_type === "hostel_allocation" &&
+                typeof req.details?.allotted_block === "string" &&
+                typeof req.details?.allotted_room === "string" && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cv-inset border border-cv-line text-[11px] font-semibold text-cv-fg">
+                    Allotted Room: {req.details.allotted_block} &bull; Room{" "}
+                    {req.details.allotted_room}
+                  </span>
+                )}
             </div>
           )}
 

@@ -159,6 +159,26 @@ export interface DiscussionRoomItem {
   conflict_reason?: string | null;
 }
 
+export interface HostelBlockRoomItem {
+  id: number;
+  room_code: string;
+  block: string;
+  hostel_name: string;
+  room_number: string;
+  sharing_type: string;
+  ac_type: string;
+  capacity: number;
+  occupied: number;
+  free_beds: number;
+  available: boolean;
+  gender: string;
+}
+
+export interface HostelRoomsResponse {
+  items: HostelBlockRoomItem[];
+  blocks: string[];
+}
+
 export interface AvailableRoomsResponse {
   items: DiscussionRoomItem[];
   window_valid: boolean;
@@ -380,6 +400,8 @@ export interface UserProfile {
   role: UserRole;
   student_id?: string | null;
   college?: string | null;
+  hostel_block?: string | null;
+  hostel_room?: string | null;
   authority_title?: string | null;
   phone?: string | null;
   office?: string | null;
@@ -417,6 +439,7 @@ export interface SignupPayload {
   role?: "student" | "administrator";
   student_id?: string;
   college?: string;
+  display_name?: string;
   invite_code?: string;
   authority_title?: string;
   phone?: string;

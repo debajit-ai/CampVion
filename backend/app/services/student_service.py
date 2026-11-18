@@ -139,6 +139,7 @@ def ensure_student_for_user(
         residence_type="hostel",
         hostel_block="BH-1",
         room_number="302",
+        hostel_room="302",
         college=(college or "Lovely Professional University")[:120],
     )
     db.add(new_student)

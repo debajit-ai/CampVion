@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { Download, ExternalLink, Loader2, Printer, ShieldCheck, X } from "lucide-react";
 import type { LeaveRequestItem } from "../types/api";
+import { safeParseResponse } from "../lib/api";
 
 interface LeaveSlipPreviewProps {
   request: LeaveRequestItem;
@@ -13,19 +14,14 @@ interface LeaveSlipPreviewProps {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export async function downloadLeaveSlipPdf(req: LeaveRequestItem): Promise<string | null> {
-  const res = await fetch(`${API_BASE}/requests/${req.id}/slip.pdf`, {
+  const slipUrl = `${API_BASE}/requests/${req.id}/slip.pdf`;
+  const res = await fetch(slipUrl, {
     method: "GET",
     credentials: "include",
   });
   if (!res.ok) {
-    let detail = "Unable to download slip.";
-    try {
-      const json = await res.json();
-      if (json?.detail) detail = String(json.detail);
-    } catch {
-      // ignore non-json error
-    }
-    return detail;
+    const parsed = await safeParseResponse(res, slipUrl);
+    return parsed.errorMessage || "Unable to download slip.";
   }
   const blob = await res.blob();
   const url = window.URL.createObjectURL(blob);

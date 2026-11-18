@@ -52,6 +52,8 @@ class ApproveBody(BaseModel):
     entry_gate: Optional[str] = Field(default=None, max_length=120)
     room_id: Optional[int] = Field(default=None, ge=1)
     room_name: Optional[str] = Field(default=None, max_length=120)
+    hostel_block: Optional[str] = Field(default=None, max_length=60)
+    hostel_room: Optional[str] = Field(default=None, max_length=40)
 
 
 class RejectBody(BaseModel):
@@ -296,7 +298,13 @@ class CreateCampusRequestBody(BaseModel):
     college: Optional[str] = Field(default=None, max_length=120)
     room_id: Optional[int] = Field(default=None, ge=1)
     room_name: Optional[str] = Field(default=None, max_length=120)
+    hostel_block: Optional[str] = Field(default=None, max_length=60)
+    hostel_room: Optional[str] = Field(default=None, max_length=40)
     people: Optional[int] = Field(default=None, ge=1, le=20)
+    sub_type: Optional[str] = Field(default=None, max_length=40)
+    preferred_block: Optional[str] = Field(default=None, max_length=60)
+    sharing_type: Optional[str] = Field(default=None, max_length=32)
+    ac_type: Optional[str] = Field(default=None, max_length=20)
     idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
@@ -410,6 +418,36 @@ def submit_generic_campus_request(
                 }
             )
             eff_title = payload.title or f"{room_obj.name} ({slot_label})"
+
+    elif req_type == "hostel_allocation":
+        hst_sub = (payload.sub_type or det.get("sub_type") or "").strip().lower()
+        pref_blk = (payload.preferred_block or det.get("preferred_block") or det.get("requested_block") or "").strip()
+        if hst_sub in {"room_change", "room_booking"} or pref_blk or payload.sharing_type:
+            resolved_sub = hst_sub if hst_sub in {"room_change", "room_booking"} else "room_booking"
+            leave_service.validate_hostel_request_v2(
+                db,
+                student=student,
+                sub_type=resolved_sub,
+                reason=payload.reason,
+            )
+            cur_blk = getattr(student, "hostel_block", None) or "Unassigned"
+            cur_rm = getattr(student, "hostel_room", None) or getattr(student, "room_number", None) or "Unassigned"
+            det.update(
+                {
+                    "sub_type": resolved_sub,
+                    "current_block": det.get("current_block") or cur_blk,
+                    "current_room": det.get("current_room") or cur_rm,
+                    "preferred_block": pref_blk or "Any Available Block",
+                    "requested_block": pref_blk or "Any Available Block",
+                    "sharing_type": (payload.sharing_type or det.get("sharing_type") or "double").lower(),
+                    "ac_type": payload.ac_type or det.get("ac_type") or "AC",
+                }
+            )
+            eff_title = payload.title or (
+                "Hostel Room Change Request"
+                if resolved_sub == "room_change"
+                else "Hostel Room Booking Request"
+            )
 
     created = leave_service.create_campus_request_at_gate(
         db,
@@ -564,6 +602,8 @@ def approve_leave(
         entry_gate=payload.entry_gate if payload else None,
         room_id=payload.room_id if payload else None,
         room_name=payload.room_name if payload else None,
+        hostel_block=payload.hostel_block if payload else None,
+        hostel_room=payload.hostel_room if payload else None,
         ip_address=_client_ip(request) if request else None,
     )
     return {

@@ -1760,6 +1760,42 @@ class ConversationEngine:
                     "quick_replies": ["Show available rooms", "Tomorrow 14:00 to 16:00"],
                 },
             )
+        if is_hostel and req_type == "room_change":
+            prof = student_ctx.get("profile") or {}
+            session.status = "awaiting_clarification"
+            session.active_intent = "HOSTEL_SERVICE"
+            return (
+                "Let's submit your hostel room change request. Confirm your current room and preferences below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "HOSTEL_SERVICE",
+                    "guided_card": {
+                        "type": "hostel_change",
+                        "prefill": {
+                            "current_block": prof.get("hostel_block") or "BH-1",
+                            "current_room": prof.get("hostel_room") or prof.get("room_number") or "302",
+                        },
+                    },
+                    "quick_replies": ["Show hostel room availability", "Check my hostel status"],
+                },
+            )
+        if is_hostel and req_type != "night_out_pass" and any(
+            kw in lower for kw in ("book", "booking", "allot", "allotment", "new room", "apply for hostel")
+        ):
+            session.status = "awaiting_clarification"
+            session.active_intent = "HOSTEL_SERVICE"
+            return (
+                "Let's apply for a hostel room booking. Choose your preferred block, sharing type, and move-in date below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "HOSTEL_SERVICE",
+                    "guided_card": {
+                        "type": "hostel_booking",
+                        "prefill": {},
+                    },
+                    "quick_replies": ["Check my hostel status"],
+                },
+            )
         fields_dict: Dict[str, Any] = {
             "service_type": (
                 "Library Room Booking"

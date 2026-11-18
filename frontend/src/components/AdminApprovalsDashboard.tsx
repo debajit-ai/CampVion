@@ -22,6 +22,7 @@ import { apiClient, ApiError } from "../lib/api";
 import {
   CampusGateItem,
   DiscussionRoomItem,
+  HostelBlockRoomItem,
   LeaveQueueStats,
   LeaveRequestItem,
 } from "../types/api";
@@ -93,11 +94,13 @@ export function AdminApprovalsDashboard({
 
   const [gates, setGates] = useState<CampusGateItem[]>(FALLBACK_GATES);
   const [discussionRooms, setDiscussionRooms] = useState<DiscussionRoomItem[]>([]);
+  const [hostelRooms, setHostelRooms] = useState<HostelBlockRoomItem[]>([]);
   const [approveModalItem, setApproveModalItem] = useState<LeaveRequestItem | null>(null);
   const [approveComment, setApproveComment] = useState<string>("");
   const [approveExitGate, setApproveExitGate] = useState<string>("");
   const [approveEntryGate, setApproveEntryGate] = useState<string>("");
   const [approveRoomId, setApproveRoomId] = useState<string>("");
+  const [approveHostelRoomCode, setApproveHostelRoomCode] = useState<string>("");
   const [rejectModalItem, setRejectModalItem] = useState<LeaveRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState<string>("");
   const [rejectNote, setRejectNote] = useState<string>("");
@@ -117,6 +120,14 @@ export function AdminApprovalsDashboard({
       .listAvailableRooms()
       .then((res) => {
         if (active && res.items?.length > 0) setDiscussionRooms(res.items);
+      })
+      .catch(() => {
+        // optional
+      });
+    apiClient
+      .listHostelRooms({ available_only: true })
+      .then((res) => {
+        if (active && res.items) setHostelRooms(res.items);
       })
       .catch(() => {
         // optional
@@ -145,15 +156,34 @@ export function AdminApprovalsDashboard({
         setApproveRoomId(curRoomId ? String(curRoomId) : "");
         setApproveExitGate("");
         setApproveEntryGate("");
+        setApproveHostelRoomCode("");
+      } else if ((item.request_type || "").toLowerCase() === "hostel_allocation") {
+        const prefBlk = String(
+          item.details?.preferred_block || item.details?.requested_block || ""
+        );
+        const matchRoom =
+          hostelRooms.find((r) => r.block === prefBlk && r.free_beds > 0) ||
+          hostelRooms.find((r) => r.free_beds > 0);
+        setApproveHostelRoomCode(matchRoom ? matchRoom.room_code : "");
+        setApproveExitGate("");
+        setApproveEntryGate("");
+        setApproveRoomId("");
+        apiClient
+          .listHostelRooms({ available_only: true })
+          .then((res) => {
+            if (res.items) setHostelRooms(res.items);
+          })
+          .catch(() => {});
       } else {
         setApproveExitGate("");
         setApproveEntryGate("");
         setApproveRoomId("");
+        setApproveHostelRoomCode("");
       }
       setApproveComment("");
       setApproveModalItem(item);
     },
-    [gates]
+    [gates, hostelRooms]
   );
 
   const [, setClockTick] = useState(0);
@@ -267,13 +297,19 @@ export function AdminApprovalsDashboard({
 
     try {
       const isLibrary = (target.request_type || "").toLowerCase() === "library_room";
+      const isHostel = (target.request_type || "").toLowerCase() === "hostel_allocation";
       const parsedRoomId = isLibrary && approveRoomId ? Number(approveRoomId) : undefined;
+      const chosenHostel = isHostel
+        ? hostelRooms.find((r) => r.room_code === approveHostelRoomCode)
+        : undefined;
       const res = await apiClient.approveLeaveRequest(target.id, {
         comment: approveComment.trim() || undefined,
         version: target.version,
         exit_gate: isLeaveType ? approveExitGate.trim() : undefined,
         entry_gate: isLeaveType ? (approveEntryGate.trim() || approveExitGate.trim()) : undefined,
         room_id: parsedRoomId,
+        hostel_block: chosenHostel?.block,
+        hostel_room: chosenHostel?.room_number,
       });
       upsertLiveLeave(res.request);
       if (drawerItem?.id === target.id) {

@@ -1,6 +1,8 @@
+import logging
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.api.router import api_router
@@ -70,6 +72,18 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_PREFIX)
+
+_main_logger = logging.getLogger("campvion.main")
+
+
+@app.exception_handler(Exception)
+async def global_json_exception_handler(request: Request, exc: Exception):
+    _main_logger.exception("Unhandled server exception on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected server error occurred. Please try again."},
+    )
+
 
 @app.get("/")
 def root():

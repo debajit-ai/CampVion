@@ -450,6 +450,42 @@ def validate_library_booking_v2(
     return room
 
 
+def validate_hostel_request_v2(
+    db: Session,
+    *,
+    student: models.Student,
+    sub_type: str,
+    reason: str,
+) -> None:
+    if sub_type not in {"room_change", "room_booking"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Hostel request sub_type must be 'room_change' or 'room_booking'.",
+        )
+    if len((reason or "").strip()) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide a brief reason or preference note (at least 3 characters).",
+        )
+    pending_existing = (
+        db.query(models.LeaveRequest)
+        .filter(
+            models.LeaveRequest.student_id == student.student_id,
+            models.LeaveRequest.request_type == "hostel_allocation",
+        )
+        .all()
+    )
+    for row in pending_existing:
+        if normalize_leave_status(row.status) == STATUS_PENDING_APPROVAL:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You already have a pending hostel allocation request ({row.leave_code}). "
+                    "Please wait for Warden review or withdraw it before submitting another."
+                ),
+            )
+
+
 def get_authority_contact(
     db: Session,
     assigned_approver_user_id: Optional[int] = None,
@@ -1049,6 +1085,8 @@ def approve_leave_request(
     entry_gate: Optional[str] = None,
     room_id: Optional[int] = None,
     room_name: Optional[str] = None,
+    hostel_block: Optional[str] = None,
+    hostel_room: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> Tuple[models.LeaveRequest, Dict[str, Any], Optional[Any]]:
     leave = None
@@ -1092,6 +1130,117 @@ def approve_leave_request(
             extra_fields["slip_no"] = generate_unique_slip_no(db)
             extra_fields["verify_code"] = generate_unique_verify_code(db)
             audit_extra["slip_no"] = extra_fields["slip_no"]
+    elif req_type_pre == "hostel_allocation":
+        try:
+            det_hst = json.loads(leave.details_json) if getattr(leave, "details_json", None) else {}
+            if not isinstance(det_hst, dict):
+                det_hst = {}
+        except Exception:
+            det_hst = {}
+
+        from app.db.seed_v2 import seed_hostel_block_rooms
+        if db.query(models.HostelBlockRoom).count() == 0:
+            seed_hostel_block_rooms(db)
+
+        chosen_block = (hostel_block or "").strip()
+        chosen_room = (hostel_room or "").strip()
+        sub_type_val = str(det_hst.get("sub_type") or "").lower()
+
+        if sub_type_val in {"room_change", "room_booking"} and (not chosen_block or not chosen_room):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please assign an available hostel block and room number to approve.",
+            )
+
+        if chosen_block and chosen_room:
+            room_row = (
+                db.query(models.HostelBlockRoom)
+                .filter(
+                    models.HostelBlockRoom.block == chosen_block,
+                    models.HostelBlockRoom.room_number == chosen_room,
+                )
+                .first()
+            )
+            if room_row:
+                same_room_already = (
+                    student_obj is not None
+                    and (student_obj.hostel_block or "") == chosen_block
+                    and ((getattr(student_obj, "hostel_room", None) or student_obj.room_number or "") == chosen_room)
+                )
+                if not same_room_already and room_row.occupied >= room_row.capacity:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Room {chosen_block} - {chosen_room} is already at full capacity.",
+                    )
+                if not same_room_already:
+                    old_block = getattr(student_obj, "hostel_block", None) if student_obj else None
+                    old_room_num = (
+                        (getattr(student_obj, "hostel_room", None) or getattr(student_obj, "room_number", None))
+                        if student_obj
+                        else None
+                    )
+                    if old_block and old_room_num:
+                        old_room_row = (
+                            db.query(models.HostelBlockRoom)
+                            .filter(
+                                models.HostelBlockRoom.block == old_block,
+                                models.HostelBlockRoom.room_number == old_room_num,
+                            )
+                            .first()
+                        )
+                        if old_room_row and old_room_row.occupied > 0:
+                            old_room_row.occupied = max(0, int(old_room_row.occupied) - 1)
+                    room_row.occupied = min(int(room_row.capacity), int(room_row.occupied) + 1)
+
+            if student_obj:
+                student_obj.hostel_block = chosen_block
+                student_obj.room_number = chosen_room
+                student_obj.hostel_room = chosen_room
+                student_obj.residence_type = "hostel"
+
+                alloc = (
+                    db.query(models.HostelAllocation)
+                    .filter(models.HostelAllocation.student_id == student_obj.student_id)
+                    .first()
+                )
+                warden_name = actor_user.full_name if actor_user else "Dr. Rajesh Rao"
+                warden_contact = (getattr(actor_user, "phone", None) if actor_user else None) or "+91 98765 01042"
+                hostel_label = room_row.hostel_name if room_row else chosen_block
+                if alloc:
+                    alloc.hostel_name = hostel_label
+                    alloc.block = chosen_block
+                    alloc.room_number = chosen_room
+                    alloc.warden_name = warden_name
+                    alloc.warden_contact = warden_contact
+                    alloc.status = "allocated"
+                else:
+                    db.add(
+                        models.HostelAllocation(
+                            student_id=student_obj.student_id,
+                            hostel_name=hostel_label,
+                            block=chosen_block,
+                            room_number=chosen_room,
+                            bed_number="B1",
+                            warden_name=warden_name,
+                            warden_contact=warden_contact,
+                            check_in_date=timezone_utils.campus_now().date().isoformat(),
+                            status="allocated",
+                        )
+                    )
+
+            det_hst["allotted_block"] = chosen_block
+            det_hst["allotted_room"] = chosen_room
+            det_hst["hostel_name"] = room_row.hostel_name if room_row else chosen_block
+            if room_row:
+                det_hst["sharing_type"] = room_row.sharing_type
+                det_hst["ac_type"] = room_row.ac_type
+            extra_fields["details_json"] = json.dumps(det_hst)
+            extra_fields["title"] = f"Hostel Allotment: {chosen_block} • Room {chosen_room}"
+            extra_fields["slip_no"] = generate_unique_slip_no(db)
+            extra_fields["verify_code"] = generate_unique_verify_code(db)
+            audit_extra["allotted_block"] = chosen_block
+            audit_extra["allotted_room"] = chosen_room
+            audit_extra["slip_no"] = extra_fields["slip_no"]
     elif req_type_pre == "library_room":
         try:
             det_lib = json.loads(leave.details_json) if getattr(leave, "details_json", None) else {}
@@ -1134,6 +1283,117 @@ def approve_leave_request(
         if getattr(leave, "from_at", None) and getattr(leave, "to_at", None):
             extra_fields["slip_no"] = generate_unique_slip_no(db)
             extra_fields["verify_code"] = generate_unique_verify_code(db)
+            audit_extra["slip_no"] = extra_fields["slip_no"]
+    elif req_type_pre == "hostel_allocation":
+        try:
+            det_hst = json.loads(leave.details_json) if getattr(leave, "details_json", None) else {}
+            if not isinstance(det_hst, dict):
+                det_hst = {}
+        except Exception:
+            det_hst = {}
+
+        from app.db.seed_v2 import seed_hostel_block_rooms
+        if db.query(models.HostelBlockRoom).count() == 0:
+            seed_hostel_block_rooms(db)
+
+        chosen_block = (hostel_block or "").strip()
+        chosen_room = (hostel_room or "").strip()
+        sub_type_val = str(det_hst.get("sub_type") or "").lower()
+
+        if sub_type_val in {"room_change", "room_booking"} and (not chosen_block or not chosen_room):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please assign an available hostel block and room number to approve.",
+            )
+
+        if chosen_block and chosen_room:
+            room_row = (
+                db.query(models.HostelBlockRoom)
+                .filter(
+                    models.HostelBlockRoom.block == chosen_block,
+                    models.HostelBlockRoom.room_number == chosen_room,
+                )
+                .first()
+            )
+            if room_row:
+                same_room_already = (
+                    student_obj is not None
+                    and (student_obj.hostel_block or "") == chosen_block
+                    and ((getattr(student_obj, "hostel_room", None) or student_obj.room_number or "") == chosen_room)
+                )
+                if not same_room_already and room_row.occupied >= room_row.capacity:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Room {chosen_block} - {chosen_room} is already at full capacity.",
+                    )
+                if not same_room_already:
+                    old_block = getattr(student_obj, "hostel_block", None) if student_obj else None
+                    old_room_num = (
+                        (getattr(student_obj, "hostel_room", None) or getattr(student_obj, "room_number", None))
+                        if student_obj
+                        else None
+                    )
+                    if old_block and old_room_num:
+                        old_room_row = (
+                            db.query(models.HostelBlockRoom)
+                            .filter(
+                                models.HostelBlockRoom.block == old_block,
+                                models.HostelBlockRoom.room_number == old_room_num,
+                            )
+                            .first()
+                        )
+                        if old_room_row and old_room_row.occupied > 0:
+                            old_room_row.occupied = max(0, int(old_room_row.occupied) - 1)
+                    room_row.occupied = min(int(room_row.capacity), int(room_row.occupied) + 1)
+
+            if student_obj:
+                student_obj.hostel_block = chosen_block
+                student_obj.room_number = chosen_room
+                student_obj.hostel_room = chosen_room
+                student_obj.residence_type = "hostel"
+
+                alloc = (
+                    db.query(models.HostelAllocation)
+                    .filter(models.HostelAllocation.student_id == student_obj.student_id)
+                    .first()
+                )
+                warden_name = actor_user.full_name if actor_user else "Dr. Rajesh Rao"
+                warden_contact = (getattr(actor_user, "phone", None) if actor_user else None) or "+91 98765 01042"
+                hostel_label = room_row.hostel_name if room_row else chosen_block
+                if alloc:
+                    alloc.hostel_name = hostel_label
+                    alloc.block = chosen_block
+                    alloc.room_number = chosen_room
+                    alloc.warden_name = warden_name
+                    alloc.warden_contact = warden_contact
+                    alloc.status = "allocated"
+                else:
+                    db.add(
+                        models.HostelAllocation(
+                            student_id=student_obj.student_id,
+                            hostel_name=hostel_label,
+                            block=chosen_block,
+                            room_number=chosen_room,
+                            bed_number="B1",
+                            warden_name=warden_name,
+                            warden_contact=warden_contact,
+                            check_in_date=timezone_utils.campus_now().date().isoformat(),
+                            status="allocated",
+                        )
+                    )
+
+            det_hst["allotted_block"] = chosen_block
+            det_hst["allotted_room"] = chosen_room
+            det_hst["hostel_name"] = room_row.hostel_name if room_row else chosen_block
+            if room_row:
+                det_hst["sharing_type"] = room_row.sharing_type
+                det_hst["ac_type"] = room_row.ac_type
+            extra_fields["details_json"] = json.dumps(det_hst)
+            extra_fields["title"] = f"Hostel Allotment: {chosen_block} • Room {chosen_room}"
+            extra_fields["slip_no"] = generate_unique_slip_no(db)
+            extra_fields["verify_code"] = generate_unique_verify_code(db)
+            audit_extra["allotted_block"] = chosen_block
+            audit_extra["allotted_room"] = chosen_room
             audit_extra["slip_no"] = extra_fields["slip_no"]
 
     clean_comment = (comment or "").strip() or "Approved at Institutional Governance Gate."

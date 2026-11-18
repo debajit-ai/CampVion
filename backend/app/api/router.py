@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from app.api.routes import auth, colleges, gates, health, rooms, students, tools, traces, agent, policies, evaluation, llm, conversations, requests, events, verify
+from app.api.routes import auth, colleges, gates, health, hostel, rooms, students, tools, traces, agent, policies, evaluation, llm, conversations, requests, events, verify
 from app.core.security import require_authenticated_user
 
 protected = [Depends(require_authenticated_user)]
@@ -10,6 +10,7 @@ api_router.include_router(colleges.router, prefix="/colleges", tags=["colleges"]
 api_router.include_router(verify.router, prefix="/verify", tags=["verify"])
 api_router.include_router(gates.router, prefix="/gates", tags=["gates"], dependencies=protected)
 api_router.include_router(rooms.router, prefix="/rooms", tags=["rooms"], dependencies=protected)
+api_router.include_router(hostel.router, prefix="/hostel", tags=["hostel"], dependencies=protected)
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(students.router, prefix="/students", tags=["students"], dependencies=protected)
 api_router.include_router(tools.router, prefix="/tools", tags=["tools"], dependencies=protected)

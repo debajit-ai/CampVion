@@ -120,6 +120,36 @@ def seed_discussion_rooms(db: Session) -> None:
         db.commit()
 
 
+DEFAULT_HOSTEL_BLOCK_ROOMS = [
+    {"room_code": "BH1-101", "block": "BH-1", "hostel_name": "Boys Hostel 1 (Aravali)", "room_number": "101", "sharing_type": "single", "ac_type": "AC", "capacity": 1, "occupied": 0, "gender": "boys"},
+    {"room_code": "BH1-102", "block": "BH-1", "hostel_name": "Boys Hostel 1 (Aravali)", "room_number": "102", "sharing_type": "double", "ac_type": "AC", "capacity": 2, "occupied": 1, "gender": "boys"},
+    {"room_code": "BH1-204", "block": "BH-1", "hostel_name": "Boys Hostel 1 (Aravali)", "room_number": "204", "sharing_type": "double", "ac_type": "Non-AC", "capacity": 2, "occupied": 1, "gender": "boys"},
+    {"room_code": "BH1-302", "block": "BH-1", "hostel_name": "Boys Hostel 1 (Aravali)", "room_number": "302", "sharing_type": "double", "ac_type": "AC", "capacity": 2, "occupied": 1, "gender": "boys"},
+    {"room_code": "BH2-105", "block": "BH-2", "hostel_name": "Boys Hostel 2 (Vindhya)", "room_number": "105", "sharing_type": "triple", "ac_type": "Non-AC", "capacity": 3, "occupied": 1, "gender": "boys"},
+    {"room_code": "BH2-210", "block": "BH-2", "hostel_name": "Boys Hostel 2 (Vindhya)", "room_number": "210", "sharing_type": "double", "ac_type": "AC", "capacity": 2, "occupied": 0, "gender": "boys"},
+    {"room_code": "BH2-312", "block": "BH-2", "hostel_name": "Boys Hostel 2 (Vindhya)", "room_number": "312", "sharing_type": "single", "ac_type": "Non-AC", "capacity": 1, "occupied": 0, "gender": "boys"},
+    {"room_code": "GH1-104", "block": "GH-1", "hostel_name": "Girls Hostel 1 (Nilgiri)", "room_number": "104", "sharing_type": "single", "ac_type": "AC", "capacity": 1, "occupied": 0, "gender": "girls"},
+    {"room_code": "GH1-201", "block": "GH-1", "hostel_name": "Girls Hostel 1 (Nilgiri)", "room_number": "201", "sharing_type": "double", "ac_type": "AC", "capacity": 2, "occupied": 1, "gender": "girls"},
+    {"room_code": "GH1-208", "block": "GH-1", "hostel_name": "Girls Hostel 1 (Nilgiri)", "room_number": "208", "sharing_type": "double", "ac_type": "Non-AC", "capacity": 2, "occupied": 1, "gender": "girls"},
+    {"room_code": "GH1-305", "block": "GH-1", "hostel_name": "Girls Hostel 1 (Nilgiri)", "room_number": "305", "sharing_type": "triple", "ac_type": "AC", "capacity": 3, "occupied": 1, "gender": "girls"},
+    {"room_code": "GH2-110", "block": "GH-2", "hostel_name": "Girls Hostel 2 (Shivalik)", "room_number": "110", "sharing_type": "double", "ac_type": "AC", "capacity": 2, "occupied": 0, "gender": "girls"},
+    {"room_code": "GH2-215", "block": "GH-2", "hostel_name": "Girls Hostel 2 (Shivalik)", "room_number": "215", "sharing_type": "single", "ac_type": "AC", "capacity": 1, "occupied": 0, "gender": "girls"},
+    {"room_code": "GH2-402", "block": "GH-2", "hostel_name": "Girls Hostel 2 (Shivalik)", "room_number": "402", "sharing_type": "double", "ac_type": "Non-AC", "capacity": 2, "occupied": 1, "gender": "girls"},
+]
+
+
+def seed_hostel_block_rooms(db: Session) -> None:
+    existing_codes = {r.room_code for r in db.query(models.HostelBlockRoom).all()}
+    added = False
+    for entry in DEFAULT_HOSTEL_BLOCK_ROOMS:
+        if entry["room_code"] not in existing_codes:
+            db.add(models.HostelBlockRoom(**entry, is_active=1))
+            added = True
+    if added:
+        db.commit()
+
+
 def seed_services_v2_defaults(db: Session) -> None:
     seed_campus_gates(db)
     seed_discussion_rooms(db)
+    seed_hostel_block_rooms(db)

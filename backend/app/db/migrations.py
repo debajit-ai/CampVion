@@ -31,6 +31,7 @@ def run_migrations():
                 ("residence_type", "VARCHAR DEFAULT 'hostel'"),
                 ("hostel_block", "VARCHAR DEFAULT 'BH-1'"),
                 ("room_number", "VARCHAR DEFAULT '302'"),
+                ("hostel_room", "VARCHAR DEFAULT NULL"),
                 ("college", "VARCHAR DEFAULT 'Lovely Professional University'"),
             ]
             for col_name, col_def in new_student_columns:
@@ -39,6 +40,7 @@ def run_migrations():
                     conn.execute(text(f"ALTER TABLE students ADD COLUMN {col_name} {col_def};"))
                     conn.commit()
             conn.execute(text("UPDATE students SET college = 'Lovely Professional University' WHERE college IS NULL OR TRIM(college) = '';"))
+            conn.execute(text("UPDATE students SET hostel_room = COALESCE(hostel_room, room_number) WHERE hostel_room IS NULL;"))
             conn.commit()
 
         # 2. Check and migrate `courses` table if it already exists

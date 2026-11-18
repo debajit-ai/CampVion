@@ -30,6 +30,7 @@ class Student(Base):
     residence_type = Column(String, nullable=True, default="hostel") # hostel, day_scholar
     hostel_block = Column(String, nullable=True, default="BH-1")
     room_number = Column(String, nullable=True, default="302")
+    hostel_room = Column(String, nullable=True)
     college = Column(String, nullable=True, default="Lovely Professional University")
 
     # Relationships
@@ -582,6 +583,23 @@ class DiscussionRoom(Base):
     floor = Column(String, nullable=False)
     capacity = Column(Integer, nullable=False)
     amenities = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+
+
+class HostelBlockRoom(Base):
+    __tablename__ = "hostel_block_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String, unique=True, nullable=False, index=True)
+    block = Column(String, nullable=False, index=True)
+    hostel_name = Column(String, nullable=False)
+    room_number = Column(String, nullable=False)
+    sharing_type = Column(String, nullable=False, default="double")  # single, double, triple
+    ac_type = Column(String, nullable=False, default="AC")  # AC, Non-AC
+    capacity = Column(Integer, nullable=False, default=2)
+    occupied = Column(Integer, nullable=False, default=0)
+    gender = Column(String, nullable=False, default="any")
     is_active = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
 

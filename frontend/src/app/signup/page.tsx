@@ -23,6 +23,7 @@ import {
 import { AuthShell } from "../../components/AuthShell";
 import { CollegeSelect } from "../../components/CollegeSelect";
 import { useAuth } from "../../context/AuthContext";
+import { toUserFacingError } from "../../lib/api";
 import { getWorkspaceRedirectPath } from "../../lib/authRedirect";
 import { useAuthTheme } from "../../lib/landingThemeStore";
 
@@ -131,7 +132,10 @@ export default function SignupPage() {
           ? { student_id: studentIdInput.trim().toUpperCase() }
           : {}),
         ...(roleChoice === "student"
-          ? { college: collegeInput.trim() }
+          ? {
+              college: collegeInput.trim(),
+              display_name: displayNameInput.trim() || undefined,
+            }
           : {}),
         ...(roleChoice === "administrator"
           ? {
@@ -147,11 +151,9 @@ export default function SignupPage() {
         router.push(destination);
       }, 320);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Unable to create account. Please verify your details.";
-      setError(msg);
+      setError(
+        toUserFacingError(err, "Unable to create account. Please verify your details.")
+      );
       setSubmitting(false);
     }
   };

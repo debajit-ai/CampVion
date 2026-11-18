@@ -33,6 +33,7 @@ import {
   Task,
 } from "../types/api";
 import { HumanApprovalCenter } from "./HumanApprovalCenter";
+import { HostelServiceCard, HostelServicePrefill } from "./HostelServiceCard";
 import { LeaveDetailsCard, LeaveGuidedPrefill } from "./LeaveDetailsCard";
 import { RoomBookingCard, RoomBookingPrefill } from "./RoomBookingCard";
 import { RequestStatusCard } from "./RequestStatusCard";
@@ -861,6 +862,20 @@ export function ConversationFeed({
               {isLastMessage && meta.guided_card?.type === "room_booking" && !isAdmin && (
                 <RoomBookingCard
                   prefill={(meta.guided_card.prefill || {}) as RoomBookingPrefill}
+                  onSubmitted={(req) => upsertLiveLeave(req)}
+                />
+              )}
+              {isLastMessage && meta.guided_card?.type === "hostel_change" && !isAdmin && (
+                <HostelServiceCard
+                  mode="room_change"
+                  prefill={(meta.guided_card.prefill || {}) as HostelServicePrefill}
+                  onSubmitted={(req) => upsertLiveLeave(req)}
+                />
+              )}
+              {isLastMessage && meta.guided_card?.type === "hostel_booking" && !isAdmin && (
+                <HostelServiceCard
+                  mode="room_booking"
+                  prefill={(meta.guided_card.prefill || {}) as HostelServicePrefill}
                   onSubmitted={(req) => upsertLiveLeave(req)}
                 />
               )}

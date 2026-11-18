@@ -57,6 +57,8 @@ def _client_ip(request: Request) -> str:
 
 def _serialize_user(user: models.UserAccount, db: Optional[Session] = None) -> UserProfileResponse:
     college_name: Optional[str] = None
+    hostel_blk: Optional[str] = None
+    hostel_rm: Optional[str] = None
     if (user.role or "").strip().lower() == "student" and db is not None:
         st = None
         if user.student_id:
@@ -64,6 +66,9 @@ def _serialize_user(user: models.UserAccount, db: Optional[Session] = None) -> U
         if not st:
             st = db.query(models.Student).filter(models.Student.email == user.email).first()
         college_name = (getattr(st, "college", None) if st else None) or DEFAULT_COLLEGE
+        if st:
+            hostel_blk = getattr(st, "hostel_block", None)
+            hostel_rm = getattr(st, "hostel_room", None) or getattr(st, "room_number", None)
 
     return UserProfileResponse(
         id=user.id,
@@ -72,6 +77,8 @@ def _serialize_user(user: models.UserAccount, db: Optional[Session] = None) -> U
         role=user.role,
         student_id=user.student_id,
         college=college_name,
+        hostel_block=hostel_blk,
+        hostel_room=hostel_rm,
         authority_title=getattr(user, "authority_title", None),
         phone=getattr(user, "phone", None),
         office=getattr(user, "office", None),
@@ -296,27 +303,34 @@ def signup(
             is_active=1,
             failed_login_attempts=0,
         )
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
+        try:
+            db.add(new_user)
+            db.flush()
 
-        clean_college = sanitize_college_name(payload.college, fallback=DEFAULT_COLLEGE)
-        student_service.ensure_student_for_user(
-            db,
-            new_user,
-            preferred_student_id=custom_student_id,
-            college=clean_college,
-        )
-        audit_service.record_audit_event(
-            db,
-            actor_user=new_user,
-            action="signup_student",
-            target_type="user_account",
-            target_id=new_user.id,
-            details={"student_id": new_user.student_id, "college": clean_college},
-            ip_address=ip,
-        )
-        db.commit()
+            clean_college = sanitize_college_name(payload.college, fallback=DEFAULT_COLLEGE)
+            student_service.ensure_student_for_user(
+                db,
+                new_user,
+                preferred_student_id=custom_student_id,
+                college=clean_college,
+            )
+            audit_service.record_audit_event(
+                db,
+                actor_user=new_user,
+                action="signup_student",
+                target_type="user_account",
+                target_id=new_user.id,
+                details={"student_id": new_user.student_id, "college": clean_college},
+                ip_address=ip,
+            )
+            db.commit()
+            db.refresh(new_user)
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception:
+            db.rollback()
+            raise
 
     return _create_session_for_user(
         db=db,
