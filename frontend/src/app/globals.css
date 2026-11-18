@@ -577,7 +577,7 @@ select option {
   --background: var(--app-bg);
   --foreground: var(--app-text);
   --cv-canvas: var(--app-bg);
-  --cv-sidebar: #FFFFFF;
+  --cv-sidebar: var(--app-bg);
   --cv-surface: var(--app-surface);
   --cv-inset: #EEF2FA;
   --cv-raised: #E7ECF6;
@@ -657,7 +657,7 @@ select option {
   --background: var(--app-bg);
   --foreground: var(--app-text);
   --cv-canvas: var(--app-bg);
-  --cv-sidebar: #070B18;
+  --cv-sidebar: var(--app-bg);
   --cv-surface: var(--app-surface);
   --cv-inset: var(--app-elevated);
   --cv-raised: rgba(255, 255, 255, 0.045);
@@ -753,23 +753,6 @@ select option {
 .dark .cv-gradient-text,
 [data-theme="dark"] .cv-gradient-text {
   background-image: linear-gradient(90deg, #6366F1 0%, #22D3EE 100%);
-}
-
-.cv-app-ambient-grid {
-  background-image:
-    linear-gradient(to right, rgba(11, 16, 32, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(11, 16, 32, 0.045) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 25%, black 15%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 25%, black 15%, transparent 80%);
-}
-
-.dark .cv-app-ambient-grid,
-[data-theme="dark"] .cv-app-ambient-grid {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
 }
 
 .cv-app .glass-panel,
