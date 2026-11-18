@@ -13,6 +13,8 @@ const backendOrigin = configuredBackend
   .replace("://localhost:", "://127.0.0.1:");
 
 const nextConfig: NextConfig = {
+  compress: false,
+  devIndicators: false,
   async rewrites() {
     return [
       {

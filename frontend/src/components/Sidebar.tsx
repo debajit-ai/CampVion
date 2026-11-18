@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Layers,
   LayoutGrid,
   LogOut,
   MessageSquare,
@@ -16,7 +15,6 @@ import {
   RefreshCw,
   Settings,
   ShieldAlert,
-  Terminal,
   Wrench,
   X,
 } from "lucide-react";
@@ -26,7 +24,8 @@ import {
   WorkflowSessionSummary,
   WorkspaceSection,
 } from "../types/api";
-import { ExperienceMode, useTheme } from "../context/ThemeContext";
+import { useTheme, ExperienceMode } from "../context/ThemeContext";
+import { useEvents } from "../context/EventsContext";
 import {
   formatRelativeTime,
   formatRoleLabel,
@@ -78,7 +77,6 @@ export function Sidebar({
   onNewRequest,
   health,
   healthLoading,
-  healthLatencyMs,
   onRefreshHealth,
   user,
   onLogout,
@@ -86,6 +84,7 @@ export function Sidebar({
   effectiveMode,
 }: SidebarProps) {
   const { resolvedTheme, reducedMotion: contextReducedMotion, experienceMode } = useTheme();
+  const { liveLeaveByWorkflowId } = useEvents();
   const osReducedMotion = Boolean(useReducedMotion());
   const disableMotion = contextReducedMotion || osReducedMotion;
   const isDark = resolvedTheme === "dark";
@@ -101,60 +100,62 @@ export function Sidebar({
   const navButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const navItems: NavItemConfig[] = useMemo(() => {
-    const items: NavItemConfig[] = [
+    if (isAdmin || isFaculty) {
+      const adminItems: NavItemConfig[] = [
+        {
+          id: "approvals",
+          label: "Approval Queue",
+          icon: <ShieldAlert className="h-4 w-4" />,
+          badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
+        },
+        {
+          id: "chat",
+          label: "Assistant",
+          icon: <MessageSquare className="h-4 w-4" />,
+        },
+        {
+          id: "observability",
+          label: activeMode === "simple" ? "All Requests" : "Request Audit & Logs",
+          icon: <Clock className="h-4 w-4" />,
+        },
+      ];
+
+      if (activeMode === "advanced") {
+        adminItems.push(
+          {
+            id: "unified",
+            label: "Operations Overview",
+            icon: <LayoutGrid className="h-4 w-4" />,
+          },
+          {
+            id: "evaluation",
+            label: "Evaluation & Reliability",
+            icon: <BarChart3 className="h-4 w-4" />,
+          },
+          {
+            id: "registry",
+            label: "Tool Registry",
+            icon: <Wrench className="h-4 w-4" />,
+          }
+        );
+      }
+
+      return adminItems;
+    }
+
+    // Student Navigation — clean, non-technical & zero vendor clutter
+    return [
       {
         id: "chat",
         label: "Assistant",
         icon: <MessageSquare className="h-4 w-4" />,
       },
       {
-        id: "unified",
-        label: "Overview",
-        icon: <LayoutGrid className="h-4 w-4" />,
-      },
-    ];
-
-    if (isAdmin || isFaculty) {
-      items.push({
-        id: "approvals",
-        label: "Approval Queue",
-        icon: <ShieldAlert className="h-4 w-4" />,
-        badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
-      });
-    }
-
-    if (activeMode === "simple") {
-      items.push({
         id: "observability",
         label: "Request History",
         icon: <Clock className="h-4 w-4" />,
-      });
-    } else {
-      items.push(
-        {
-          id: "workspace",
-          label: "Workflow Pipeline (DAG)",
-          icon: <Layers className="h-4 w-4" />,
-        },
-        {
-          id: "observability",
-          label: "Decision Traces & Logs",
-          icon: <Terminal className="h-4 w-4" />,
-        },
-        {
-          id: "evaluation",
-          label: "Evaluation & Reliability",
-          icon: <BarChart3 className="h-4 w-4" />,
-        },
-        {
-          id: "registry",
-          label: "Tool Registry & Schemas",
-          icon: <Wrench className="h-4 w-4" />,
-        }
-      );
-    }
-
-    return items;
+      },
+    ];
   }, [activeMode, isAdmin, isFaculty, pendingApprovalsCount]);
 
   const handleNavKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -375,20 +376,35 @@ export function Sidebar({
             <div className="space-y-1">
               {recentRequestIds.map((id) => {
                 const summary = sessionSummaries[id];
+                const liveLeave = liveLeaveByWorkflowId[id];
                 const isSelected = activeRequestId === id && activeSection === "chat";
-                const status = summary?.status || "IDLE";
+                const status =
+                  liveLeave?.status === "APPROVED"
+                    ? "COMPLETED"
+                    : liveLeave?.status === "REJECTED"
+                    ? "ENDED_REJECTED"
+                    : liveLeave?.status === "CANCELLED"
+                    ? "CANCELLED"
+                    : liveLeave?.status === "PENDING_APPROVAL"
+                    ? "WAITING_FOR_HUMAN"
+                    : summary?.status || "IDLE";
 
                 const dotColor =
                   status === "COMPLETED"
                     ? "bg-cv-success-solid"
                     : status === "WAITING_FOR_HUMAN"
-                    ? "bg-cv-warning-solid"
-                    : status === "FAILED"
+                    ? "bg-cv-warning-solid animate-pulse"
+                    : status === "FAILED" || status === "ENDED_REJECTED"
                     ? "bg-cv-error-solid"
+                    : status === "CANCELLED"
+                    ? "bg-cv-fg-3"
                     : "bg-cv-accent";
 
-                const titleText = summary?.goal?.trim() || `Request #${id}`;
-                const relTime = formatRelativeTime(summary?.updated_at);
+                const titleText =
+                  (liveLeave ? `${liveLeave.leave_code} · ${liveLeave.reason}` : null) ||
+                  summary?.goal?.trim() ||
+                  `Request #${id}`;
+                const relTime = formatRelativeTime(liveLeave?.updated_at || summary?.updated_at);
 
                 if (collapsed) {
                   return (
@@ -458,17 +474,9 @@ export function Sidebar({
                   isOnline ? "bg-cv-success-solid" : "bg-cv-error-solid"
                 }`}
               />
-              {isAdmin && activeMode === "advanced" ? (
-                <span className="text-[10px] font-mono text-cv-fg-3 truncate">
-                  {isOnline
-                    ? `API Online${typeof healthLatencyMs === "number" ? ` · ${healthLatencyMs}ms` : ""}`
-                    : "API Offline"}
-                </span>
-              ) : (
-                <span className="text-[11px] text-cv-fg-3 truncate">
-                  {isOnline ? "All systems normal" : "Service reconnecting"}
-                </span>
-              )}
+              <span className="text-[11px] text-cv-fg-3 truncate">
+                {isOnline ? "All systems normal" : "Service reconnecting"}
+              </span>
             </div>
 
             {isAdmin && activeMode === "advanced" && (

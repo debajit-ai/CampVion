@@ -21,6 +21,7 @@ import {
 import { AttendanceRecord, CourseRecord, Student } from "../types/api";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { IS_DEMO_MODE, isAdminRole } from "../lib/authRedirect";
 
 interface AdvancedComposerProps {
   students: Student[];
@@ -58,6 +59,8 @@ export function AdvancedComposer({
 }: AdvancedComposerProps) {
   const { experienceMode } = useTheme();
   const { user, preferredDisplayName, setPreferredDisplayName } = useAuth();
+  const isAdmin = isAdminRole(user?.role);
+  const showDemoSelector = IS_DEMO_MODE && isAdmin;
   const [studentPickerOpen, setStudentPickerOpen] = useState<boolean>(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalRef || internalRef;
@@ -92,7 +95,7 @@ export function AdvancedComposer({
   // Single shared submission function for Enter key, Ctrl+Enter, and Send button
   const triggerSubmit = useCallback(async () => {
     const trimmed = goalText.trim();
-    if (!trimmed || !selectedStudentId.trim() || isLoading || inFlightLockRef.current) {
+    if (!trimmed || (!isAdmin && !selectedStudentId.trim()) || isLoading || inFlightLockRef.current) {
       return;
     }
 
@@ -102,7 +105,7 @@ export function AdvancedComposer({
     } finally {
       inFlightLockRef.current = false;
     }
-  }, [goalText, selectedStudentId, isLoading, onSubmit]);
+  }, [goalText, isAdmin, selectedStudentId, isLoading, onSubmit]);
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
@@ -202,51 +205,51 @@ export function AdvancedComposer({
 
       {/* Composer Container Card */}
       <div className="cv-composer-shell relative rounded-2xl bg-cv-surface border border-cv-line focus-within:border-cv-accent-line transition-all duration-200">
-        {/* Top Control Bar: Professional Student Identity Selector & Quick Utilities */}
+        {/* Top Control Bar: Clean Utilities (Demo selector hidden unless NEXT_PUBLIC_DEMO_MODE=true & Admin) */}
         <div className="flex items-center justify-between px-3.5 pt-2.5 pb-2 border-b border-cv-line bg-cv-inset rounded-t-2xl gap-2">
-          {/* Student Identity Selector with Detailed Profile Popover */}
-          <div className="relative" ref={pickerRef}>
-            <button
-              type="button"
-              onClick={() => setStudentPickerOpen((prev) => !prev)}
-              aria-expanded={studentPickerOpen}
-              aria-label="Student Identity and Academic Profile Selector"
-              className="flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-cv-surface hover:bg-cv-raised border border-cv-line hover:border-cv-accent-line/50 transition cursor-pointer text-left group shadow-2xs"
-            >
-              <div
-                className={`p-1 rounded-lg shrink-0 border ${
-                  isCurrentEligible
-                    ? "bg-cv-success-soft border-cv-success-line text-cv-success"
-                    : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
-                }`}
+          {showDemoSelector ? (
+            <div className="relative" ref={pickerRef}>
+              <button
+                type="button"
+                onClick={() => setStudentPickerOpen((prev) => !prev)}
+                aria-expanded={studentPickerOpen}
+                aria-label="Demo Student Profile Selector"
+                className="flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-cv-surface hover:bg-cv-raised border border-cv-line hover:border-cv-accent-line/50 transition cursor-pointer text-left group shadow-2xs"
               >
-                {isCurrentEligible ? (
-                  <UserCheck className="h-3.5 w-3.5" />
-                ) : (
-                  <UserX className="h-3.5 w-3.5" />
-                )}
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-xs font-bold text-cv-fg">
-                  {currentDisplayName}
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
-                  {selectedStudentId}
-                </span>
-                <span
-                  className={`text-[11px] font-semibold hidden sm:inline ${
-                    isCurrentEligible ? "text-cv-success" : "text-cv-warning"
+                <div
+                  className={`p-1 rounded-lg shrink-0 border ${
+                    isCurrentEligible
+                      ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                      : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
                   }`}
                 >
-                  &bull; {currentPct}% {isCurrentEligible ? "Eligible" : "Below 75%"}
-                </span>
-              </div>
-              <ChevronDown
-                className={`h-3.5 w-3.5 text-cv-fg-2 group-hover:text-cv-fg transition-transform ${
-                  studentPickerOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
+                  {isCurrentEligible ? (
+                    <UserCheck className="h-3.5 w-3.5" />
+                  ) : (
+                    <UserX className="h-3.5 w-3.5" />
+                  )}
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-bold text-cv-fg">
+                    {currentDisplayName}
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2">
+                    {selectedStudentId}
+                  </span>
+                  <span
+                    className={`text-[11px] font-semibold hidden sm:inline ${
+                      isCurrentEligible ? "text-cv-success" : "text-cv-warning"
+                    }`}
+                  >
+                    &bull; {currentPct}% {isCurrentEligible ? "Eligible" : "Below 75%"}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-cv-fg-2 group-hover:text-cv-fg transition-transform ${
+                    studentPickerOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
             {/* Student Identity & Academic Profile Popover Panel */}
             {studentPickerOpen && (
@@ -453,6 +456,16 @@ export function AdvancedComposer({
               </div>
             )}
           </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[11px] text-cv-fg-2">
+              <Sparkles className="h-3.5 w-3.5 text-cv-accent-ink shrink-0" />
+              <span>
+                {isAdmin
+                  ? `${user?.authority_title || "Administrator"} Workspace`
+                  : "Campus Assistant"}
+              </span>
+            </div>
+          )}
 
           {/* Right Bar Actions: New Chat & Request Options */}
           <div className="flex items-center space-x-2">
@@ -500,7 +513,7 @@ export function AdvancedComposer({
           <button
             type="button"
             onClick={() => void triggerSubmit()}
-            disabled={isLoading || !goalText.trim() || !selectedStudentId.trim()}
+            disabled={isLoading || !goalText.trim() || (!isAdmin && !selectedStudentId.trim())}
             aria-label="Send message"
             className="flex items-center justify-center space-x-1.5 h-9 px-4 rounded-xl text-xs font-bold bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
           >
@@ -523,9 +536,7 @@ export function AdvancedComposer({
           <div className="flex items-center space-x-1.5 truncate">
             <CheckCircle2 className="h-3 w-3 text-cv-accent-ink shrink-0" />
             <span className="truncate">
-              {experienceMode === "simple"
-                ? "CampVion remembers conversation context and asks before submitting actions."
-                : "Groq Conversational Engine • Multi-Turn Slot Tracking • Governed DAG"}
+              CampVion verifies university policies and requests authorization before submission.
             </span>
           </div>
 

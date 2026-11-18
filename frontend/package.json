@@ -10,6 +10,7 @@
     "start": "next start",
     "seed": "node scripts/seed.mjs",
     "test:auth": "node scripts/test-auth.mjs",
+    "test:flow": "node scripts/test-flow.mjs",
     "lint": "eslint"
   },
   "dependencies": {

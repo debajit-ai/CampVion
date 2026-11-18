@@ -8,7 +8,7 @@ export function isAdminRole(role?: string | null): boolean {
 }
 
 export function getWorkspaceRedirectPath(role?: string | null): string {
-  return isAdminRole(role) ? "/app?role=admin" : "/app";
+  return isAdminRole(role) ? "/app/approvals" : "/app";
 }
 
 export const DEMO_ACCOUNTS = {

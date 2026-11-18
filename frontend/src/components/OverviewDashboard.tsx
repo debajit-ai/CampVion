@@ -93,7 +93,6 @@ export function OverviewDashboard({
   const fetchApprovals = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      setApprovalsLoading(true);
       const items = await apiClient.listPendingApprovals();
       setPendingApprovals(items);
       if (onRefreshPendingApprovals) {
@@ -107,10 +106,19 @@ export function OverviewDashboard({
   }, [isAdmin, onRefreshPendingApprovals]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchApprovals();
-    }
-  }, [isAdmin, fetchApprovals]);
+    if (!isAdmin) return;
+    let active = true;
+    apiClient
+      .listPendingApprovals()
+      .then((items) => {
+        if (!active) return;
+        setPendingApprovals(items);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
 
   const handleApproveItem = async (requestId: number) => {
     try {

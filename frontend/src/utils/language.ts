@@ -59,6 +59,18 @@ export function getFriendlyWorkflowStatus(
           description: "Unrecoverable policy or runtime failure halted execution graph.",
           badgeClass: "bg-cv-error-soft border-cv-error-line text-cv-error",
         };
+      case "ENDED_REJECTED":
+        return {
+          label: "DECLINED",
+          description: "Request was declined at the institutional approval gate.",
+          badgeClass: "bg-cv-error-soft border-cv-error-line text-cv-error",
+        };
+      case "CANCELLED":
+        return {
+          label: "WITHDRAWN",
+          description: "Request was withdrawn prior to administrative decision.",
+          badgeClass: "bg-cv-raised border-cv-line text-cv-fg-2",
+        };
       case "IDLE":
       default:
         return {
@@ -73,9 +85,9 @@ export function getFriendlyWorkflowStatus(
   switch (status) {
     case "WAITING_FOR_HUMAN":
       return {
-        label: "Waiting for Your Approval",
-        description: "CampVion needs your review and approval before submitting your official application.",
-        badgeClass: "bg-cv-warning-soft border-cv-warning-line text-cv-warning animate-pulse",
+        label: "Pending Approval",
+        description: "Your request is queued and awaiting Warden / Administrator review.",
+        badgeClass: "bg-cv-warning-soft border-cv-warning-line text-cv-warning",
       };
     case "EXECUTING":
     case "UNDERSTANDING":
@@ -94,9 +106,21 @@ export function getFriendlyWorkflowStatus(
       };
     case "COMPLETED":
       return {
-        label: "Request Completed",
-        description: "All steps finished successfully and your campus request is complete.",
+        label: "Approved & Completed",
+        description: "Your request was approved and recorded in the university system.",
         badgeClass: "bg-cv-success-soft border-cv-success-line text-cv-success",
+      };
+    case "ENDED_REJECTED":
+      return {
+        label: "Declined",
+        description: "The administrator declined this request. Review details and contact options below.",
+        badgeClass: "bg-cv-error-soft border-cv-error-line text-cv-error",
+      };
+    case "CANCELLED":
+      return {
+        label: "Withdrawn",
+        description: "You withdrew this request prior to review.",
+        badgeClass: "bg-cv-raised border-cv-line text-cv-fg-2",
       };
     case "FAILED":
       return {

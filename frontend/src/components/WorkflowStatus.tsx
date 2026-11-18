@@ -104,7 +104,9 @@ export function WorkflowStatus({
     result?.final_message ||
     state?.final_result ||
     state?.error ||
-    (workflowStatus === "WAITING_FOR_HUMAN" ? "Waiting for human approval" : null);
+    (workflowStatus === "WAITING_FOR_HUMAN" ? "Pending institutional review" : null);
+
+  const isDecisionPending = workflowStatus === "WAITING_FOR_HUMAN";
 
   const getTaskVisualState = (task: Task) => {
     if (completedSet.has(task.task_id)) return "COMPLETED";
@@ -183,13 +185,13 @@ export function WorkflowStatus({
         )}
       </div>
 
-      {/* Final message alert if completed, waiting, or failed */}
-      {finalMessage && (
+      {/* Final message alert ONLY once decided or completed/failed/cancelled */}
+      {finalMessage && !isDecisionPending && (
         <div
           className={`mt-4 p-3.5 rounded-xl text-xs border flex items-start justify-between gap-3 ${
             workflowStatus === "COMPLETED"
               ? "bg-cv-success-soft border-cv-success-line text-cv-success"
-              : workflowStatus === "FAILED"
+              : workflowStatus === "FAILED" || workflowStatus === "ENDED_REJECTED"
               ? "bg-cv-error-soft border-cv-error-line text-cv-error"
               : "bg-cv-warning-soft border-cv-warning-line text-cv-warning"
           }`}

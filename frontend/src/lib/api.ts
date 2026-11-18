@@ -1,4 +1,5 @@
 import {
+  AdminProfileUpdatePayload,
   AgentResult,
   AgentState,
   AttendanceRecord,
@@ -6,7 +7,10 @@ import {
   CourseRecord,
   ForgotPasswordResponse,
   HealthResponse,
+  LeaveListResponse,
+  LeaveRequestItem,
   LoginPayload,
+  NotificationItem,
   ResetPasswordPayload,
   RunAgentPayload,
   SignupPayload,
@@ -248,6 +252,13 @@ export const apiClient = {
     return fetchJson<UserProfile>("/auth/me");
   },
 
+  async updateAdminProfile(payload: AdminProfileUpdatePayload): Promise<UserProfile> {
+    return fetchJson<UserProfile>("/auth/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
   async forgotPassword(email: string): Promise<ForgotPasswordResponse> {
     return fetchJson<ForgotPasswordResponse>("/auth/forgot-password", {
       method: "POST",
@@ -422,6 +433,96 @@ export const apiClient = {
 
   async runBenchmarkSuite(): Promise<BenchmarkReportResponse> {
     return fetchJson<BenchmarkReportResponse>("/evaluation/run-benchmark", {
+      method: "POST",
+    });
+  },
+
+  // Leave Requests & Institutional Approval Queue API
+  async listLeaveRequests(params?: {
+    status?: string;
+    q?: string;
+    sort?: "oldest" | "newest";
+    student_id?: string;
+  }): Promise<LeaveListResponse> {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.q) sp.set("q", params.q);
+    if (params?.sort) sp.set("sort", params.sort);
+    if (params?.student_id) sp.set("student_id", params.student_id);
+    const qs = sp.toString();
+    return fetchJson<LeaveListResponse>(`/requests${qs ? `?${qs}` : ""}`);
+  },
+
+  async getLeaveRequestDetail(leaveId: number): Promise<LeaveRequestItem> {
+    return fetchJson<LeaveRequestItem>(`/requests/${leaveId}`);
+  },
+
+  async submitLeaveRequest(payload: {
+    days: number;
+    start_date?: string;
+    category?: string;
+    reason: string;
+  }): Promise<{ request: LeaveRequestItem; workflow: AgentResult }> {
+    return fetchJson<{ request: LeaveRequestItem; workflow: AgentResult }>("/requests/leave", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async approveLeaveRequest(
+    leaveId: number,
+    payload?: { comment?: string; version?: number }
+  ): Promise<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }> {
+    return fetchJson<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }>(
+      `/requests/${leaveId}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload || {}),
+      }
+    );
+  },
+
+  async rejectLeaveRequest(
+    leaveId: number,
+    payload: { reason: string; comment?: string; version?: number }
+  ): Promise<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }> {
+    return fetchJson<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }>(
+      `/requests/${leaveId}/reject`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async cancelLeaveRequest(
+    leaveId: number,
+    payload?: { version?: number }
+  ): Promise<{ request: LeaveRequestItem }> {
+    return fetchJson<{ request: LeaveRequestItem }>(`/requests/${leaveId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  // Real-time Notification Inbox API
+  async listNotifications(limit = 30): Promise<{ items: NotificationItem[]; unread_count: number }> {
+    return fetchJson<{ items: NotificationItem[]; unread_count: number }>(
+      `/notifications?limit=${limit}`
+    );
+  },
+
+  async markNotificationRead(
+    notificationId: number
+  ): Promise<{ notification: NotificationItem; unread_count: number }> {
+    return fetchJson<{ notification: NotificationItem; unread_count: number }>(
+      `/notifications/${notificationId}/read`,
+      { method: "POST" }
+    );
+  },
+
+  async markAllNotificationsRead(): Promise<{ unread_count: number }> {
+    return fetchJson<{ unread_count: number }>("/notifications/read-all", {
       method: "POST",
     });
   },

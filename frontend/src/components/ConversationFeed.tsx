@@ -33,9 +33,11 @@ import {
   Task,
 } from "../types/api";
 import { HumanApprovalCenter } from "./HumanApprovalCenter";
+import { RequestStatusCard } from "./RequestStatusCard";
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useEvents } from "../context/EventsContext";
 import { useAssistantUi } from "../store/assistantUiStore";
 import type { Logo3DState } from "./brand/Logo3D";
 import {
@@ -68,6 +70,7 @@ interface ConversationFeedProps {
     updatedSlots?: Record<string, unknown>
   ) => Promise<void>;
   onInspectToolInTrace?: (toolName: string) => void;
+  onPrefillComposer?: (prompt: string) => void;
 }
 
 function renderFormattedInline(text: string): React.ReactNode[] {
@@ -411,6 +414,7 @@ export function ConversationFeed({
   onSendMessage,
   onConfirmAction,
   onInspectToolInTrace,
+  onPrefillComposer,
 }: ConversationFeedProps) {
   const {
     experienceMode,
@@ -420,6 +424,7 @@ export function ConversationFeed({
   const osReducedMotion = Boolean(useReducedMotion());
   const disableMotion = contextReducedMotion || osReducedMotion;
   const { user, preferredDisplayName } = useAuth();
+  const { liveLeaveById, liveLeaveByWorkflowId, upsertLiveLeave } = useEvents();
   const {
     firstMessageSent,
     isScattering,
@@ -536,30 +541,66 @@ export function ConversationFeed({
     );
   }
 
-  // Active workflow execution details (when a confirmed request runs through AXORAAgent)
+  // Active workflow execution details synced live with SSE LeaveRequest state
+  const resolvedWfId = activeRequestId ?? state?.request_id ?? result?.request_id ?? null;
+  const liveLeaveForWorkflow = resolvedWfId ? liveLeaveByWorkflowId[resolvedWfId] : undefined;
+
   const planTasks = state?.plan && state.plan.length > 0 ? state.plan : tasks;
   const completedSet = new Set(
     state?.completed_tasks || result?.completed_tasks || []
   );
   const failedSet = new Set(state?.failed_tasks || result?.failed_tasks || []);
   const pendingSet = new Set(state?.pending_tasks || []);
+
+  if (liveLeaveForWorkflow?.status === "APPROVED") {
+    for (const t of planTasks) {
+      completedSet.add(t.task_id);
+      pendingSet.delete(t.task_id);
+    }
+  } else if (liveLeaveForWorkflow?.status === "REJECTED") {
+    for (const t of planTasks) {
+      if (t.requires_human_approval) {
+        failedSet.add(t.task_id);
+        pendingSet.delete(t.task_id);
+      }
+    }
+  }
+
   const toolResults = state?.tool_results || {};
   const selectedTools = state?.selected_tools || {};
   const observations = state?.observations || [];
-  const workflowStatus = state?.current_status || result?.status || "IDLE";
+  const rawWorkflowStatus = state?.current_status || result?.status || "IDLE";
+  const workflowStatus =
+    liveLeaveForWorkflow?.status === "APPROVED"
+      ? "COMPLETED"
+      : liveLeaveForWorkflow?.status === "REJECTED"
+      ? "ENDED_REJECTED"
+      : liveLeaveForWorkflow?.status === "CANCELLED"
+      ? "CANCELLED"
+      : liveLeaveForWorkflow?.status === "PENDING_APPROVAL"
+      ? "WAITING_FOR_HUMAN"
+      : rawWorkflowStatus;
+
   const replanCount = state?.replanning_count ?? result?.replanning_count ?? 0;
   const friendlyStatus = getFriendlyWorkflowStatus(
     workflowStatus,
     experienceMode
   );
 
-  const finalMessage =
+  const rawFinalMessage =
     result?.final_message ||
     state?.final_result ||
     state?.error ||
-    (workflowStatus === "WAITING_FOR_HUMAN"
-      ? "Waiting for institutional advisor approval"
-      : null);
+    null;
+
+  const finalMessage =
+    workflowStatus === "WAITING_FOR_HUMAN"
+      ? null
+      : liveLeaveForWorkflow?.status === "APPROVED"
+      ? `${liveLeaveForWorkflow.leave_code} approved by ${liveLeaveForWorkflow.decided_by_name || liveLeaveForWorkflow.assigned_approver}.`
+      : liveLeaveForWorkflow?.status === "REJECTED"
+      ? `${liveLeaveForWorkflow.leave_code} declined: ${liveLeaveForWorkflow.rejection_reason || "See details below."}`
+      : rawFinalMessage;
 
   const formattedOutcome = formatStudentFriendlyError(
     finalMessage,
@@ -618,9 +659,6 @@ export function ConversationFeed({
                   <div className="flex items-center space-x-1.5">
                     <User className="h-3.5 w-3.5 text-cv-accent-ink" />
                     <span className="text-xs font-semibold text-cv-fg">You</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cv-surface border border-cv-line text-cv-accent-ink">
-                      {meta.student_id || conversation?.student_id || "Student"}
-                    </span>
                   </div>
                 </div>
                 <p className="text-xs sm:text-sm text-cv-fg font-sans leading-relaxed whitespace-pre-wrap">
@@ -811,6 +849,16 @@ export function ConversationFeed({
                 />
               )}
 
+              {/* Live In-Place Leave Request Status Card */}
+              {meta.leave_request && (
+                <RequestStatusCard
+                  initialRequest={liveLeaveById[meta.leave_request.id] || meta.leave_request}
+                  allowCancel={!isAdmin}
+                  onPrefillNewRequest={onPrefillComposer}
+                  onUpdated={upsertLiveLeave}
+                />
+              )}
+
               {/* Quick Reply Suggestion Chips (on latest message) */}
               {isLastMessage && quickReplies.length > 0 && !isLoading && (
                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -948,8 +996,19 @@ export function ConversationFeed({
               )}
             </div>
 
-            {/* Institutional Human Approval Gate (WAITING_FOR_HUMAN) */}
-            {workflowStatus === "WAITING_FOR_HUMAN" && (
+            {/* Live Leave Card inside workflow block when not already shown by a conversation message */}
+            {liveLeaveForWorkflow &&
+              !messages.some((m) => m.metadata?.leave_request?.id === liveLeaveForWorkflow.id) && (
+                <RequestStatusCard
+                  initialRequest={liveLeaveForWorkflow}
+                  allowCancel={!isAdmin}
+                  onPrefillNewRequest={onPrefillComposer}
+                  onUpdated={upsertLiveLeave}
+                />
+              )}
+
+            {/* Institutional Human Approval Gate (Admins only inside chat if workflow active) */}
+            {workflowStatus === "WAITING_FOR_HUMAN" && isAdmin && (
               <div className="animate-in fade-in duration-200">
                 <HumanApprovalCenter
                   state={state}
@@ -1127,13 +1186,13 @@ export function ConversationFeed({
               </div>
             )}
 
-            {/* Final Outcome / Resolution Card */}
-            {finalMessage && (
+            {/* Final Outcome / Resolution Card (ONLY shown once workflow truly finishes/declines/fails, never while WAITING_FOR_HUMAN) */}
+            {finalMessage && workflowStatus !== "WAITING_FOR_HUMAN" && (
               <div
                 className={`rounded-2xl p-4 border text-xs sm:text-sm font-sans leading-relaxed shadow-xs ${
                   workflowStatus === "COMPLETED"
                     ? "bg-cv-success-soft border-cv-success-line text-cv-fg"
-                    : workflowStatus === "FAILED"
+                    : workflowStatus === "FAILED" || workflowStatus === "ENDED_REJECTED"
                     ? "bg-cv-error-soft border-cv-error-line text-cv-fg"
                     : "bg-cv-surface border-cv-line text-cv-fg"
                 }`}
@@ -1142,21 +1201,21 @@ export function ConversationFeed({
                   <div className="flex items-center space-x-1.5 font-semibold">
                     {workflowStatus === "COMPLETED" ? (
                       <CheckCircle2 className="h-4 w-4 text-cv-success" />
-                    ) : workflowStatus === "FAILED" ? (
+                    ) : workflowStatus === "FAILED" || workflowStatus === "ENDED_REJECTED" ? (
                       <XCircle className="h-4 w-4 text-cv-error" />
                     ) : (
                       <Sparkles className="h-4 w-4 text-cv-accent-ink" />
                     )}
                     <span>
                       {workflowStatus === "COMPLETED"
-                        ? experienceMode === "simple"
-                          ? "Request Completed Successfully"
-                          : "Workflow Successfully Finalized"
+                        ? "Request Approved & Recorded"
+                        : workflowStatus === "ENDED_REJECTED"
+                        ? "Request Declined at Approval Gate"
+                        : workflowStatus === "CANCELLED"
+                        ? "Request Withdrawn"
                         : workflowStatus === "FAILED"
-                        ? experienceMode === "simple"
-                          ? "Unable to Complete Request"
-                          : "Workflow Terminated with Policy / System Halt"
-                        : "Execution Status"}
+                        ? "Unable to Complete Request"
+                        : "Execution Update"}
                     </span>
                   </div>
                   {result?.execution_time !== undefined && (
