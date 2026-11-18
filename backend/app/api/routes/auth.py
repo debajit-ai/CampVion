@@ -5,6 +5,8 @@ server-managed HttpOnly sessions, logout/revocation, and secure password recover
 """
 
 from datetime import datetime, timedelta, timezone
+import hmac
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query, status
@@ -18,7 +20,9 @@ from app.core.security import (
     generate_secure_token,
     hash_password,
     hash_token,
+    require_admin,
     require_authenticated_user,
+    require_student,
     resolve_session_and_user,
     set_auth_cookies,
     validate_password_strength,
@@ -27,6 +31,7 @@ from app.core.security import (
 from app.db import models
 from app.db.database import get_db
 from app.schemas.auth import (
+    AdminProfileUpdateRequest,
     AuthSessionResponse,
     ForgotPasswordRequest,
     LoginRequest,
@@ -35,7 +40,7 @@ from app.schemas.auth import (
     UserProfileResponse,
 )
 from app.services.email_service import EmailDeliveryService
-from app.services import student_service
+from app.services import audit_service, student_service
 
 router = APIRouter()
 
@@ -56,6 +61,11 @@ def _serialize_user(user: models.UserAccount) -> UserProfileResponse:
         full_name=user.full_name,
         role=user.role,
         student_id=user.student_id,
+        authority_title=getattr(user, "authority_title", None),
+        phone=getattr(user, "phone", None),
+        office=getattr(user, "office", None),
+        office_hours=getattr(user, "office_hours", None),
+        contact_email=getattr(user, "contact_email", None),
         is_active=bool(user.is_active),
         created_at=ensure_utc(user.created_at) or datetime.now(timezone.utc),
         last_login_at=ensure_utc(user.last_login_at),
@@ -143,6 +153,8 @@ def signup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide your full name (at least 2 characters).",
         )
+    if full_name.isupper() and len(full_name) > 2:
+        full_name = full_name.title()
 
     email = payload.email.strip().lower()
 
@@ -180,21 +192,114 @@ def signup(
             detail="An account with this email address already exists. Please sign in instead.",
         )
 
-    new_user = models.UserAccount(
-        email=email,
-        full_name=full_name,
-        password_hash=hash_password(payload.password),
-        role="student",  # Strictly enforced default role
-        student_id=None,
-        is_active=1,
-        failed_login_attempts=0,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    raw_role = (payload.role or "student").strip().lower()
+    # Explicit administrator onboarding requires a verified secret invite code;
+    # arbitrary escalation attempts like 'system_administrator' without invite flow remain safely scoped to 'student'.
+    is_admin_onboarding = raw_role in {"administrator", "admin"}
 
-    # Link or dynamically create authentic Student profile record
-    student_service.ensure_student_for_user(db, new_user)
+    if is_admin_onboarding:
+        auth_rate_limiter.check(f"admin_signup:{ip}", max_requests=5, window_seconds=300)
+        expected_code = (settings.ADMIN_INVITE_CODE or "").strip()
+        supplied_code = (payload.invite_code or "").strip()
+        if not expected_code or not hmac.compare_digest(
+            supplied_code.encode("utf-8"), expected_code.encode("utf-8")
+        ):
+            audit_service.record_audit_event(
+                db,
+                actor_role="anonymous",
+                action="signup_admin_denied",
+                target_type="user_account",
+                target_id=email,
+                details={"reason": "invalid_invite_code"},
+                ip_address=ip,
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Administrator registration could not be verified with the provided invite code.",
+            )
+
+        allowed_titles = {"Warden", "Dean", "Registrar"}
+        chosen_title = (payload.authority_title or "Warden").strip()
+        if chosen_title not in allowed_titles:
+            chosen_title = "Warden"
+
+        new_user = models.UserAccount(
+            email=email,
+            full_name=full_name,
+            password_hash=hash_password(payload.password),
+            role="administrator",
+            student_id=None,
+            authority_title=chosen_title,
+            phone=(payload.phone or "").strip() or None,
+            office="Administrative Office",
+            office_hours="Mon-Fri 10:00-16:00",
+            contact_email=email,
+            is_active=1,
+            failed_login_attempts=0,
+        )
+        db.add(new_user)
+        db.flush()
+        audit_service.record_audit_event(
+            db,
+            actor_user=new_user,
+            action="signup_admin",
+            target_type="user_account",
+            target_id=new_user.id,
+            details={"authority_title": chosen_title},
+            ip_address=ip,
+        )
+        db.commit()
+        db.refresh(new_user)
+    else:
+        custom_student_id: Optional[str] = None
+        if payload.student_id and payload.student_id.strip():
+            custom_student_id = payload.student_id.strip().upper()
+            if not re.match(r"^[A-Z0-9_-]{3,20}$", custom_student_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Student ID must be 3-20 alphanumeric characters.",
+                )
+            dup_user = (
+                db.query(models.UserAccount)
+                .filter(models.UserAccount.student_id == custom_student_id)
+                .first()
+            )
+            dup_stud = (
+                db.query(models.Student)
+                .filter(models.Student.student_id == custom_student_id)
+                .first()
+            )
+            if dup_user or dup_stud:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Student ID '{custom_student_id}' is already registered.",
+                )
+
+        new_user = models.UserAccount(
+            email=email,
+            full_name=full_name,
+            password_hash=hash_password(payload.password),
+            role="student",  # Strictly enforced default role
+            student_id=custom_student_id,
+            is_active=1,
+            failed_login_attempts=0,
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        student_service.ensure_student_for_user(db, new_user, preferred_student_id=custom_student_id)
+        audit_service.record_audit_event(
+            db,
+            actor_user=new_user,
+            action="signup_student",
+            target_type="user_account",
+            target_id=new_user.id,
+            details={"student_id": new_user.student_id},
+            ip_address=ip,
+        )
+        db.commit()
 
     return _create_session_for_user(
         db=db,
@@ -214,43 +319,37 @@ def login(
 ):
     """
     Authenticate an existing account using constant-time scrypt verification and lockout protection.
+    Always returns a generic failure message to prevent user enumeration.
     """
     ip = _client_ip(request)
-    auth_rate_limiter.check(f"login:{ip}", max_requests=15, window_seconds=60)
-
     email = payload.email.strip().lower()
+
+    auth_rate_limiter.check(f"login:{ip}:{email}", max_requests=5, window_seconds=60)
+    auth_rate_limiter.check(f"login_ip:{ip}", max_requests=30, window_seconds=60)
+
     user = db.query(models.UserAccount).filter(models.UserAccount.email == email).first()
 
     now = datetime.now(timezone.utc)
+    is_locked = False
     if user and user.locked_until:
         locked_until = ensure_utc(user.locked_until)
         if locked_until and locked_until > now:
-            remaining_min = max(1, int((locked_until - now).total_seconds() // 60) + 1)
-            raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail=f"Account is temporarily locked due to multiple failed sign-in attempts. Please try again in {remaining_min} minute(s) or reset your password.",
-            )
+            is_locked = True
 
     password_ok = verify_password_constant_time(
         payload.password,
         user.password_hash if user else None,
     )
 
-    if not user or not password_ok:
-        if user:
+    if not user or not password_ok or is_locked or not user.is_active:
+        if user and not is_locked:
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
             if user.failed_login_attempts >= settings.AUTH_MAX_FAILED_ATTEMPTS:
                 user.locked_until = now + timedelta(minutes=settings.AUTH_LOCKOUT_MINUTES)
             db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email address or password.",
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated. Please contact campus administration.",
+            detail="Invalid email or password",
         )
 
     if user.role == "student":
@@ -293,6 +392,62 @@ def get_current_user_profile(
     """
     if user.role == "student":
         student_service.ensure_student_for_user(db, user)
+    return _serialize_user(user)
+
+
+@router.get("/admin/verify", response_model=UserProfileResponse)
+def verify_admin_role(
+    user: models.UserAccount = Depends(require_admin),
+):
+    """Server-side RBAC check restricted exclusively to administrators."""
+    return _serialize_user(user)
+
+
+@router.get("/student/verify", response_model=UserProfileResponse)
+def verify_student_role(
+    user: models.UserAccount = Depends(require_student),
+):
+    """Server-side RBAC check restricted to student accounts."""
+    return _serialize_user(user)
+
+
+@router.patch("/profile", response_model=UserProfileResponse)
+def update_user_profile(
+    payload: AdminProfileUpdateRequest,
+    request: Request,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """Allow authenticated users (primarily administrators) to update contact metadata."""
+    is_admin = (user.role or "").lower() in {"admin", "administrator", "system_administrator"}
+    if payload.full_name and payload.full_name.strip():
+        cleaned = payload.full_name.strip()
+        if cleaned.isupper() and len(cleaned) > 2:
+            cleaned = cleaned.title()
+        user.full_name = cleaned
+
+    if is_admin:
+        if payload.authority_title is not None:
+            user.authority_title = payload.authority_title.strip() or "Warden"
+        if payload.phone is not None:
+            user.phone = payload.phone.strip() or None
+        if payload.office is not None:
+            user.office = payload.office.strip() or None
+        if payload.office_hours is not None:
+            user.office_hours = payload.office_hours.strip() or None
+        if payload.contact_email is not None:
+            user.contact_email = str(payload.contact_email).strip().lower()
+
+    audit_service.record_audit_event(
+        db,
+        actor_user=user,
+        action="profile_update",
+        target_type="user_account",
+        target_id=user.id,
+        ip_address=_client_ip(request),
+    )
+    db.commit()
+    db.refresh(user)
     return _serialize_user(user)
 
 

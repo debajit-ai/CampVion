@@ -158,13 +158,13 @@ def test_5_to_11_multiturn_leave_context_modify_cancel_and_confirm(client):
     assert d6["workflow_state"]["human_approval_status"] == "PENDING"
     assert f"Request #{d6['active_workflow_request_id']}" in d6["latest_reply"]["content"]
 
-    # Turn 7: Start another request and Cancel it (Test 10: Request cancellation)
+    # Turn 7: Start another request on non-overlapping future dates and Cancel it (Test 10: Request cancellation)
     r7 = client.post(
         "/api/conversations/message",
         json={
             "conversation_id": conv_id,
             "student_id": "S001",
-            "message": "Apply for personal leave for 2 days starting tomorrow because of family function",
+            "message": "Apply for personal leave for 2 days starting 2027-06-15 because of family function",
         },
     )
     assert r7.status_code == 200

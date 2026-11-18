@@ -67,7 +67,9 @@ def _ensure_attendance_and_courses(db: Session, student_id: str):
             ))
         db.commit()
 
-def ensure_student_for_user(db: Session, user: models.UserAccount) -> models.Student:
+def ensure_student_for_user(
+    db: Session, user: models.UserAccount, preferred_student_id: str = None
+) -> models.Student:
     """
     Ensures an authentic Student record exists and is properly linked for a UserAccount.
     Prevents non-Alice accounts from erroneously sharing or hijacking S001.
@@ -77,6 +79,8 @@ def ensure_student_for_user(db: Session, user: models.UserAccount) -> models.Stu
     """
     if not user or not user.email:
         return None
+
+    display_name = user.full_name.title() if user.full_name and user.full_name.isupper() and len(user.full_name) > 2 else user.full_name
 
     # 1. Match by email first
     matched = db.query(models.Student).filter(models.Student.email == user.email).first()
@@ -91,26 +95,29 @@ def ensure_student_for_user(db: Session, user: models.UserAccount) -> models.Stu
     if user.student_id and (user.student_id != "S001" or user.email.lower() == "alice@lpu.edu"):
         existing_student = db.query(models.Student).filter(models.Student.student_id == user.student_id).first()
         if existing_student:
-            if existing_student.name != user.full_name and user.email.lower() != "alice@lpu.edu":
-                existing_student.name = user.full_name
+            if existing_student.name != display_name and user.email.lower() != "alice@lpu.edu":
+                existing_student.name = display_name
                 db.commit()
             _ensure_attendance_and_courses(db, existing_student.student_id)
             return existing_student
 
-    # 3. Generate a new sequential student ID (e.g. S026)
-    all_students = db.query(models.Student.student_id).all()
-    max_num = 25
-    for (s_id,) in all_students:
-        if s_id and s_id.startswith("S") and s_id[1:].isdigit():
-            val = int(s_id[1:])
-            if val > max_num:
-                max_num = val
-    new_student_id = f"S{max_num + 1:03d}"
+    # 3. Use preferred student_id if explicitly specified and unclaimed, else generate sequential SXXX
+    if preferred_student_id:
+        new_student_id = preferred_student_id.strip().upper()
+    else:
+        all_students = db.query(models.Student.student_id).all()
+        max_num = 25
+        for (s_id,) in all_students:
+            if s_id and s_id.startswith("S") and s_id[1:].isdigit():
+                val = int(s_id[1:])
+                if val > max_num:
+                    max_num = val
+        new_student_id = f"S{max_num + 1:03d}"
 
     # 4. Create new Student profile record
     new_student = models.Student(
         student_id=new_student_id,
-        name=user.full_name,
+        name=display_name,
         email=user.email,
         program="B.Tech Computer Science & Engineering",
         semester=5,

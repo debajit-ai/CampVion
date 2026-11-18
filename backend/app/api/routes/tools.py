@@ -5,7 +5,8 @@ from app.schemas.tool import ToolSchema
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ToolSchema])
+@router.get("", response_model=List[ToolSchema])
+@router.get("/", response_model=List[ToolSchema], include_in_schema=False)
 def list_tools():
     return [tool.to_schema() for tool in registry.list_tools()]
 

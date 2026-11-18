@@ -1,0 +1,454 @@
+"""
+REST API Routes for Leave Requests & Institutional Approval Queue.
+Supports Student submissions/cancellations/history and Admin/Warden queue filtering,
+optimistic-lock approve/reject decisions, and full audit/workflow inspection.
+"""
+
+from datetime import datetime, timezone
+import logging
+import secrets
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.agent.agent import AXORAAgent
+from app.core.security import (
+    auth_rate_limiter,
+    is_admin_role,
+    require_admin,
+    require_authenticated_user,
+)
+from app.db import models
+from app.db.database import get_db
+from app.services import leave_service, student_service
+
+logger = logging.getLogger("campvion.requests")
+router = APIRouter()
+
+
+class CreateLeaveBody(BaseModel):
+    days: int = Field(..., ge=1, le=30, description="Number of leave days requested")
+    start_date: Optional[str] = Field(default=None, max_length=64)
+    category: str = Field(default="personal", max_length=40)
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+class ApproveBody(BaseModel):
+    comment: Optional[str] = Field(default=None, max_length=500)
+    version: Optional[int] = Field(default=None, ge=1)
+
+
+class RejectBody(BaseModel):
+    reason: str = Field(..., min_length=10, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=500)
+    version: Optional[int] = Field(default=None, ge=1)
+
+
+class CancelBody(BaseModel):
+    version: Optional[int] = Field(default=None, ge=1)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _compute_queue_stats(rows: List[models.LeaveRequest]) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    today_date = now.date()
+    pending_count = 0
+    approved_today = 0
+    rejected_today = 0
+    decided_total = 0
+    approved_total = 0
+    response_minutes: List[float] = []
+
+    for row in rows:
+        st = leave_service.normalize_leave_status(row.status)
+        if st == leave_service.STATUS_PENDING_APPROVAL:
+            pending_count += 1
+        elif st in {leave_service.STATUS_APPROVED, leave_service.STATUS_REJECTED}:
+            decided_total += 1
+            if st == leave_service.STATUS_APPROVED:
+                approved_total += 1
+            if row.decided_at:
+                dec_dt = row.decided_at.replace(tzinfo=timezone.utc) if row.decided_at.tzinfo is None else row.decided_at
+                if dec_dt.date() == today_date:
+                    if st == leave_service.STATUS_APPROVED:
+                        approved_today += 1
+                    else:
+                        rejected_today += 1
+                sub_dt = row.submitted_at or row.created_at
+                if sub_dt:
+                    sub_utc = sub_dt.replace(tzinfo=timezone.utc) if sub_dt.tzinfo is None else sub_dt
+                    diff_mins = max(0.0, (dec_dt - sub_utc).total_seconds() / 60.0)
+                    response_minutes.append(diff_mins)
+
+    avg_response_minutes = round(sum(response_minutes) / len(response_minutes), 1) if response_minutes else 0.0
+    approval_rate_pct = round((approved_total / decided_total) * 100.0, 1) if decided_total else 0.0
+    return {
+        "pending_count": pending_count,
+        "approved_today_count": approved_today,
+        "rejected_today_count": rejected_today,
+        "avg_response_minutes": avg_response_minutes,
+        "approval_rate_pct": approval_rate_pct,
+    }
+
+
+@router.get("/stats")
+def get_queue_stats(
+    response: Response,
+    student_id: Optional[str] = Query(default=None),
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    req_id = f"req_{secrets.token_hex(6)}"
+    response.headers["X-Request-ID"] = req_id
+    try:
+        is_admin = is_admin_role(user.role)
+        query = db.query(models.LeaveRequest)
+        if is_admin:
+            if student_id:
+                query = query.filter(models.LeaveRequest.student_id == student_id.strip())
+        else:
+            student_service.ensure_student_for_user(db, user)
+            if student_id and student_id.strip() != user.student_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"message": "Students can only view their own request statistics.", "request_id": req_id},
+                )
+            query = query.filter(models.LeaveRequest.student_id == user.student_id)
+        return _compute_queue_stats(query.all())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[%s] Failed computing queue stats for user=%s: %s", req_id, user.email, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"Failed to load queue statistics ({type(exc).__name__})", "request_id": req_id},
+        )
+
+
+@router.get("")
+@router.get("/", include_in_schema=False)
+def list_leave_requests(
+    response: Response,
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    request_type: Optional[str] = Query(default=None),
+    request_type_alias: Optional[str] = Query(default=None, alias="type"),
+    q: Optional[str] = Query(default=None),
+    sort: str = Query(default="newest"),
+    student_id: Optional[str] = Query(default=None),
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    req_id = f"req_{secrets.token_hex(6)}"
+    response.headers["X-Request-ID"] = req_id
+    try:
+        is_admin = is_admin_role(user.role)
+
+        query = db.query(models.LeaveRequest)
+        if is_admin:
+            if student_id:
+                query = query.filter(models.LeaveRequest.student_id == student_id.strip())
+        else:
+            student_service.ensure_student_for_user(db, user)
+            if student_id and student_id.strip() != user.student_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"message": "Students can only view their own leave requests.", "request_id": req_id},
+                )
+            query = query.filter(models.LeaveRequest.student_id == user.student_id)
+
+        all_rows = query.all()
+        stats_data = _compute_queue_stats(all_rows)
+
+        # Filter by status
+        filtered_rows = all_rows
+        if status_filter and status_filter.strip().upper() != "ALL":
+            target = leave_service.normalize_leave_status(status_filter)
+            filtered_rows = [r for r in filtered_rows if leave_service.normalize_leave_status(r.status) == target]
+
+        # Filter by request_type (`request_type` or `type` query alias: leave, library_room, hostel_allocation, certificate)
+        eff_type = (request_type if request_type is not None else request_type_alias) or ""
+        if eff_type.strip().lower() not in {"", "all"}:
+            rt_target = eff_type.strip().lower()
+            filtered_rows = [
+                r for r in filtered_rows if (getattr(r, "request_type", None) or "leave").strip().lower() == rt_target
+            ]
+
+        # Search filter
+        if q and q.strip():
+            needle = q.strip().lower()
+            student_lookup = {
+                s.student_id: (s.name or "")
+                for s in db.query(models.Student).filter(
+                    models.Student.student_id.in_({r.student_id for r in filtered_rows if r.student_id})
+                ).all()
+            } if filtered_rows else {}
+            filtered_rows = [
+                r
+                for r in filtered_rows
+                if needle in (r.leave_code or "").lower()
+                or needle in (r.student_id or "").lower()
+                or needle in (student_lookup.get(r.student_id or "", "")).lower()
+                or needle in (r.reason or "").lower()
+                or needle in (r.category or "").lower()
+                or needle in (getattr(r, "title", None) or "").lower()
+                or needle in (getattr(r, "request_type", None) or "").lower()
+            ]
+
+        # Null-safe sort (avoids datetime.min.timestamp() OSError on Windows)
+        def _sort_key(r: models.LeaveRequest):
+            dt = r.submitted_at or r.created_at
+            if not dt:
+                return 0.0
+            try:
+                return dt.timestamp()
+            except Exception:
+                return 0.0
+
+        filtered_rows.sort(key=_sort_key, reverse=(sort != "oldest"))
+
+        serialized: List[Dict[str, Any]] = []
+        for r in filtered_rows:
+            try:
+                serialized.append(leave_service.serialize_leave_request(db, r, include_workflow=False))
+            except Exception as row_exc:
+                logger.exception(
+                    "[%s] Skipping/recovering malformed request row id=%s: %s",
+                    req_id,
+                    getattr(r, "id", None),
+                    row_exc,
+                )
+
+        return {
+            "items": serialized,
+            "total": len(serialized),
+            "stats": stats_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[%s] Unhandled error listing requests for user=%s: %s", req_id, user.email, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"Failed to load requests ({type(exc).__name__})", "request_id": req_id},
+        )
+
+
+@router.get("/{leave_id}")
+def get_leave_request_detail(
+    leave_id: int,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    leave = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found")
+
+    is_admin = (user.role or "").lower() in leave_service.ADMIN_ROLES
+    if not is_admin:
+        student_service.ensure_student_for_user(db, user)
+        if leave.student_id != user.student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you can only inspect your own leave requests.",
+            )
+
+    return leave_service.serialize_leave_request(db, leave, include_workflow=True)
+
+
+class CreateCampusRequestBody(BaseModel):
+    request_type: str = Field(..., description="One of: leave, library_room, hostel_allocation, certificate")
+    title: Optional[str] = Field(default=None, max_length=160)
+    category: Optional[str] = Field(default="general")
+    start_date: Optional[str] = Field(default=None)
+    end_date: Optional[str] = Field(default=None)
+    days: int = Field(default=1, ge=1, le=60)
+    reason: str = Field(..., min_length=3, max_length=600)
+    details: Optional[Dict[str, Any]] = Field(default=None)
+
+
+@router.post("/submit", status_code=status.HTTP_201_CREATED)
+def submit_generic_campus_request(
+    payload: CreateCampusRequestBody,
+    request: Request,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    auth_rate_limiter.check(f"req_submit:{user.id}", max_requests=15, window_seconds=60)
+    if (user.role or "").lower() in leave_service.ADMIN_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrators review and decide student requests and cannot submit requests.",
+        )
+
+    req_type = (payload.request_type or "").strip().lower()
+    if req_type == "leave":
+        return submit_leave_request(
+            payload=CreateLeaveBody(
+                days=payload.days,
+                start_date=payload.start_date,
+                category=payload.category or "personal",
+                reason=payload.reason,
+            ),
+            request=request,
+            user=user,
+            db=db,
+        )
+
+    if req_type not in leave_service.REQUEST_TYPE_LABELS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported request_type '{payload.request_type}'. Must be leave, library_room, hostel_allocation, or certificate.",
+        )
+
+    student = student_service.ensure_student_for_user(db, user)
+    if not student:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
+
+    created = leave_service.create_campus_request_at_gate(
+        db,
+        student=student,
+        request_type=req_type,
+        title=payload.title,
+        category=payload.category or req_type,
+        start_date_hint=payload.start_date,
+        days_count=payload.days,
+        reason=payload.reason.strip(),
+        details=payload.details or {},
+        actor_user=user,
+        ip_address=_client_ip(request),
+    )
+    return {"request": created, "workflow": None}
+
+
+@router.post("/leave", status_code=status.HTTP_201_CREATED)
+def submit_leave_request(
+    payload: CreateLeaveBody,
+    request: Request,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    auth_rate_limiter.check(f"leave_submit:{user.id}", max_requests=10, window_seconds=60)
+    is_admin = (user.role or "").lower() in leave_service.ADMIN_ROLES
+    if is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrators cannot submit student leave requests on their own admin account.",
+        )
+
+    student = student_service.ensure_student_for_user(db, user)
+    if not student:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
+
+    start_hint = payload.start_date or "tomorrow"
+    goal_text = (
+        f"Apply for {payload.category.strip()} leave for {payload.days} days "
+        f"starting {start_hint} because {payload.reason.strip()}"
+    )
+
+    agent = AXORAAgent(
+        db,
+        auto_approve=False,
+        start_date_hint=start_hint,
+        actor_user=user,
+        enforce_overlap_check=True,
+        ip_address=_client_ip(request),
+    )
+    result = agent.start(student.student_id, goal_text)
+    state = agent.get_state(result.request_id)
+
+    if result.status == "FAILED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(state.error if state and state.error else result.final_message) or "Leave request eligibility check failed.",
+        )
+
+    leave_row = (
+        db.query(models.LeaveRequest)
+        .filter(models.LeaveRequest.workflow_run_id == result.request_id)
+        .first()
+    )
+    if not leave_row:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workflow paused but leave record was not created.",
+        )
+
+    return {
+        "request": leave_service.serialize_leave_request(db, leave_row, include_workflow=True),
+        "workflow": result.model_dump(),
+    }
+
+
+@router.post("/{leave_id}/approve")
+def approve_leave(
+    leave_id: int,
+    payload: Optional[ApproveBody] = None,
+    request: Request = None,
+    user: models.UserAccount = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    auth_rate_limiter.check(f"leave_decision:{user.id}", max_requests=30, window_seconds=60)
+    _, leave_payload, agent_result = leave_service.approve_leave_request(
+        db,
+        leave_id=leave_id,
+        actor_user=user,
+        comment=payload.comment if payload else None,
+        expected_version=payload.version if payload else None,
+        ip_address=_client_ip(request) if request else None,
+    )
+    return {
+        "request": leave_payload,
+        "workflow_result": agent_result.model_dump() if agent_result else None,
+    }
+
+
+@router.post("/{leave_id}/reject")
+def reject_leave(
+    leave_id: int,
+    payload: RejectBody,
+    request: Request,
+    user: models.UserAccount = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    auth_rate_limiter.check(f"leave_decision:{user.id}", max_requests=30, window_seconds=60)
+    _, leave_payload, agent_result = leave_service.reject_leave_request(
+        db,
+        leave_id=leave_id,
+        actor_user=user,
+        rejection_reason=payload.reason,
+        comment=payload.comment,
+        expected_version=payload.version,
+        ip_address=_client_ip(request),
+        min_reason_len=10,
+    )
+    return {
+        "request": leave_payload,
+        "workflow_result": agent_result.model_dump() if agent_result else None,
+    }
+
+
+@router.post("/{leave_id}/cancel")
+def cancel_leave(
+    leave_id: int,
+    payload: Optional[CancelBody] = None,
+    request: Request = None,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    auth_rate_limiter.check(f"leave_cancel:{user.id}", max_requests=20, window_seconds=60)
+    _, leave_payload = leave_service.cancel_leave_request(
+        db,
+        leave_id=leave_id,
+        actor_user=user,
+        expected_version=payload.version if payload else None,
+        ip_address=_client_ip(request) if request else None,
+    )
+    return {"request": leave_payload}

@@ -15,13 +15,29 @@ class SignupRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128, description="Account password")
     confirm_password: str = Field(..., min_length=8, max_length=128, description="Password confirmation")
     accept_terms: bool = Field(..., description="Must accept Terms of Service and Privacy Policy")
+    role: Optional[str] = Field(default="student", description="Requested account role ('student' or 'administrator')")
+    student_id: Optional[str] = Field(default=None, max_length=32, description="Optional unique university student ID")
+    invite_code: Optional[str] = Field(default=None, max_length=128, description="Required secret invite code for admin signup")
+    authority_title: Optional[str] = Field(default=None, max_length=60, description="Administrator authority title (Warden, Dean, Registrar)")
+    phone: Optional[str] = Field(default=None, max_length=32, description="Contact phone number")
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class AdminProfileUpdateRequest(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    authority_title: Optional[str] = Field(default=None, max_length=60)
+    phone: Optional[str] = Field(default=None, max_length=32)
+    office: Optional[str] = Field(default=None, max_length=160)
+    office_hours: Optional[str] = Field(default=None, max_length=120)
+    contact_email: Optional[EmailStr] = Field(default=None)
 
     model_config = ConfigDict(extra="ignore")
 
 
 class LoginRequest(BaseModel):
     email: EmailStr = Field(..., description="Registered email address")
-    password: str = Field(..., min_length=1, max_length=128, description="Account password")
+    password: str = Field(..., min_length=6, max_length=128, description="Account password")
     remember_me: bool = Field(default=False, description="Extend session validity to 14 days")
 
     model_config = ConfigDict(extra="ignore")
@@ -47,6 +63,11 @@ class UserProfileResponse(BaseModel):
     full_name: str
     role: str
     student_id: Optional[str] = None
+    authority_title: Optional[str] = None
+    phone: Optional[str] = None
+    office: Optional[str] = None
+    office_hours: Optional[str] = None
+    contact_email: Optional[str] = None
     is_active: bool
     created_at: datetime
     last_login_at: Optional[datetime] = None

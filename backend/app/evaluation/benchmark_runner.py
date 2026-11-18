@@ -105,7 +105,7 @@ def run_project_55_benchmark() -> Dict[str, Any]:
             agent_success = True
         elif exp_approval and agent_res.status == "WAITING_FOR_HUMAN":
             agent_success = True
-        elif exp_final == "FAILED" and agent_res.status == "FAILED":
+        elif exp_final == "FAILED" and agent_res.status in ("FAILED", "ENDED_REJECTED"):
             agent_success = True
 
         if agent_success:

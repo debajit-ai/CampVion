@@ -246,8 +246,38 @@ def db():
         revoked=0,
     )
     db.add(test_session)
+
+    # 13. Default Admin User & Session for HITL governance tests
+    admin_user = models.UserAccount(
+        email="admin@campvion.edu",
+        full_name="Dr. Rajesh Rao",
+        password_hash=hash_password("Admin@CampVion2026"),
+        role="administrator",
+        student_id=None,
+        authority_title="Warden",
+        phone="+91 98765 01042",
+        office="Hostel Block A, Warden Office",
+        office_hours="Mon-Fri 10:00-16:00",
+        contact_email="admin@campvion.edu",
+        is_active=1,
+    )
+    db.add(admin_user)
+    db.flush()
+
+    raw_admin_token = generate_secure_token(32)
+    admin_session = models.AuthSession(
+        user_id=admin_user.id,
+        token_hash=hash_token(raw_admin_token),
+        csrf_token=generate_secure_token(24),
+        remember_me=0,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        revoked=0,
+    )
+    db.add(admin_session)
+
     db.commit()
     db.info["test_session_token"] = raw_test_token
+    db.info["admin_session_token"] = raw_admin_token
     
     yield db
     db.close()
@@ -265,10 +295,28 @@ def client(db):
     tc = TestClient(app)
     tc.cookies.set("campvion_session", db.info["test_session_token"])
     yield tc
-    del app.dependency_overrides[get_db]
+    if get_db in app.dependency_overrides:
+        del app.dependency_overrides[get_db]
+
+@pytest.fixture(scope="module")
+def admin_client(db):
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    tc = TestClient(app)
+    tc.cookies.set("campvion_session", db.info["admin_session_token"])
+    yield tc
+    if get_db in app.dependency_overrides:
+        del app.dependency_overrides[get_db]
 
 @pytest.fixture
 def unauthenticated_client(db):
+    prev_override = app.dependency_overrides.get(get_db)
+
     def override_get_db():
         try:
             yield db
@@ -277,5 +325,7 @@ def unauthenticated_client(db):
 
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
-    if get_db in app.dependency_overrides:
+    if prev_override is not None:
+        app.dependency_overrides[get_db] = prev_override
+    elif get_db in app.dependency_overrides:
         del app.dependency_overrides[get_db]

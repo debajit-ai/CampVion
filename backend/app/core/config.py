@@ -41,12 +41,13 @@ class Settings(BaseSettings):
     # Authentication, Session & Password Recovery Settings
     SESSION_COOKIE_NAME: str = "campvion_session"
     CSRF_COOKIE_NAME: str = "campvion_csrf"
-    SESSION_DURATION_HOURS: int = 24
+    SESSION_DURATION_HOURS: int = 12
     SESSION_REMEMBER_DAYS: int = 14
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     AUTH_MAX_FAILED_ATTEMPTS: int = 5
     AUTH_LOCKOUT_MINUTES: int = 15
     ALLOWED_EMAIL_DOMAINS: Optional[str] = None  # Comma-separated institutional domains if restricted
+    ADMIN_INVITE_CODE: str = "CAMPVION-ADMIN-2026"
 
     # Optional SMTP / Transactional Email Provider Configuration
     SMTP_HOST: Optional[str] = None

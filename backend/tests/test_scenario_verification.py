@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import patch
 from app.db.models import DecisionTrace, CampusRequest
 
-def test_scenario_1_normal_leave_workflow(client, db):
+def test_scenario_1_normal_leave_workflow(client, admin_client, db):
     """
     Scenario 1: Normal Leave Workflow
     Confirm task dependency order, successful completion, and trace records.
@@ -33,8 +33,8 @@ def test_scenario_1_normal_leave_workflow(client, db):
     assert mid_state["human_approval_required"] is True
     assert mid_state["human_approval_status"] == "PENDING"
 
-    # Approve the workflow
-    approve_res = client.post(f"/api/agent/{request_id}/approve")
+    # Approve the workflow via admin account
+    approve_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert approve_res.status_code == 200
     final_data = approve_res.json()
 
@@ -44,7 +44,7 @@ def test_scenario_1_normal_leave_workflow(client, db):
     assert final_data["failed_tasks"] == []
     assert final_data["replanning_count"] == 0
     assert final_data["human_intervention_count"] == 1
-    assert "Goal achieved successfully" in final_data["final_message"]
+    assert "approved and recorded" in final_data["final_message"].lower() or "goal achieved successfully" in final_data["final_message"].lower()
 
     # Confirm trace records
     trace_res = client.get(f"/api/agent/{request_id}/trace")
@@ -70,7 +70,7 @@ def test_scenario_1_normal_leave_workflow(client, db):
     assert step_numbers == list(range(1, len(traces) + 1))
 
 
-def test_scenario_2_transient_tool_failure_recovery(client, db):
+def test_scenario_2_transient_tool_failure_recovery(client, admin_client, db):
     """
     Scenario 2: Transient Tool Failure
     Verify that the agent encounters a recoverable tool failure, retries/replans,
@@ -109,7 +109,7 @@ def test_scenario_2_transient_tool_failure_recovery(client, db):
     assert traces[replan_idx]["event_type"] == "REPLAN_TRIGGERED"
 
     # Workflow can be approved and finishes successfully
-    app_res = client.post(f"/api/agent/{request_id}/approve")
+    app_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert app_res.status_code == 200
     final_data = app_res.json()
     assert final_data["status"] == "COMPLETED"
@@ -211,7 +211,7 @@ def test_scenario_4b_actual_database_exception_handling(client, db):
         assert "Simulated Database I/O Error" in fail_trace["error_message"]
 
 
-def test_scenario_5_human_rejection_prevents_consequential_action(client, db):
+def test_scenario_5_human_rejection_prevents_consequential_action(client, admin_client, db):
     """
     Scenario 5: Human Rejection
     Confirm the consequential leave-application creation action does not execute after rejection.
@@ -222,12 +222,12 @@ def test_scenario_5_human_rejection_prevents_consequential_action(client, db):
     request_id = response.json()["request_id"]
 
     # Reject the workflow
-    reject_res = client.post(f"/api/agent/{request_id}/reject")
+    reject_res = admin_client.post(f"/api/agent/{request_id}/reject")
     assert reject_res.status_code == 200
     reject_data = reject_res.json()
 
-    assert reject_data["status"] == "FAILED"
-    assert "Human rejected" in reject_data["final_message"]
+    assert reject_data["status"] == "ENDED_REJECTED"
+    assert "declined" in reject_data["final_message"].lower() or "rejected" in reject_data["final_message"].lower()
     assert reject_data["human_intervention_count"] == 1
 
     # CRITICAL AUDIT CHECK: t5 must NOT have completed
@@ -237,7 +237,7 @@ def test_scenario_5_human_rejection_prevents_consequential_action(client, db):
     # State check
     state_res = client.get(f"/api/agent/{request_id}")
     state = state_res.json()
-    assert state["current_status"] == "FAILED"
+    assert state["current_status"] == "ENDED_REJECTED"
     assert state["human_approval_status"] == "REJECTED"
     assert "t5" in state["pending_tasks"]
     assert "t5" not in state["selected_tools"]
@@ -251,14 +251,14 @@ def test_scenario_5_human_rejection_prevents_consequential_action(client, db):
     assert "get_leave_application_status" not in executed_tools
 
     # Calling approve or reject after rejection must fail with HTTP 400
-    approve_again = client.post(f"/api/agent/{request_id}/approve")
+    approve_again = admin_client.post(f"/api/agent/{request_id}/approve")
     assert approve_again.status_code == 400
 
-    reject_again = client.post(f"/api/agent/{request_id}/reject")
+    reject_again = admin_client.post(f"/api/agent/{request_id}/reject")
     assert reject_again.status_code == 400
 
 
-def test_scenario_6_human_approval_resumes_without_duplicate_action(client, db):
+def test_scenario_6_human_approval_resumes_without_duplicate_action(client, admin_client, db):
     """
     Scenario 6: Human Approval
     Confirm execution resumes correctly without repeating completed actions
@@ -274,7 +274,7 @@ def test_scenario_6_human_approval_resumes_without_duplicate_action(client, db):
     tools_before = [t["input_data"] for t in trace_before if t["event_type"] == "TOOL_STARTED"]
 
     # Approve
-    approve_res = client.post(f"/api/agent/{request_id}/approve")
+    approve_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert approve_res.status_code == 200
     app_data = approve_res.json()
 
@@ -294,14 +294,14 @@ def test_scenario_6_human_approval_resumes_without_duplicate_action(client, db):
     assert len(tool_starts) == 6
 
     # Repeated approve calls must fail and NOT repeat create_leave_application
-    duplicate_approve = client.post(f"/api/agent/{request_id}/approve")
+    duplicate_approve = admin_client.post(f"/api/agent/{request_id}/approve")
     assert duplicate_approve.status_code == 400
 
-    duplicate_reject = client.post(f"/api/agent/{request_id}/reject")
+    duplicate_reject = admin_client.post(f"/api/agent/{request_id}/reject")
     assert duplicate_reject.status_code == 400
 
 
-def test_scenario_7_execution_trace_integrity(client, db):
+def test_scenario_7_execution_trace_integrity(client, admin_client, db):
     """
     Scenario 7: Execution Trace Fidelity
     Verify that recorded events, components, actions and statuses match the actual execution sequence.
@@ -309,7 +309,7 @@ def test_scenario_7_execution_trace_integrity(client, db):
     goal = "I want to apply for leave tomorrow because I have a family function."
     res = client.post("/api/agent/run", json={"student_id": "S001", "goal": goal})
     request_id = res.json()["request_id"]
-    client.post(f"/api/agent/{request_id}/approve")
+    admin_client.post(f"/api/agent/{request_id}/approve")
 
     trace_res = client.get(f"/api/agent/{request_id}/trace")
     assert trace_res.status_code == 200

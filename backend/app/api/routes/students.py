@@ -8,7 +8,8 @@ from app.db import models
 
 router = APIRouter()
 
-@router.get("/", response_model=List[schemas.StudentResponse])
+@router.get("", response_model=List[schemas.StudentResponse])
+@router.get("/", response_model=List[schemas.StudentResponse], include_in_schema=False)
 def get_students(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return student_service.get_students(db, skip=skip, limit=limit)
 

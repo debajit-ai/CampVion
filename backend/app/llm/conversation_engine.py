@@ -569,7 +569,7 @@ class ConversationEngine:
         if any(ind in lower for ind in policy_question_indicators):
             return "GENERAL_CAMPUS_INFO"
 
-        # 7. Operational Requests (Leave Application, Hostel Service Request, Support Ticket)
+        # 7. Operational Requests (Leave Application, Library Room Booking, Certificate Request, Hostel Service, Support Ticket)
         if any(
             phrase in lower
             for phrase in [
@@ -594,6 +594,20 @@ class ConversationEngine:
         if any(
             phrase in lower
             for phrase in [
+                "library room",
+                "book a room",
+                "book room",
+                "book library",
+                "study room",
+                "seminar room",
+                "discussion room",
+                "bonafide",
+                "enrollment certificate",
+                "study certificate",
+                "request certificate",
+                "need a certificate",
+                "apply for certificate",
+                "hostel allocation",
                 "hostel maintenance",
                 "room change",
                 "room transfer",
@@ -644,19 +658,26 @@ class ConversationEngine:
         session: models.ConversationSession,
         user_text: str,
         user_display_name: str = "Student",
+        user_role: str = "student",
     ) -> Dict[str, Any]:
         """
-        Process a student message within a persistent ConversationSession,
-        update multi-turn state & slots, invoke read-only campus tools or prepare
-        confirmation cards, and persist both user and assistant messages.
+        Process a message within a persistent ConversationSession.
+        Students receive full multi-turn academic/campus workflow support;
+        Administrators run strictly in read-only Ask CampVion reviewer Q&A mode.
         """
         clean_text = user_text.strip()
+        is_admin = (user_role or "").strip().lower() in {
+            "admin",
+            "administrator",
+            "system_administrator",
+            "faculty",
+        }
         student_id = session.student_id
         student_ctx = self._get_student_context(student_id)
         effective_display_name = (
             user_display_name.strip()
-            if user_display_name and user_display_name.strip() and user_display_name.strip().lower() != "student"
-            else student_ctx.get("first_name", "Student")
+            if user_display_name and user_display_name.strip() and user_display_name.strip().lower() not in {"student", "admin"}
+            else ("Admin" if is_admin else student_ctx.get("first_name", "Student"))
         )
         first_name = effective_display_name
 
@@ -671,6 +692,27 @@ class ConversationEngine:
         self.db.add(user_msg)
         self.db.commit()
         self.db.refresh(user_msg)
+
+        if is_admin:
+            reply_text, admin_meta = self._handle_admin_readonly_query(
+                session=session,
+                user_text=clean_text,
+                first_name=first_name,
+            )
+            user_msg.intent_category = admin_meta.get("intent_category", "ADMIN_READONLY_QA")
+            assistant_msg = models.ConversationMessage(
+                conversation_id=session.id,
+                role="assistant",
+                content=reply_text,
+                intent_category=admin_meta.get("intent_category", "ADMIN_READONLY_QA"),
+                metadata_json=json.dumps(admin_meta),
+            )
+            self.db.add(assistant_msg)
+            session.updated_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(assistant_msg)
+            self.db.refresh(session)
+            return self.serialize_session_response(session, latest_assistant_message=assistant_msg)
 
         # Load current session state
         collected_slots: Dict[str, Any] = json.loads(session.collected_slots_json or "{}")
@@ -721,6 +763,19 @@ class ConversationEngine:
                 and (
                     extract_days_from_text(clean_text) is not None
                     or clean_text.lower() in ("i want to apply for leave.", "i want to apply for leave", "apply for leave")
+                    or any(
+                        k in clean_text.lower()
+                        for k in (
+                            "library room",
+                            "book a room",
+                            "book room",
+                            "book library",
+                            "study room",
+                            "seminar room",
+                            "bonafide",
+                            "certificate",
+                        )
+                    )
                 )
             )
         )
@@ -912,6 +967,113 @@ class ConversationEngine:
         self.db.refresh(session)
 
         return self.serialize_session_response(session, latest_assistant_message=assistant_msg)
+
+    def _handle_admin_readonly_query(
+        self,
+        session: models.ConversationSession,
+        user_text: str,
+        first_name: str = "Admin",
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Read-only Ask CampVion handler for administrators/reviewers."""
+        from app.services import leave_service, student_service
+
+        lower = user_text.lower()
+
+        # Block any request-creation / leave application attempt cleanly
+        create_block_phrases = [
+            "apply for leave",
+            "i want leave",
+            "need leave",
+            "submit a leave",
+            "book a library room",
+            "book library room",
+            "request certificate",
+            "apply for certificate",
+            "submit a request",
+            "create request",
+            "create leave",
+        ]
+        if any(p in lower for p in create_block_phrases):
+            reply = (
+                "**Ask CampVion** operates in **read-only governance mode** for administrators and Wardens.\n\n"
+                "You can query pending queues, policy rules, and approval statistics here, while **approvals and rejections** "
+                "are performed directly in the **Approval Queue**. Administrators do not submit student leave or service requests."
+            )
+            return reply, {
+                "intent_category": "ADMIN_READONLY_GUARD",
+                "readonly_mode": True,
+                "quick_replies": [
+                    "Show me pending approvals",
+                    "Summarize today's student requests",
+                    "Summarize attendance policy",
+                ],
+            }
+
+        # Policy queries
+        if any(w in lower for w in ["policy", "75", "attendance", "condonation", "rules", "criteria"]):
+            reply = (
+                "Here is the verified **University Governance & Leave Policy Summary**:\n\n"
+                "- **Attendance Threshold (`POL-ATT-001`)**: Students need **>= 75%** aggregate attendance for standard leave approval.\n"
+                "- **Medical Condonation (`POL-ATT-002`)**: Students between **65% – 74.99%** require documented medical evidence & Dean/Warden review.\n"
+                "- **Decision Governance (`POL-LV-001`)**: Every pending leave, library booking, hostel allocation, and certificate request remains in `PENDING_APPROVAL` until a reviewer approves or provides a rejection reason (>= 10 chars)."
+            )
+            return reply, {
+                "intent_category": "ADMIN_POLICY_QA",
+                "readonly_mode": True,
+                "quick_replies": [
+                    "Show me pending approvals",
+                    "Summarize today's student requests",
+                ],
+            }
+
+        # Live Queue / Request Status Summary (default & explicit)
+        all_rows = (
+            self.db.query(models.LeaveRequest)
+            .order_by(models.LeaveRequest.id.desc())
+            .all()
+        )
+        pending_rows = [
+            r
+            for r in all_rows
+            if leave_service.normalize_leave_status(r.status) == leave_service.STATUS_PENDING_APPROVAL
+        ]
+        approved_count = sum(
+            1 for r in all_rows if leave_service.normalize_leave_status(r.status) == leave_service.STATUS_APPROVED
+        )
+        rejected_count = sum(
+            1 for r in all_rows if leave_service.normalize_leave_status(r.status) == leave_service.STATUS_REJECTED
+        )
+
+        by_type: Dict[str, int] = {}
+        for r in pending_rows:
+            rt = leave_service.get_request_type_label(getattr(r, "request_type", None))
+            by_type[rt] = by_type.get(rt, 0) + 1
+
+        if not pending_rows:
+            summary_lines = ["There are currently **0 pending requests** awaiting review."]
+        else:
+            breakdown = ", ".join(f"**{cnt} {lbl}**" for lbl, cnt in by_type.items())
+            summary_lines = [
+                f"There are currently **{len(pending_rows)} pending requests** awaiting review ({breakdown}):\n"
+            ]
+            for r in pending_rows[:6]:
+                st = student_service.get_student_by_id(self.db, r.student_id)
+                s_name = leave_service._format_display_name(st.name if st else None, fallback=r.student_id)
+                lbl = leave_service.get_request_type_label(getattr(r, "request_type", None))
+                desc = getattr(r, "title", None) or r.reason[:55]
+                summary_lines.append(f"- `{r.leave_code}` (**{lbl}**) — **{s_name}** ({r.student_id}): {desc}")
+
+        summary_lines.append(
+            f"\nTotals recorded: **{approved_count}** approved • **{rejected_count}** declined. Open the **Approval Queue** to review and decide items."
+        )
+        return "\n".join(summary_lines), {
+            "intent_category": "ADMIN_QUEUE_QA",
+            "readonly_mode": True,
+            "quick_replies": [
+                "Show me pending approvals",
+                "Summarize attendance policy",
+            ],
+        }
 
     # =========================================================================
     # ROUTE HANDLERS
@@ -1267,8 +1429,19 @@ class ConversationEngine:
 
         # Determine target operational intent
         target_intent = session.active_intent
-        if not target_intent or target_intent == "ATTENDANCE_ENQUIRY":
-            if any(w in lower for w in ["hostel", "night out", "room change", "ac repair", "warden"]):
+        if (
+            not target_intent
+            or target_intent == "ATTENDANCE_ENQUIRY"
+            or any(
+                w in lower
+                for w in ["library room", "book a room", "book room", "book library", "study room", "seminar room", "bonafide", "certificate"]
+            )
+        ):
+            if any(w in lower for w in ["library room", "book a room", "book room", "book library", "study room", "seminar room", "discussion room"]):
+                target_intent = "LIBRARY_ROOM_BOOKING"
+            elif any(w in lower for w in ["bonafide", "certificate", "enrollment certificate", "study certificate"]):
+                target_intent = "CERTIFICATE_REQUEST"
+            elif any(w in lower for w in ["hostel", "night out", "room change", "ac repair", "warden"]):
                 target_intent = "HOSTEL_SERVICE"
             elif any(w in lower for w in ["support ticket", "it support", "wifi", "wi-fi", "helpdesk"]):
                 target_intent = "SUPPORT_TICKET"
@@ -1374,13 +1547,37 @@ class ConversationEngine:
                 "Medical leave" if category_str == "medical" else "Personal leave"
             )
 
-            # Determine approver tier according to POL-LV-001
-            if days_count <= 3:
-                approver = "Faculty Advisor"
-            elif days_count <= 7:
-                approver = "Head of Department (HOD)"
-            else:
-                approver = "Proctor / Dean Student Welfare"
+            # Check if dates overlap with an existing PENDING_APPROVAL leave request
+            from app.services import leave_service
+            start_iso, end_iso = leave_service.compute_date_range(start_date_str, days_count)
+            overlap = leave_service.find_overlapping_pending_leave(
+                self.db,
+                student_id=student_ctx["student_id"],
+                start_date=start_iso,
+                end_date=end_iso,
+            )
+            if overlap:
+                session.active_intent = None
+                session.collected_slots_json = "{}"
+                session.missing_slots_json = "[]"
+                session.pending_confirmation_json = None
+                session.status = "active"
+                overlap_reply = (
+                    f"You already have a pending leave request (**{overlap.leave_code}**) covering "
+                    f"**{overlap.start_date} to {overlap.end_date}** awaiting review by **{overlap.assigned_approver}**.\n\n"
+                    f"Please wait for that decision or withdraw **{overlap.leave_code}** in your Request History before submitting overlapping dates."
+                )
+                return overlap_reply, {
+                    "duplicate_blocked": True,
+                    "existing_leave_code": overlap.leave_code,
+                    "quick_replies": ["Check my leave status", "Check my overall attendance"],
+                }
+
+            # Determine approver from live Warden profile
+            _, approver_name, approver_title = leave_service.get_primary_warden(self.db)
+            approver = f"{approver_name} ({approver_title})" if days_count <= 3 else (
+                "Head of Department (HOD)" if days_count <= 7 else "Proctor / Dean Student Welfare"
+            )
 
             proposal = {
                 "proposal_id": f"PROP-{int(time.time())}",
@@ -1430,8 +1627,10 @@ class ConversationEngine:
             }
 
         # ---------------------------------------------------------------------
-        # CASE 2: HOSTEL SERVICE REQUEST OR SUPPORT TICKET
+        # CASE 2: LIBRARY ROOM / CERTIFICATE / HOSTEL / SUPPORT REQUESTS
         # ---------------------------------------------------------------------
+        is_library = target_intent == "LIBRARY_ROOM_BOOKING"
+        is_certificate = target_intent == "CERTIFICATE_REQUEST"
         is_hostel = target_intent == "HOSTEL_SERVICE"
         req_type = "maintenance"
         if "night out" in lower or "gate pass" in lower:
@@ -1439,20 +1638,58 @@ class ConversationEngine:
         elif "room change" in lower or "transfer" in lower:
             req_type = "room_change"
 
+        proposal_title = (
+            "Prepared Library Room Booking"
+            if is_library
+            else "Prepared Certificate / Bonafide Request"
+            if is_certificate
+            else "Prepared Hostel Service Request"
+            if is_hostel
+            else "Prepared Campus Support Ticket"
+        )
+        time_match = re.search(
+            r"(\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
+            user_text,
+            re.IGNORECASE,
+        )
+        fields_dict: Dict[str, Any] = {
+            "service_type": (
+                "Library Room Booking"
+                if is_library
+                else "Bonafide / Official Certificate"
+                if is_certificate
+                else (req_type.replace("_", " ").title() if is_hostel else "IT & Campus Helpdesk")
+            ),
+            "details": user_text.strip(),
+            "reason": user_text.strip(),
+            "priority": "Medium",
+            "start_date": extract_date_from_text(user_text) or "tomorrow",
+            "approver_gate": (
+                "Dr. Rajesh Rao (Library Desk)"
+                if is_library
+                else "Dr. Rajesh Rao (Registrar)"
+                if is_certificate
+                else ("Hostel Warden Gate" if is_hostel else "Campus Helpdesk Dispatch")
+            ),
+        }
+        if is_library:
+            fields_dict["title"] = "Library Seminar Room Booking"
+            fields_dict["room"] = "Central Library — Seminar Room B-204"
+            fields_dict["time_slot"] = time_match.group(1) if time_match else "Tomorrow 14:00 - 16:00"
+        elif is_certificate:
+            fields_dict["title"] = "Bonafide & Enrollment Certificate"
+            fields_dict["certificate_type"] = "Bonafide Certificate"
+            fields_dict["purpose"] = user_text.strip()
+
         proposal = {
             "proposal_id": f"PROP-{int(time.time())}",
             "operation_type": target_intent,
-            "title": "Prepared Hostel Service Request" if is_hostel else "Prepared Campus Support Ticket",
+            "title": proposal_title,
             "student_id": student_ctx["student_id"],
             "student_name": student_ctx["profile"].get("name", student_ctx["student_id"]),
             "attendance_pct": student_ctx["overall_attendance_pct"],
             "is_eligible": True,
-            "fields": {
-                "service_type": req_type.replace("_", " ").title() if is_hostel else "IT & Campus Helpdesk",
-                "details": user_text.strip(),
-                "priority": "Medium",
-                "approver_gate": "Hostel Warden Gate" if is_hostel else "Campus Helpdesk Dispatch",
-            },
+            "fields": fields_dict,
             "raw_goal": user_text.strip(),
         }
 
@@ -1518,8 +1755,29 @@ class ConversationEngine:
         session.missing_slots_json = "[]"
 
         if op_type == "LEAVE_APPLICATION":
-            agent = AXORAAgent(self.db, auto_approve=False)
-            result = agent.start(student_id, raw_goal)
+            from fastapi import HTTPException as FastAPIHTTPException
+            from app.services import leave_service
+
+            fields = proposal.get("fields", {})
+            start_hint = fields.get("start_date") or proposal.get("raw_goal")
+            agent = AXORAAgent(
+                self.db,
+                auto_approve=False,
+                start_date_hint=str(start_hint) if start_hint else None,
+                enforce_overlap_check=True,
+            )
+            try:
+                result = agent.start(student_id, raw_goal)
+            except FastAPIHTTPException as exc:
+                session.status = "active"
+                return (
+                    f"Unable to submit leave request: **{exc.detail}**",
+                    {
+                        "duplicate_blocked": exc.status_code == 409,
+                        "quick_replies": ["Check my leave status", "Check my overall attendance"],
+                    },
+                )
+
             state = agent.get_state(result.request_id)
 
             session.active_workflow_request_id = result.request_id
@@ -1529,36 +1787,98 @@ class ConversationEngine:
                 else "completed"
             )
 
+            leave_payload = None
+            if state and state.leave_request_id:
+                leave_row = (
+                    self.db.query(models.LeaveRequest)
+                    .filter(models.LeaveRequest.id == state.leave_request_id)
+                    .first()
+                )
+                if leave_row:
+                    leave_payload = leave_service.serialize_leave_request(self.db, leave_row, include_workflow=True)
+
             if result.status == "WAITING_FOR_HUMAN":
-                fields = proposal.get("fields", {})
-                approver_label = fields.get("approver_gate", "Warden / Faculty Advisor")
+                approver_label = (
+                    f"{leave_payload['assigned_approver']} ({leave_payload['approver_role']})"
+                    if leave_payload
+                    else fields.get("approver_gate", "Dr. Rajesh Rao (Warden)")
+                )
+                leave_code_txt = leave_payload["leave_code"] if leave_payload else f"Request #{result.request_id}"
+                att_txt = (
+                    f"{round(leave_payload['attendance_snapshot'], 1)}%"
+                    if leave_payload and leave_payload.get("attendance_snapshot") is not None
+                    else f"{proposal.get('attendance_pct', 75)}%"
+                )
                 reply = (
-                    f"Your leave application has been compiled and registered as **Request #{result.request_id}**.\n\n"
-                    f"- **Eligibility & Policy Check**: Verified (`get_student_profile`, `get_attendance`, `get_leave_policy`, `check_leave_eligibility` completed)\n"
-                    f"- **Institutional Governance Status**: **WAITING FOR APPROVAL** — Paused at Institutional Gate\n"
-                    f"- **Designated Approver**: {approver_label}\n\n"
-                    "Your request is now queued in the university administrative dashboard awaiting formal authorization by the Warden / Administrator."
+                    f"Your leave request **{leave_code_txt}** (**Request #{result.request_id}**) has been submitted and paused at the approval gate.\n\n"
+                    f"- **Attendance & Policy Check**: Verified ({att_txt} attendance — meets 75% threshold)\n"
+                    f"- **Status**: **Pending Approval** — Awaiting approval from **{approver_label}**\n"
+                    f"- **Routed To**: {approver_label}\n"
+                    f"- **Next Steps**: Your request is live in the Warden's queue. You'll receive an instant status update and notification here as soon as a decision is made."
                 )
             elif result.status == "COMPLETED":
                 reply = (
-                    f"**Request #{result.request_id}** has been completed! "
+                    f"**Request #{result.request_id}** has been approved and recorded. "
                     f"{result.final_message}"
                 )
             else:
                 reply = (
-                    f"**Request #{result.request_id}** could not be approved automatically due to university policy constraints:\n\n"
+                    f"**Request #{result.request_id}** could not be submitted due to university eligibility requirements:\n\n"
                     f"- **Reason**: {state.error if state and state.error else result.final_message}\n"
-                    "- **Reference**: Policy `POL-ATT-001` / `POL-LV-001` requires at least 75% attendance for standard leave."
+                    "- **Policy**: Standard leave requires at least 75% overall attendance (`POL-ATT-001` / `POL-LV-001`). Please contact your Warden or Faculty Advisor for special medical or emergency exceptions."
                 )
 
             return reply, {
                 "workflow_executed": True,
                 "request_id": result.request_id,
+                "leave_request": leave_payload,
                 "workflow_result": result.model_dump(),
                 "workflow_state": state.model_dump() if state else None,
                 "quick_replies": [
                     "Check my leave status",
                     "Check my overall attendance",
+                ],
+            }
+
+        elif op_type in {"LIBRARY_ROOM_BOOKING", "CERTIFICATE_REQUEST"}:
+            from app.services import leave_service, student_service
+
+            req_type = "library_room" if op_type == "LIBRARY_ROOM_BOOKING" else "certificate"
+            fields = proposal.get("fields", {})
+            student_obj = student_service.get_student_by_id(self.db, student_id)
+            actor_usr = (
+                self.db.query(models.UserAccount)
+                .filter(models.UserAccount.id == session.user_id)
+                .first()
+                if session.user_id
+                else None
+            )
+            created_req = leave_service.create_campus_request_at_gate(
+                self.db,
+                student=student_obj,
+                request_type=req_type,
+                title=fields.get("title") or proposal.get("title"),
+                category=req_type,
+                start_date_hint=fields.get("start_date") or "tomorrow",
+                days_count=1,
+                reason=fields.get("reason") or raw_goal,
+                details=fields.get("details") or fields,
+                actor_user=actor_usr,
+            )
+            session.status = "waiting_for_approval"
+            approver_name = created_req.get("assigned_approver") or "Dr. Rajesh Rao"
+            approver_role = created_req.get("approver_role") or "Warden"
+            type_label = created_req.get("request_type_label") or leave_service.get_request_type_label(req_type)
+            reply = (
+                f"Your {type_label.lower()} request **{created_req.get('leave_code')}** has been submitted.\n\n"
+                f"**Awaiting approval from {approver_name} ({approver_role})**. You will receive an automatic notification here as soon as a decision is recorded."
+            )
+            return reply, {
+                "workflow_executed": True,
+                "leave_request": created_req,
+                "quick_replies": [
+                    "Check my overall attendance",
+                    "Show pending requests",
                 ],
             }
 

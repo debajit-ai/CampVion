@@ -19,11 +19,12 @@ from app.tools.campus_tools import (
 # =============================================================================
 # SCENARIO A: ELIGIBLE LEAVE REQUEST (DATABASE TRANSACTION VERIFICATION)
 # =============================================================================
-def test_scenario_a_eligible_leave_request_persists_to_db(client, db):
+def test_scenario_a_eligible_leave_request_persists_to_db(client, admin_client, db):
     """
     Test A: Eligible leave request for S001 (75% attendance).
-    Verify that upon human approval, a real LeaveRequest record is persisted
-    into SQLite with the exact policy approver (Advisor for <= 3 days).
+    Verify that at gate pause a PENDING_APPROVAL record exists (zero approved),
+    and upon human approval, that single LeaveRequest record transitions to APPROVED
+    with the exact policy approver (Dr. Rajesh Rao, Warden).
     """
     initial_leave_count = db.query(models.LeaveRequest).count()
 
@@ -37,20 +38,20 @@ def test_scenario_a_eligible_leave_request_persists_to_db(client, db):
     assert data["status"] == "WAITING_FOR_HUMAN"
     request_id = data["request_id"]
 
-    # 2. Before approval: ensure no approved leave was prematurely inserted
+    # 2. Before approval: ensure no APPROVED leave was prematurely inserted
     premature_leaves = db.query(models.LeaveRequest).filter(
         models.LeaveRequest.student_id == "S001",
-        models.LeaveRequest.status == "approved"
+        models.LeaveRequest.status.in_(["approved", "APPROVED"])
     ).all()
     assert len(premature_leaves) == 0
 
-    # 3. Approve via Human Authorization Gate
-    app_res = client.post(f"/api/agent/{request_id}/approve")
+    # 3. Approve via Human Authorization Gate (Admin)
+    app_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert app_res.status_code == 200
     app_data = app_res.json()
     assert app_data["status"] == "COMPLETED"
 
-    # 4. Verify actual database state
+    # 4. Verify actual database state (exactly 1 record created & transitioned to APPROVED)
     new_leave_count = db.query(models.LeaveRequest).count()
     assert new_leave_count == initial_leave_count + 1
 
@@ -61,9 +62,9 @@ def test_scenario_a_eligible_leave_request_persists_to_db(client, db):
     assert latest_leave is not None
     assert latest_leave.student_id == "S001"
     assert latest_leave.days_count == 2
-    assert latest_leave.status == "approved"
+    assert latest_leave.status == "APPROVED"
     assert latest_leave.assigned_approver == "Dr. Rajesh Rao"
-    assert latest_leave.approver_role == "Advisor"
+    assert latest_leave.approver_role == "Warden"
     assert "LV-2026-" in latest_leave.leave_code
 
     # 5. Verify trace record
@@ -201,13 +202,15 @@ def test_scenario_g_human_approval_gate_enforcement(client, db):
 # =============================================================================
 # SCENARIO H: REJECTED APPROVAL PREVENTS ACTION EXECUTION
 # =============================================================================
-def test_scenario_h_rejection_prevents_db_write(client, db):
+def test_scenario_h_rejection_prevents_db_write(client, admin_client, db):
     """
     Test H: Human approver clicks Reject.
-    Verify that status transitions to FAILED, consequential task is NOT executed,
-    and no leave record is written.
+    Verify that status transitions to ENDED_REJECTED, consequential task is NOT executed,
+    the pending LeaveRequest is marked REJECTED, and ZERO approved leave records exist.
     """
-    initial_count = db.query(models.LeaveRequest).count()
+    initial_approved_count = db.query(models.LeaveRequest).filter(
+        models.LeaveRequest.status.in_(["approved", "APPROVED"])
+    ).count()
 
     res = client.post("/api/agent/run", json={
         "student_id": "S001",
@@ -216,19 +219,23 @@ def test_scenario_h_rejection_prevents_db_write(client, db):
     request_id = res.json()["request_id"]
 
     # Reject
-    rej_res = client.post(f"/api/agent/{request_id}/reject")
+    rej_res = admin_client.post(f"/api/agent/{request_id}/reject")
     assert rej_res.status_code == 200
     rej_data = rej_res.json()
-    assert rej_data["status"] == "FAILED"
-    assert "rejected" in rej_data["final_message"].lower()
+    assert rej_data["status"] == "ENDED_REJECTED"
+    assert "declined" in rej_data["final_message"].lower() or "rejected" in rej_data["final_message"].lower()
 
-    # Zero records added
-    assert db.query(models.LeaveRequest).count() == initial_count
+    # Zero approved records added and linked record is REJECTED
+    assert db.query(models.LeaveRequest).filter(
+        models.LeaveRequest.status.in_(["approved", "APPROVED"])
+    ).count() == initial_approved_count
+    linked = db.query(models.LeaveRequest).filter(models.LeaveRequest.workflow_run_id == request_id).first()
+    assert linked is not None and linked.status == "REJECTED"
 
 # =============================================================================
 # SCENARIO I: TEMPORARY TOOL FAILURE FOLLOWED BY RECOVERY
 # =============================================================================
-def test_scenario_i_transient_failure_self_healing_recovery(client, db):
+def test_scenario_i_transient_failure_self_healing_recovery(client, admin_client, db):
     """
     Test I: Simulated transient tool timeout on external attendance API.
     Verify self-healing loop recovers automatically and completes upon approval.
@@ -244,7 +251,7 @@ def test_scenario_i_transient_failure_self_healing_recovery(client, db):
     request_id = data["request_id"]
 
     # Approve to finish
-    app_res = client.post(f"/api/agent/{request_id}/approve")
+    app_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert app_res.status_code == 200
     assert app_res.json()["status"] == "COMPLETED"
 

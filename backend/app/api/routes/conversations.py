@@ -121,7 +121,8 @@ class NewConversationRequest(BaseModel):
     title: Optional[str] = Field(default=None)
 
 
-@router.get("/")
+@router.get("")
+@router.get("/", include_in_schema=False)
 def list_conversations(
     student_id: Optional[str] = Query(default=None),
     x_strict_student_isolation: Optional[str] = Header(default=None),
@@ -277,6 +278,7 @@ async def send_conversation_message(
         session=session,
         user_text=trimmed,
         user_display_name=payload.user_display_name or "Student",
+        user_role=user.role or "student",
     )
 
 
@@ -291,6 +293,11 @@ def confirm_or_modify_prepared_action(
     Handle explicit Confirmation Card actions ('confirm', 'cancel', 'edit').
     Validates backend authorization and ensures a prepared proposal exists before executing.
     """
+    if (user.role or "").lower() in {"administrator", "system_administrator", "faculty"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrators operate in read-only Ask CampVion review mode and cannot submit student requests.",
+        )
     _ensure_conversation_tables(db)
     session = (
         db.query(models.ConversationSession)

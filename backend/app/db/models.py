@@ -171,7 +171,8 @@ class LeaveRequest(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     leave_code = Column(String, unique=True, index=True, nullable=False) # LV-2026-0001
-    student_id = Column(String, ForeignKey("students.student_id"), nullable=False)
+    workflow_run_id = Column(Integer, ForeignKey("campus_requests.id"), nullable=True, index=True)
+    student_id = Column(String, ForeignKey("students.student_id"), nullable=False, index=True)
     category = Column(String, nullable=False, default="personal") # personal, medical, family_emergency, academic_event, placement
     start_date = Column(String, nullable=False) # YYYY-MM-DD
     end_date = Column(String, nullable=False) # YYYY-MM-DD
@@ -179,12 +180,26 @@ class LeaveRequest(Base):
     reason = Column(String, nullable=False)
     supporting_doc_url = Column(String, nullable=True)
     doc_required = Column(Integer, default=0) # 0 = false, 1 = true
-    status = Column(String, default="pending") # pending, approved, rejected, cancelled
-    assigned_approver = Column(String, nullable=False, default="Faculty Advisor")
-    approver_role = Column(String, nullable=False, default="Advisor") # Advisor, HOD, Proctor, Warden
+    status = Column(String, default="PENDING_APPROVAL", nullable=False, index=True) # DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, CANCELLED
+    attendance_snapshot = Column(Float, nullable=True)
+    policy_result = Column(Text, nullable=True) # JSON policy breakdown
+    routed_to_role = Column(String, nullable=False, default="Warden")
+    assigned_approver = Column(String, nullable=False, default="Dr. Rajesh Rao")
+    approver_role = Column(String, nullable=False, default="Warden") # Warden, HOD, Proctor, Advisor
+    assigned_approver_user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=True)
+    decided_by = Column(Integer, ForeignKey("user_accounts.id"), nullable=True)
+    decided_by_name = Column(String, nullable=True)
+    decision_comment = Column(Text, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
     submitted_at = Column(DateTime, default=get_utc_now)
     decided_at = Column(DateTime, nullable=True)
     decision_remarks = Column(String, nullable=True)
+    created_at = Column(DateTime, default=get_utc_now, nullable=True)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+    request_type = Column(String, nullable=False, default="leave", index=True)
+    title = Column(String, nullable=True)
+    details_json = Column(Text, nullable=True)
 
     student = relationship("Student", back_populates="leave_requests")
 
@@ -407,6 +422,11 @@ class UserAccount(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False, default="student")  # student, faculty, administrator, system_administrator
     student_id = Column(String, nullable=True, index=True)    # Optional link to Student.student_id (e.g., S001)
+    authority_title = Column(String, nullable=True)           # e.g., Warden, Dean, Registrar
+    phone = Column(String, nullable=True)
+    office = Column(String, nullable=True)
+    office_hours = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)
     is_active = Column(Integer, default=1, nullable=False)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
@@ -491,5 +511,38 @@ class ConversationMessage(Base):
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
 
     session = relationship("ConversationSession", back_populates="messages")
+
+
+# =============================================================================
+# DOMAIN L: REAL-TIME NOTIFICATIONS & IMMUTABLE AUDIT LOG
+# =============================================================================
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=False, index=True)
+    leave_request_id = Column(Integer, ForeignKey("leave_requests.id"), nullable=True, index=True)
+    event_type = Column(String, nullable=False, default="notification.created")
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    payload_json = Column(Text, nullable=True)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False, index=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=True, index=True)
+    actor_role = Column(String, nullable=True)
+    action = Column(String, nullable=False, index=True)
+    target_type = Column(String, nullable=False)
+    target_id = Column(String, nullable=False)
+    details_json = Column(Text, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False, index=True)
+
 
 
