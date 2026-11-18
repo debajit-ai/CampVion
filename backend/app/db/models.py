@@ -30,6 +30,7 @@ class Student(Base):
     residence_type = Column(String, nullable=True, default="hostel") # hostel, day_scholar
     hostel_block = Column(String, nullable=True, default="BH-1")
     room_number = Column(String, nullable=True, default="302")
+    college = Column(String, nullable=True, default="Lovely Professional University")
 
     # Relationships
     attendance_records = relationship("AttendanceRecord", back_populates="student")

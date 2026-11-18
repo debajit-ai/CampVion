@@ -391,6 +391,7 @@ def serialize_leave_request(db: Session, leave: models.LeaveRequest, include_wor
         "student_program": student.program if student else None,
         "student_semester": student.semester if student else None,
         "student_department": student.department if student else None,
+        "student_college": (getattr(student, "college", None) if student else None) or "Lovely Professional University",
         "category": cat_val,
         "start_date": start_val,
         "end_date": end_val,

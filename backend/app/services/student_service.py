@@ -68,7 +68,10 @@ def _ensure_attendance_and_courses(db: Session, student_id: str):
         db.commit()
 
 def ensure_student_for_user(
-    db: Session, user: models.UserAccount, preferred_student_id: str = None
+    db: Session,
+    user: models.UserAccount,
+    preferred_student_id: str = None,
+    college: str = None,
 ) -> models.Student:
     """
     Ensures an authentic Student record exists and is properly linked for a UserAccount.
@@ -85,8 +88,14 @@ def ensure_student_for_user(
     # 1. Match by email first
     matched = db.query(models.Student).filter(models.Student.email == user.email).first()
     if matched:
+        changed = False
         if user.student_id != matched.student_id:
             user.student_id = matched.student_id
+            changed = True
+        if college and not getattr(matched, "college", None):
+            matched.college = college
+            changed = True
+        if changed:
             db.commit()
         _ensure_attendance_and_courses(db, matched.student_id)
         return matched
@@ -130,6 +139,7 @@ def ensure_student_for_user(
         residence_type="hostel",
         hostel_block="BH-1",
         room_number="302",
+        college=(college or "Lovely Professional University")[:120],
     )
     db.add(new_student)
     db.flush()

@@ -41,6 +41,7 @@ from app.schemas.auth import (
 )
 from app.services.email_service import EmailDeliveryService
 from app.services import audit_service, student_service
+from app.api.routes.colleges import DEFAULT_COLLEGE, sanitize_college_name
 
 router = APIRouter()
 
@@ -54,13 +55,23 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
-def _serialize_user(user: models.UserAccount) -> UserProfileResponse:
+def _serialize_user(user: models.UserAccount, db: Optional[Session] = None) -> UserProfileResponse:
+    college_name: Optional[str] = None
+    if (user.role or "").strip().lower() == "student" and db is not None:
+        st = None
+        if user.student_id:
+            st = db.query(models.Student).filter(models.Student.student_id == user.student_id).first()
+        if not st:
+            st = db.query(models.Student).filter(models.Student.email == user.email).first()
+        college_name = (getattr(st, "college", None) if st else None) or DEFAULT_COLLEGE
+
     return UserProfileResponse(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
         role=user.role,
         student_id=user.student_id,
+        college=college_name,
         authority_title=getattr(user, "authority_title", None),
         phone=getattr(user, "phone", None),
         office=getattr(user, "office", None),
@@ -120,7 +131,7 @@ def _create_session_for_user(
 
     return AuthSessionResponse(
         authenticated=True,
-        user=_serialize_user(user),
+        user=_serialize_user(user, db=db),
         csrf_token=csrf_token,
         expires_at=expires_at,
         session_token=raw_session_token,
@@ -289,14 +300,20 @@ def signup(
         db.commit()
         db.refresh(new_user)
 
-        student_service.ensure_student_for_user(db, new_user, preferred_student_id=custom_student_id)
+        clean_college = sanitize_college_name(payload.college, fallback=DEFAULT_COLLEGE)
+        student_service.ensure_student_for_user(
+            db,
+            new_user,
+            preferred_student_id=custom_student_id,
+            college=clean_college,
+        )
         audit_service.record_audit_event(
             db,
             actor_user=new_user,
             action="signup_student",
             target_type="user_account",
             target_id=new_user.id,
-            details={"student_id": new_user.student_id},
+            details={"student_id": new_user.student_id, "college": clean_college},
             ip_address=ip,
         )
         db.commit()
@@ -392,7 +409,7 @@ def get_current_user_profile(
     """
     if user.role == "student":
         student_service.ensure_student_for_user(db, user)
-    return _serialize_user(user)
+    return _serialize_user(user, db=db)
 
 
 @router.get("/admin/verify", response_model=UserProfileResponse)
@@ -406,9 +423,10 @@ def verify_admin_role(
 @router.get("/student/verify", response_model=UserProfileResponse)
 def verify_student_role(
     user: models.UserAccount = Depends(require_student),
+    db: Session = Depends(get_db),
 ):
     """Server-side RBAC check restricted to student accounts."""
-    return _serialize_user(user)
+    return _serialize_user(user, db=db)
 
 
 @router.patch("/profile", response_model=UserProfileResponse)
@@ -418,13 +436,24 @@ def update_user_profile(
     user: models.UserAccount = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    """Allow authenticated users (primarily administrators) to update contact metadata."""
+    """Allow authenticated users to update profile contact metadata or college."""
     is_admin = (user.role or "").lower() in {"admin", "administrator", "system_administrator"}
     if payload.full_name and payload.full_name.strip():
         cleaned = payload.full_name.strip()
         if cleaned.isupper() and len(cleaned) > 2:
             cleaned = cleaned.title()
         user.full_name = cleaned
+
+    if not is_admin and payload.college is not None:
+        student = student_service.ensure_student_for_user(db, user)
+        if student:
+            clean_col = sanitize_college_name(payload.college, fallback=None)
+            if not clean_col:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Please select or enter a valid college name (max 120 chars).",
+                )
+            student.college = clean_col
 
     if is_admin:
         if payload.authority_title is not None:
@@ -444,11 +473,12 @@ def update_user_profile(
         action="profile_update",
         target_type="user_account",
         target_id=user.id,
+        details={"college": payload.college} if payload.college is not None else None,
         ip_address=_client_ip(request),
     )
     db.commit()
     db.refresh(user)
-    return _serialize_user(user)
+    return _serialize_user(user, db=db)
 
 
 @router.post("/forgot-password")

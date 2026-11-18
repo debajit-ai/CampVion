@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends
-from app.api.routes import auth, health, students, tools, traces, agent, policies, evaluation, llm, conversations, requests, events
+from app.api.routes import auth, colleges, health, students, tools, traces, agent, policies, evaluation, llm, conversations, requests, events
 from app.core.security import require_authenticated_user
 
 protected = [Depends(require_authenticated_user)]
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(colleges.router, prefix="/colleges", tags=["colleges"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(students.router, prefix="/students", tags=["students"], dependencies=protected)
 api_router.include_router(tools.router, prefix="/tools", tags=["tools"], dependencies=protected)

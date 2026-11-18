@@ -59,6 +59,7 @@ def get_student_academic_summary(student_id: str, db: Session = Depends(get_db))
         "advisor_name": getattr(student, "advisor_name", "Dr. Rajesh Rao"),
         "advisor_email": getattr(student, "advisor_email", "rajesh.rao@lpu.edu"),
         "residence_type": getattr(student, "residence_type", "hostel"),
+        "college": getattr(student, "college", None) or "Lovely Professional University",
         "overall_attendance_percentage": overall_att_pct,
         "enrolled_courses_count": len(attendance_records)
     }

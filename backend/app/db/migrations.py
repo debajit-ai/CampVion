@@ -31,12 +31,15 @@ def run_migrations():
                 ("residence_type", "VARCHAR DEFAULT 'hostel'"),
                 ("hostel_block", "VARCHAR DEFAULT 'BH-1'"),
                 ("room_number", "VARCHAR DEFAULT '302'"),
+                ("college", "VARCHAR DEFAULT 'Lovely Professional University'"),
             ]
             for col_name, col_def in new_student_columns:
                 if col_name not in student_columns:
                     logger.info(f"Adding column '{col_name}' to 'students' table...")
                     conn.execute(text(f"ALTER TABLE students ADD COLUMN {col_name} {col_def};"))
                     conn.commit()
+            conn.execute(text("UPDATE students SET college = 'Lovely Professional University' WHERE college IS NULL OR TRIM(college) = '';"))
+            conn.commit()
 
         # 2. Check and migrate `courses` table if it already exists
         if "courses" in existing_tables:

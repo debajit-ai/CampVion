@@ -4,6 +4,7 @@ import {
   AgentState,
   AttendanceRecord,
   AuthSessionResponse,
+  CollegeOption,
   CourseRecord,
   ForgotPasswordResponse,
   HealthResponse,
@@ -227,6 +228,16 @@ export const apiClient = {
 
   async checkHealth(): Promise<HealthResponse> {
     return fetchJson<HealthResponse>("/health");
+  },
+
+  async listColleges(q?: string): Promise<{
+    items: CollegeOption[];
+    total: number;
+    default_college: string;
+    other_option: string;
+  }> {
+    const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return fetchJson(`/colleges${qs}`);
   },
 
   // Authentication & Session Management

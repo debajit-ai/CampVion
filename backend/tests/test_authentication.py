@@ -288,3 +288,53 @@ def test_forgot_and_reset_password_lifecycle(db):
         == 200
     )
 
+
+def test_colleges_directory_signup_and_profile_update(db):
+    anon = _fresh_client(db)
+
+    # 1. Public /api/colleges returns 100+ institutions with LPU featured first & Cache-Control
+    res_all = anon.get("/api/colleges")
+    assert res_all.status_code == 200
+    assert "max-age=" in res_all.headers.get("cache-control", "")
+    data = res_all.json()
+    assert data["total"] >= 100
+    assert data["items"][0]["name"] == "Lovely Professional University"
+
+    # 2. Query search matches LPU and IIT Bombay
+    res_lpu = anon.get("/api/colleges?q=lpu")
+    assert res_lpu.status_code == 200
+    assert res_lpu.json()["items"][0]["name"] == "Lovely Professional University"
+
+    res_iit = anon.get("/api/colleges?q=IIT Bombay")
+    assert res_iit.status_code == 200
+    assert any("Bombay" in item["name"] for item in res_iit.json()["items"])
+
+    # 3. Student signup sanitizes 'Other' college (strips HTML tags, enforces max 120 chars)
+    long_custom = "<script>alert(1)</script>  " + ("Custom Tech Institute Punjab " * 6)
+    res_signup = anon.post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Priya Nair",
+            "email": "priya.college@university.edu",
+            "password": "CampusUser2026!",
+            "confirm_password": "CampusUser2026!",
+            "accept_terms": True,
+            "role": "student",
+            "college": long_custom,
+        },
+    )
+    assert res_signup.status_code == 201
+    user_data = res_signup.json()["user"]
+    assert "<script>" not in user_data["college"]
+    assert len(user_data["college"]) <= 120
+    assert user_data["college"].startswith("alert(1) Custom Tech Institute")
+
+    # 4. Student can update college via PATCH /api/auth/profile and it persists on Student & /auth/me
+    upd = anon.patch("/api/auth/profile", json={"college": "Indian Institute of Technology Delhi"})
+    assert upd.status_code == 200
+    assert upd.json()["college"] == "Indian Institute of Technology Delhi"
+    me = anon.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["college"] == "Indian Institute of Technology Delhi"
+
+

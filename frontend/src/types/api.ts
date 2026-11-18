@@ -81,6 +81,7 @@ export interface LeaveRequestItem {
   student_program?: string | null;
   student_semester?: number | null;
   student_department?: string | null;
+  student_college?: string | null;
   category: string;
   start_date: string;
   end_date: string;
@@ -157,6 +158,15 @@ export interface HealthResponse {
   version: string;
 }
 
+export interface CollegeOption {
+  name: string;
+  short?: string;
+  city?: string;
+  state?: string;
+  category?: string;
+  featured?: boolean;
+}
+
 export interface Student {
   id: number;
   student_id: string;
@@ -164,6 +174,7 @@ export interface Student {
   email: string;
   program: string;
   semester: number;
+  college?: string | null;
 }
 
 export interface AttendanceRecord {
@@ -285,6 +296,7 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   student_id?: string | null;
+  college?: string | null;
   authority_title?: string | null;
   phone?: string | null;
   office?: string | null;
@@ -297,6 +309,7 @@ export interface UserProfile {
 
 export interface AdminProfileUpdatePayload {
   full_name?: string;
+  college?: string;
   authority_title?: string;
   phone?: string;
   office?: string;
@@ -320,6 +333,7 @@ export interface SignupPayload {
   accept_terms: boolean;
   role?: "student" | "administrator";
   student_id?: string;
+  college?: string;
   invite_code?: string;
   authority_title?: string;
   phone?: string;
