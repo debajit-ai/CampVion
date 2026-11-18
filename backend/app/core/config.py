@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "no-reply@campvion.edu"
     FRONTEND_BASE_URL: str = "http://localhost:3000"
     FRONTEND_URL: str = "*"
+    CAMPUS_TZ: str = "Asia/Kolkata"
+    PUBLIC_BASE_URL: str = ""
+    LEAVE_MAX_DAYS: int = 30
+    LIBRARY_OPEN_HOUR: int = 8
+    LIBRARY_CLOSE_HOUR: int = 20
 
     model_config = SettingsConfigDict(
         env_file=(_ENV_FILE_PATH, ".env"),

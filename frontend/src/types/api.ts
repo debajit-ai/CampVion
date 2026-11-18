@@ -81,10 +81,34 @@ export interface LeaveRequestItem {
   student_program?: string | null;
   student_semester?: number | null;
   student_department?: string | null;
+  student_college?: string | null;
+  college?: string | null;
+  student_residence_type?: string | null;
+  student_residence_label?: string | null;
+  student_hostel_block?: string | null;
+  student_room_number?: string | null;
   category: string;
   start_date: string;
   end_date: string;
   days_count: number;
+  from_at?: string | null;
+  to_at?: string | null;
+  from_at_campus?: string | null;
+  to_at_campus?: string | null;
+  from_display?: string | null;
+  to_display?: string | null;
+  from_day?: string | null;
+  to_day?: string | null;
+  campus_tz?: string | null;
+  destination?: string | null;
+  exit_gate?: string | null;
+  entry_gate?: string | null;
+  slip_no?: string | null;
+  verify_code?: string | null;
+  approved_at?: string | null;
+  approved_at_display?: string | null;
+  has_slip?: boolean;
+  can_cancel?: boolean;
   reason: string;
   doc_required?: boolean;
   status: LeaveRequestStatus;
@@ -113,6 +137,86 @@ export interface LeaveRequestItem {
     plan: Task[];
   } | null;
   traces?: LeaveTraceEvent[];
+}
+
+export interface CampusGateItem {
+  id: number;
+  gate_code: string;
+  name: string;
+  location?: string | null;
+  is_default_hostel?: boolean;
+}
+
+export interface DiscussionRoomItem {
+  id: number;
+  room_code: string;
+  name: string;
+  floor: string;
+  capacity: number;
+  amenities: string;
+  fits_capacity: boolean;
+  available: boolean;
+  conflict_reason?: string | null;
+}
+
+export interface HostelBlockRoomItem {
+  id: number;
+  room_code: string;
+  block: string;
+  hostel_name: string;
+  room_number: string;
+  sharing_type: string;
+  ac_type: string;
+  capacity: number;
+  occupied: number;
+  free_beds: number;
+  available: boolean;
+  gender: string;
+}
+
+export interface HostelRoomsResponse {
+  items: HostelBlockRoomItem[];
+  blocks: string[];
+}
+
+export interface AvailableRoomsResponse {
+  items: DiscussionRoomItem[];
+  window_valid: boolean;
+  window_error?: string | null;
+  library_hours: {
+    open_hour: number;
+    close_hour: number;
+    max_hours: number;
+    campus_tz: string;
+  };
+}
+
+export interface LeaveSlipVerifyResponse {
+  status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
+  verification_status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
+  valid: boolean;
+  message: string;
+  slip_no?: string | null;
+  request_code?: string | null;
+  request_type?: string | null;
+  student_name?: string | null;
+  student_id?: string | null;
+  college?: string | null;
+  from_at?: string | null;
+  to_at?: string | null;
+  from_display?: string | null;
+  to_display?: string | null;
+  exit_gate?: string | null;
+  entry_gate?: string | null;
+  approved_by?: string | null;
+  approver_role?: string | null;
+  approved_at_display?: string | null;
+  campus_tz?: string | null;
+}
+
+export interface GuidedCardPayload {
+  type: "leave_details" | "room_booking" | "hostel_change" | "hostel_booking" | "email_authority";
+  prefill?: Record<string, unknown>;
 }
 
 export interface LeaveQueueStats {
@@ -157,6 +261,15 @@ export interface HealthResponse {
   version: string;
 }
 
+export interface CollegeOption {
+  name: string;
+  short?: string;
+  city?: string;
+  state?: string;
+  category?: string;
+  featured?: boolean;
+}
+
 export interface Student {
   id: number;
   student_id: string;
@@ -164,6 +277,7 @@ export interface Student {
   email: string;
   program: string;
   semester: number;
+  college?: string | null;
 }
 
 export interface AttendanceRecord {
@@ -285,6 +399,9 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   student_id?: string | null;
+  college?: string | null;
+  hostel_block?: string | null;
+  hostel_room?: string | null;
   authority_title?: string | null;
   phone?: string | null;
   office?: string | null;
@@ -297,6 +414,7 @@ export interface UserProfile {
 
 export interface AdminProfileUpdatePayload {
   full_name?: string;
+  college?: string;
   authority_title?: string;
   phone?: string;
   office?: string;
@@ -320,6 +438,8 @@ export interface SignupPayload {
   accept_terms: boolean;
   role?: "student" | "administrator";
   student_id?: string;
+  college?: string;
+  display_name?: string;
   invite_code?: string;
   authority_title?: string;
   phone?: string;
@@ -414,6 +534,7 @@ export interface ConversationMessageMetadata {
   awaiting_clarification?: boolean;
   awaiting_confirmation?: boolean;
   confirmation_proposal?: ConfirmationProposal;
+  guided_card?: GuidedCardPayload | null;
   collected_slots?: Record<string, unknown>;
   missing_slots?: string[];
   workflow_executed?: boolean;

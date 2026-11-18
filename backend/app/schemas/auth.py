@@ -17,6 +17,9 @@ class SignupRequest(BaseModel):
     accept_terms: bool = Field(..., description="Must accept Terms of Service and Privacy Policy")
     role: Optional[str] = Field(default="student", description="Requested account role ('student' or 'administrator')")
     student_id: Optional[str] = Field(default=None, max_length=32, description="Optional unique university student ID")
+    college: Optional[str] = Field(default=None, max_length=300, description="Student college or university name")
+    display_name: Optional[str] = Field(default=None, max_length=120, description="Optional preferred display name")
+    displayName: Optional[str] = Field(default=None, max_length=120, description="Optional preferred display name alias")
     invite_code: Optional[str] = Field(default=None, max_length=128, description="Required secret invite code for admin signup")
     authority_title: Optional[str] = Field(default=None, max_length=60, description="Administrator authority title (Warden, Dean, Registrar)")
     phone: Optional[str] = Field(default=None, max_length=32, description="Contact phone number")
@@ -26,6 +29,7 @@ class SignupRequest(BaseModel):
 
 class AdminProfileUpdateRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    college: Optional[str] = Field(default=None, max_length=300)
     authority_title: Optional[str] = Field(default=None, max_length=60)
     phone: Optional[str] = Field(default=None, max_length=32)
     office: Optional[str] = Field(default=None, max_length=160)
@@ -63,6 +67,9 @@ class UserProfileResponse(BaseModel):
     full_name: str
     role: str
     student_id: Optional[str] = None
+    college: Optional[str] = None
+    hostel_block: Optional[str] = None
+    hostel_room: Optional[str] = None
     authority_title: Optional[str] = None
     phone: Optional[str] = None
     office: Optional[str] = None

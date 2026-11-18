@@ -8,17 +8,21 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Download,
+  Eye,
   Loader2,
   Mail,
   Phone,
   RotateCcw,
   ShieldAlert,
+  ShieldCheck,
   UserCheck,
   XCircle,
 } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { LeaveRequestItem } from "../types/api";
 import { useEvents } from "../context/EventsContext";
+import { downloadLeaveSlipPdf, LeaveSlipPreview } from "./LeaveSlipPreview";
 
 function formatWaitingDuration(submittedIso?: string | null): string {
   if (!submittedIso) return "Waiting just now";
@@ -138,7 +142,10 @@ export function RequestStatusCard({
 }: RequestStatusCardProps) {
   const { liveLeaveById, liveLeaveByWorkflowId, upsertLiveLeave } = useEvents();
   const [cancelling, setCancelling] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [showSlipPreview, setShowSlipPreview] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedSummary, setCopiedSummary] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [flashHighlight, setFlashHighlight] = useState(false);
   const [, setTick] = useState(0);
@@ -169,6 +176,12 @@ export function RequestStatusCard({
   }, [req.status]);
 
   const handleCancel = async () => {
+    if (isApproved) {
+      const confirmed = window.confirm(
+        `Cancel approved request ${req.leave_code}? Your gate slip will be revoked and the Warden will be notified.`
+      );
+      if (!confirmed) return;
+    }
     setCancelling(true);
     setActionError(null);
     try {
@@ -181,6 +194,32 @@ export function RequestStatusCard({
       );
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDownloadSlip = async () => {
+    setDownloadingPdf(true);
+    setActionError(null);
+    const err = await downloadLeaveSlipPdf(req);
+    if (err) setActionError(err);
+    setDownloadingPdf(false);
+  };
+
+  const handleCopySummary = async () => {
+    const windowTxt =
+      req.from_display && req.to_display
+        ? `${req.from_display} to ${req.to_display}`
+        : `${req.start_date} to ${req.end_date}`;
+    const gatesTxt = req.exit_gate
+      ? ` | Exit: ${req.exit_gate}, Entry: ${req.entry_gate || req.exit_gate}`
+      : "";
+    const summary = `${req.slip_no || req.leave_code} (${req.status}) — ${req.student_name} (${req.student_id}) | ${windowTxt}${gatesTxt}`;
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 2000);
+    } catch {
+      // Ignore
     }
   };
 
@@ -290,11 +329,13 @@ export function RequestStatusCard({
           <span className="font-medium text-cv-fg flex items-center gap-1 mt-0.5">
             <Calendar className="h-3 w-3 text-cv-accent-ink shrink-0" />
             <span className="truncate">
-              {(req.details && typeof req.details.time_slot === "string" && req.details.time_slot) ||
-                (req.details && typeof req.details.requested_block === "string" && req.details.requested_block) ||
-                (req.start_date === req.end_date
-                  ? req.start_date
-                  : `${req.start_date} \u2192 ${req.end_date}`)}
+              {req.from_display && req.to_display
+                ? `${req.from_display} \u2192 ${req.to_display}`
+                : (req.details && typeof req.details.time_slot === "string" && req.details.time_slot) ||
+                  (req.details && typeof req.details.requested_block === "string" && req.details.requested_block) ||
+                  (req.start_date === req.end_date
+                    ? req.start_date
+                    : `${req.start_date} \u2192 ${req.end_date}`)}
             </span>
           </span>
         </div>
@@ -335,31 +376,84 @@ export function RequestStatusCard({
       </div>
 
       {/* Reason */}
-      <div className="text-xs text-cv-fg-2">
-        <span className="font-semibold text-cv-fg">
-          {req.request_type && req.request_type !== "leave" ? "Summary:" : "Reason:"}
-        </span>{" "}
-        {req.reason}
+      <div className="text-xs text-cv-fg-2 space-y-1">
+        <div>
+          <span className="font-semibold text-cv-fg">
+            {req.request_type && req.request_type !== "leave" ? "Summary:" : "Reason:"}
+          </span>{" "}
+          {req.reason}
+        </div>
+        {(req.from_display || req.destination || req.college) && req.request_type === "leave" && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-cv-fg-2">
+            {req.from_display && req.to_display && (
+              <span>
+                <strong className="text-cv-fg">Schedule (IST):</strong> {req.from_display} &rarr; {req.to_display}
+              </span>
+            )}
+            {req.destination && (
+              <span>
+                <strong className="text-cv-fg">Destination:</strong> {req.destination}
+              </span>
+            )}
+            {req.college && (
+              <span>
+                <strong className="text-cv-fg">College:</strong> {req.college}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Status-specific outcome panel */}
       {isApproved && (
-        <div className="rounded-xl bg-cv-surface border border-cv-success-line p-3 space-y-1.5 text-xs">
-          <div className="flex items-center justify-between gap-2">
+        <div className="rounded-xl bg-cv-surface border border-cv-success-line p-3 space-y-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-semibold text-cv-success flex items-center gap-1.5">
               <UserCheck className="h-3.5 w-3.5" />
               <span>
-                Approved by {req.decided_by_name || req.assigned_approver}
+                Approved by {req.decided_by_name || req.assigned_approver} ({req.approver_role})
               </span>
             </span>
-            {req.decided_at && (
+            {(req.approved_at_display || req.decided_at) && (
               <span className="text-[11px] text-cv-fg-3">
-                {new Date(req.decided_at).toLocaleString()}
+                {req.approved_at_display || (req.decided_at ? new Date(req.decided_at).toLocaleString() : "")}
               </span>
             )}
           </div>
+
+          {(req.exit_gate || req.entry_gate || req.slip_no) && (
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {req.slip_no && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cv-success-soft border border-cv-success-line font-mono text-[11px] font-semibold text-cv-success">
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>{req.slip_no}</span>
+                </span>
+              )}
+              {req.exit_gate && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cv-inset border border-cv-line text-[11px] font-medium text-cv-fg">
+                  <span>Exit: {req.exit_gate}</span>
+                  {req.entry_gate && <span>&bull; Entry: {req.entry_gate}</span>}
+                </span>
+              )}
+              {req.request_type === "hostel_allocation" &&
+                typeof req.details?.allotted_block === "string" &&
+                typeof req.details?.allotted_room === "string" && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cv-inset border border-cv-line text-[11px] font-semibold text-cv-fg">
+                    Allotted Room: {req.details.allotted_block} &bull; Room{" "}
+                    {req.details.allotted_room}
+                  </span>
+                )}
+            </div>
+          )}
+
           {req.decision_comment && (
             <p className="text-cv-fg-2">{req.decision_comment}</p>
+          )}
+
+          {req.request_type === "leave" && !req.from_at && (
+            <p className="text-[11px] text-cv-fg-3 italic">
+              Slip not available for older requests.
+            </p>
           )}
         </div>
       )}
@@ -403,8 +497,8 @@ export function RequestStatusCard({
             : "This request was withdrawn before review."}
         </span>
 
-        <div className="flex items-center gap-2">
-          {isPending && allowCancel && (
+        <div className="flex flex-wrap items-center gap-2">
+          {((isPending || (isApproved && req.can_cancel)) && allowCancel) && (
             <button
               type="button"
               onClick={handleCancel}
@@ -416,7 +510,57 @@ export function RequestStatusCard({
               ) : (
                 <XCircle className="h-3.5 w-3.5" />
               )}
-              <span>Cancel Request</span>
+              <span>{isApproved ? (req.request_type === "leave" ? "Cancel Leave" : "Cancel Booking") : "Cancel Request"}</span>
+            </button>
+          )}
+
+          {isApproved && req.has_slip && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleDownloadSlip()}
+                disabled={downloadingPdf}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                {downloadingPdf ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {req.request_type === "leave"
+                    ? "Download leave slip (PDF)"
+                    : "Download confirmation (PDF)"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSlipPreview(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cv-surface hover:bg-cv-raised border border-cv-line text-xs font-medium text-cv-fg transition cursor-pointer"
+              >
+                <Eye className="h-3.5 w-3.5 text-cv-accent-ink" />
+                <span>View slip</span>
+              </button>
+            </>
+          )}
+
+          {isApproved && (
+            <button
+              type="button"
+              onClick={() => void handleCopySummary()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cv-surface hover:bg-cv-raised border border-cv-line text-xs font-medium text-cv-fg transition cursor-pointer"
+            >
+              {copiedSummary ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-cv-success" />
+                  <span className="text-cv-success">Copied summary</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5 text-cv-accent-ink" />
+                  <span>Copy summary</span>
+                </>
+              )}
             </button>
           )}
 
@@ -456,6 +600,10 @@ export function RequestStatusCard({
           )}
         </div>
       </div>
+
+      {showSlipPreview && (
+        <LeaveSlipPreview request={req} onClose={() => setShowSlipPreview(false)} />
+      )}
     </div>
   );
 }

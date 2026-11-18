@@ -18,6 +18,7 @@ class StudentBase(BaseModel):
     email: EmailStr
     program: str
     semester: int
+    college: Optional[str] = "Lovely Professional University"
 
 class StudentResponse(StudentBase):
     id: int

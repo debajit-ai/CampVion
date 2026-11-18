@@ -1,6 +1,8 @@
+import logging
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.api.router import api_router
@@ -8,6 +10,7 @@ from app.db.database import engine, Base, SessionLocal
 from app.db.migrations import run_migrations
 from app.db.seed_engine import seed_campus_database
 from app.db.seed_users import seed_demo_users
+from app.db.seed_v2 import seed_services_v2_defaults
 from app.db import models
 from app.services import student_service, leave_service
 import app.tools  # Ensure all tools are registered in ToolRegistry
@@ -32,6 +35,9 @@ try:
 
     # Idempotently seed sample pending non-leave requests (library_room, hostel_allocation, certificate)
     leave_service.seed_sample_multi_type_requests(db_init)
+
+    # Idempotently seed Services v2 infrastructure (campus gates, etc.)
+    seed_services_v2_defaults(db_init)
 finally:
     db_init.close()
 
@@ -66,6 +72,18 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_PREFIX)
+
+_main_logger = logging.getLogger("campvion.main")
+
+
+@app.exception_handler(Exception)
+async def global_json_exception_handler(request: Request, exc: Exception):
+    _main_logger.exception("Unhandled server exception on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected server error occurred. Please try again."},
+    )
+
 
 @app.get("/")
 def root():

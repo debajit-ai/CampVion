@@ -288,3 +288,142 @@ def test_forgot_and_reset_password_lifecycle(db):
         == 200
     )
 
+
+def test_colleges_directory_signup_and_profile_update(db):
+    anon = _fresh_client(db)
+
+    # 1. Public /api/colleges returns 100+ institutions with LPU featured first & Cache-Control
+    res_all = anon.get("/api/colleges")
+    assert res_all.status_code == 200
+    assert "max-age=" in res_all.headers.get("cache-control", "")
+    data = res_all.json()
+    assert data["total"] >= 100
+    assert data["items"][0]["name"] == "Lovely Professional University"
+
+    # 2. Query search matches LPU and IIT Bombay
+    res_lpu = anon.get("/api/colleges?q=lpu")
+    assert res_lpu.status_code == 200
+    assert res_lpu.json()["items"][0]["name"] == "Lovely Professional University"
+
+    res_iit = anon.get("/api/colleges?q=IIT Bombay")
+    assert res_iit.status_code == 200
+    assert any("Bombay" in item["name"] for item in res_iit.json()["items"])
+
+    # 3. Student signup sanitizes 'Other' college (strips HTML tags, enforces max 120 chars)
+    long_custom = "<script>alert(1)</script>  " + ("Custom Tech Institute Punjab " * 6)
+    res_signup = anon.post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Priya Nair",
+            "email": "priya.college@university.edu",
+            "password": "CampusUser2026!",
+            "confirm_password": "CampusUser2026!",
+            "accept_terms": True,
+            "role": "student",
+            "college": long_custom,
+        },
+    )
+    assert res_signup.status_code == 201
+    user_data = res_signup.json()["user"]
+    assert "<script>" not in user_data["college"]
+    assert len(user_data["college"]) <= 120
+    assert user_data["college"].startswith("alert(1) Custom Tech Institute")
+
+    # 4. Student can update college via PATCH /api/auth/profile and it persists on Student & /auth/me
+    upd = anon.patch("/api/auth/profile", json={"college": "Indian Institute of Technology Delhi"})
+    assert upd.status_code == 200
+    assert upd.json()["college"] == "Indian Institute of Technology Delhi"
+    me = anon.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["college"] == "Indian Institute of Technology Delhi"
+
+
+def test_signup_blank_student_id_display_name_and_admin_invite_flows(db):
+    from app.core.config import settings
+    from app.db.seed_users import seed_demo_users
+
+    seed_demo_users(db=db, verbose=False)
+    anon = _fresh_client(db)
+
+    # 1. Student signup matching UI form: blank optional student_id & display_name, LPU college
+    res_stu = anon.post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Rhea Sen",
+            "email": "rhea.sen@lpu.edu",
+            "password": "StrongPassword2026!",
+            "confirm_password": "StrongPassword2026!",
+            "accept_terms": True,
+            "role": "student",
+            "student_id": "",
+            "display_name": "",
+            "college": "Lovely Professional University",
+        },
+    )
+    assert res_stu.status_code == 201, res_stu.text
+    stu_data = res_stu.json()["user"]
+    assert stu_data["role"] == "student"
+    assert stu_data["student_id"].startswith("S")
+    assert stu_data["college"] == "Lovely Professional University"
+
+    # Duplicate email returns clean 409 JSON message
+    res_dup = anon.post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Rhea Sen",
+            "email": "rhea.sen@lpu.edu",
+            "password": "StrongPassword2026!",
+            "confirm_password": "StrongPassword2026!",
+            "accept_terms": True,
+            "role": "student",
+            "college": "Lovely Professional University",
+        },
+    )
+    assert res_dup.status_code == 409
+    assert "already exists" in res_dup.json()["detail"].lower()
+
+    # 2. Both demo accounts sign in cleanly
+    for demo_email, demo_pw, exp_role in [
+        ("alice@lpu.edu", "CampVion@2026", "student"),
+        ("admin@campvion.edu", "Admin@CampVion2026", "administrator"),
+    ]:
+        res_login = _fresh_client(db).post(
+            "/api/auth/login",
+            json={"email": demo_email, "password": demo_pw, "remember_me": False},
+        )
+        assert res_login.status_code == 200, res_login.text
+        assert res_login.json()["user"]["role"] == exp_role
+
+    # 3. Admin signup without invite code -> 403; with invite code -> 201
+    res_adm_no = _fresh_client(db).post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Admin Rejected",
+            "email": "adm.reject@campvion.edu",
+            "password": "StrongPassword2026!",
+            "confirm_password": "StrongPassword2026!",
+            "accept_terms": True,
+            "role": "administrator",
+            "authority_title": "Warden",
+        },
+    )
+    assert res_adm_no.status_code == 403
+
+    res_adm_ok = _fresh_client(db).post(
+        "/api/auth/signup",
+        json={
+            "full_name": "Admin Accepted",
+            "email": "adm.accept@campvion.edu",
+            "password": "StrongPassword2026!",
+            "confirm_password": "StrongPassword2026!",
+            "accept_terms": True,
+            "role": "administrator",
+            "invite_code": settings.ADMIN_INVITE_CODE,
+            "authority_title": "Warden",
+        },
+    )
+    assert res_adm_ok.status_code == 201, res_adm_ok.text
+    assert res_adm_ok.json()["user"]["role"] == "administrator"
+
+
+

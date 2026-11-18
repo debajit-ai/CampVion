@@ -19,8 +19,21 @@ import {
   XCircle,
 } from "lucide-react";
 import { apiClient, ApiError } from "../lib/api";
-import { LeaveQueueStats, LeaveRequestItem } from "../types/api";
+import {
+  CampusGateItem,
+  DiscussionRoomItem,
+  HostelBlockRoomItem,
+  LeaveQueueStats,
+  LeaveRequestItem,
+} from "../types/api";
 import { useEvents } from "../context/EventsContext";
+
+const FALLBACK_GATES: CampusGateItem[] = [
+  { id: 1, gate_code: "GATE-1", name: "Gate 1 - Main Gate", is_default_hostel: false },
+  { id: 2, gate_code: "GATE-2", name: "Gate 2 - Hostel Gate", is_default_hostel: true },
+  { id: 3, gate_code: "GATE-3", name: "Gate 3 - Library Gate", is_default_hostel: false },
+  { id: 4, gate_code: "GATE-4", name: "Gate 4 - Sports Complex Gate", is_default_hostel: false },
+];
 
 function getWaitingMinutes(submittedIso?: string | null): number {
   if (!submittedIso) return 0;
@@ -79,12 +92,99 @@ export function AdminApprovalsDashboard({
   const [drawerItem, setDrawerItem] = useState<LeaveRequestItem | null>(null);
   const [drawerLoading, setDrawerLoading] = useState<boolean>(false);
 
+  const [gates, setGates] = useState<CampusGateItem[]>(FALLBACK_GATES);
+  const [discussionRooms, setDiscussionRooms] = useState<DiscussionRoomItem[]>([]);
+  const [hostelRooms, setHostelRooms] = useState<HostelBlockRoomItem[]>([]);
   const [approveModalItem, setApproveModalItem] = useState<LeaveRequestItem | null>(null);
   const [approveComment, setApproveComment] = useState<string>("");
+  const [approveExitGate, setApproveExitGate] = useState<string>("");
+  const [approveEntryGate, setApproveEntryGate] = useState<string>("");
+  const [approveRoomId, setApproveRoomId] = useState<string>("");
+  const [approveHostelRoomCode, setApproveHostelRoomCode] = useState<string>("");
   const [rejectModalItem, setRejectModalItem] = useState<LeaveRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState<string>("");
   const [rejectNote, setRejectNote] = useState<string>("");
   const [decisionBusy, setDecisionBusy] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .listCampusGates()
+      .then((res) => {
+        if (active && res.items?.length > 0) setGates(res.items);
+      })
+      .catch(() => {
+        // fallback gates remain active
+      });
+    apiClient
+      .listAvailableRooms()
+      .then((res) => {
+        if (active && res.items?.length > 0) setDiscussionRooms(res.items);
+      })
+      .catch(() => {
+        // optional
+      });
+    apiClient
+      .listHostelRooms({ available_only: true })
+      .then((res) => {
+        if (active && res.items) setHostelRooms(res.items);
+      })
+      .catch(() => {
+        // optional
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const openApproveModal = useCallback(
+    (item: LeaveRequestItem) => {
+      const isLeave = (item.request_type || "leave").toLowerCase() === "leave";
+      if (isLeave) {
+        const isHosteller =
+          (item.student_residence_type || "").toLowerCase() === "hosteller" ||
+          Boolean(item.student_hostel_block);
+        const preferred =
+          (isHosteller
+            ? gates.find((g) => g.is_default_hostel)?.name
+            : gates.find((g) => g.gate_code === "GATE-1")?.name) ||
+          (isHosteller ? "Gate 2 - Hostel Gate" : "Gate 1 - Main Gate");
+        setApproveExitGate(preferred);
+        setApproveEntryGate(preferred);
+      } else if ((item.request_type || "").toLowerCase() === "library_room") {
+        const curRoomId = item.details?.room_id;
+        setApproveRoomId(curRoomId ? String(curRoomId) : "");
+        setApproveExitGate("");
+        setApproveEntryGate("");
+        setApproveHostelRoomCode("");
+      } else if ((item.request_type || "").toLowerCase() === "hostel_allocation") {
+        const prefBlk = String(
+          item.details?.preferred_block || item.details?.requested_block || ""
+        );
+        const matchRoom =
+          hostelRooms.find((r) => r.block === prefBlk && r.free_beds > 0) ||
+          hostelRooms.find((r) => r.free_beds > 0);
+        setApproveHostelRoomCode(matchRoom ? matchRoom.room_code : "");
+        setApproveExitGate("");
+        setApproveEntryGate("");
+        setApproveRoomId("");
+        apiClient
+          .listHostelRooms({ available_only: true })
+          .then((res) => {
+            if (res.items) setHostelRooms(res.items);
+          })
+          .catch(() => {});
+      } else {
+        setApproveExitGate("");
+        setApproveEntryGate("");
+        setApproveRoomId("");
+        setApproveHostelRoomCode("");
+      }
+      setApproveComment("");
+      setApproveModalItem(item);
+    },
+    [gates, hostelRooms]
+  );
 
   const [, setClockTick] = useState(0);
   useEffect(() => {
@@ -186,6 +286,8 @@ export function AdminApprovalsDashboard({
 
   const handleConfirmApprove = async () => {
     if (!approveModalItem || decisionBusy) return;
+    const isLeaveType = (approveModalItem.request_type || "leave").toLowerCase() === "leave";
+    if (isLeaveType && !approveExitGate.trim()) return;
     setDecisionBusy(true);
     setBanner(null);
     const target = approveModalItem;
@@ -194,9 +296,20 @@ export function AdminApprovalsDashboard({
     setItems((prev) => prev.filter((item) => item.id !== target.id || tab !== "PENDING_APPROVAL"));
 
     try {
+      const isLibrary = (target.request_type || "").toLowerCase() === "library_room";
+      const isHostel = (target.request_type || "").toLowerCase() === "hostel_allocation";
+      const parsedRoomId = isLibrary && approveRoomId ? Number(approveRoomId) : undefined;
+      const chosenHostel = isHostel
+        ? hostelRooms.find((r) => r.room_code === approveHostelRoomCode)
+        : undefined;
       const res = await apiClient.approveLeaveRequest(target.id, {
         comment: approveComment.trim() || undefined,
         version: target.version,
+        exit_gate: isLeaveType ? approveExitGate.trim() : undefined,
+        entry_gate: isLeaveType ? (approveEntryGate.trim() || approveExitGate.trim()) : undefined,
+        room_id: parsedRoomId,
+        hostel_block: chosenHostel?.block,
+        hostel_room: chosenHostel?.room_number,
       });
       upsertLiveLeave(res.request);
       if (drawerItem?.id === target.id) {
@@ -645,10 +758,7 @@ export function AdminApprovalsDashboard({
                       <>
                         <button
                           type="button"
-                          onClick={() => {
-                            setApproveComment("");
-                            setApproveModalItem(item);
-                          }}
+                          onClick={() => openApproveModal(item)}
                           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cv-success-solid hover:opacity-90 text-white text-xs font-semibold transition cursor-pointer shadow-2xs"
                         >
                           <Check className="h-3.5 w-3.5" />
@@ -812,10 +922,7 @@ export function AdminApprovalsDashboard({
                     <div className="flex items-center gap-3 pt-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setApproveComment("");
-                          setApproveModalItem(drawerItem);
-                        }}
+                        onClick={() => openApproveModal(drawerItem)}
                         className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-cv-success-solid hover:opacity-90 text-white text-xs font-semibold transition cursor-pointer"
                       >
                         <Check className="h-4 w-4" />
@@ -912,10 +1019,94 @@ export function AdminApprovalsDashboard({
 
             <p className="text-xs text-cv-fg-2">
               Authorize {approveModalItem.days_count} day(s) of{" "}
-              <span className="capitalize">{approveModalItem.category}</span> leave for{" "}
-              <span className="font-semibold text-cv-fg">{approveModalItem.student_name}</span> (
-              {approveModalItem.start_date} &rarr; {approveModalItem.end_date}). The student will receive an instant notification.
+              <span className="capitalize">{approveModalItem.category}</span>{" "}
+              {approveModalItem.request_type && approveModalItem.request_type !== "leave"
+                ? approveModalItem.request_type_label || "request"
+                : "leave"}{" "}
+              for <span className="font-semibold text-cv-fg">{approveModalItem.student_name}</span> (
+              {approveModalItem.from_display && approveModalItem.to_display
+                ? `${approveModalItem.from_display} \u2192 ${approveModalItem.to_display}`
+                : `${approveModalItem.start_date} \u2192 ${approveModalItem.end_date}`}
+              ). The student will receive an instant notification.
             </p>
+
+            {(approveModalItem.request_type || "leave").toLowerCase() === "leave" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-cv-inset border border-cv-line p-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-cv-fg block">
+                    Exit Gate <span className="text-cv-error">*</span>
+                  </label>
+                  <select
+                    value={approveExitGate}
+                    onChange={(e) => {
+                      const nextGate = e.target.value;
+                      setApproveExitGate(nextGate);
+                      if (!approveEntryGate || approveEntryGate === approveExitGate) {
+                        setApproveEntryGate(nextGate);
+                      }
+                    }}
+                    aria-label="Exit Gate"
+                    className="w-full rounded-lg bg-cv-surface border border-cv-line px-2.5 py-2 text-xs text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                  >
+                    <option value="">Select exit gate...</option>
+                    {gates.map((g) => (
+                      <option key={g.gate_code} value={g.name}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-cv-fg block">
+                    Entry Gate <span className="text-cv-error">*</span>
+                  </label>
+                  <select
+                    value={approveEntryGate}
+                    onChange={(e) => setApproveEntryGate(e.target.value)}
+                    aria-label="Entry Gate"
+                    className="w-full rounded-lg bg-cv-surface border border-cv-line px-2.5 py-2 text-xs text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                  >
+                    <option value="">Select entry gate...</option>
+                    {gates.map((g) => (
+                      <option key={g.gate_code} value={g.name}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {(approveModalItem.request_type || "").toLowerCase() === "library_room" &&
+              discussionRooms.length > 0 && (
+                <div className="space-y-1 rounded-xl bg-cv-inset border border-cv-line p-3">
+                  <label className="text-[11px] font-medium text-cv-fg block">
+                    Confirm / Reassign Discussion Room <span className="text-cv-fg-3">(optional)</span>
+                  </label>
+                  <select
+                    value={approveRoomId}
+                    onChange={(e) => setApproveRoomId(e.target.value)}
+                    aria-label="Discussion Room"
+                    className="w-full rounded-lg bg-cv-surface border border-cv-line px-2.5 py-2 text-xs text-cv-fg focus:outline-none focus:border-cv-accent-line"
+                  >
+                    <option value="">
+                      Keep requested room (
+                      {String(
+                        approveModalItem.details?.room_name ||
+                          approveModalItem.details?.room ||
+                          "Requested Room"
+                      )}
+                      )
+                    </option>
+                    {discussionRooms.map((rm) => (
+                      <option key={rm.id} value={String(rm.id)}>
+                        {rm.name} ({rm.floor}, {rm.capacity} seats)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-cv-fg">
@@ -941,7 +1132,11 @@ export function AdminApprovalsDashboard({
               </button>
               <button
                 type="button"
-                disabled={decisionBusy}
+                disabled={
+                  decisionBusy ||
+                  ((approveModalItem.request_type || "leave").toLowerCase() === "leave" &&
+                    (!approveExitGate.trim() || !approveEntryGate.trim()))
+                }
                 onClick={() => void handleConfirmApprove()}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cv-success-solid hover:opacity-90 text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
               >

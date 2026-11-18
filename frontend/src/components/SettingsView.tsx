@@ -22,6 +22,7 @@ import { DEFAULT_API_BASE_URL, apiClient } from "../lib/api";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { IS_DEMO_MODE, isAdminRole } from "../lib/authRedirect";
+import { CollegeSelect } from "./CollegeSelect";
 
 const ENTER_STORAGE_KEY = "campvion_enter_to_send";
 const EVENT_ENTER_CHANGE = "campvion_enter_change";
@@ -111,6 +112,35 @@ export function SettingsView({
   const [officeHours, setOfficeHours] = useState(user?.office_hours || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileNotice, setProfileNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [studentCollege, setStudentCollege] = useState(
+    user?.college || "Lovely Professional University"
+  );
+  const [savingCollege, setSavingCollege] = useState(false);
+  const [collegeNotice, setCollegeNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  const handleSaveStudentCollege = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentCollege.trim()) {
+      setCollegeNotice({ type: "err", text: "Please select or enter a college name." });
+      return;
+    }
+    setSavingCollege(true);
+    setCollegeNotice(null);
+    try {
+      const updated = await apiClient.updateAdminProfile({
+        college: studentCollege.trim(),
+      });
+      updateLocalUser(updated);
+      setCollegeNotice({ type: "ok", text: `Institution updated to ${updated.college || studentCollege}.` });
+    } catch (err: unknown) {
+      setCollegeNotice({
+        type: "err",
+        text: err instanceof Error ? err.message : "Failed to save institution.",
+      });
+    } finally {
+      setSavingCollege(false);
+    }
+  };
 
   const handleSaveAdminProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -543,6 +573,51 @@ export function SettingsView({
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Student Institution / College Selector */}
+            {!isAdmin && (
+              <form onSubmit={handleSaveStudentCollege} className="p-4 space-y-3">
+                <div>
+                  <span className="text-xs font-semibold text-cv-fg block">
+                    College / University
+                  </span>
+                  <span className="text-xs text-cv-fg-2 block mt-0.5">
+                    Printed on your approved leave permission slips and gate passes.
+                  </span>
+                </div>
+
+                {collegeNotice && (
+                  <div
+                    className={`text-xs px-3 py-2 rounded-lg border ${
+                      collegeNotice.type === "ok"
+                        ? "bg-cv-success-soft border-cv-success-line text-cv-success"
+                        : "bg-cv-error-soft border-cv-error-line text-cv-error"
+                    }`}
+                  >
+                    {collegeNotice.text}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row sm:items-start gap-2.5">
+                  <div className="flex-1 min-w-0">
+                    <CollegeSelect
+                      id="settings-college"
+                      variant="workspace"
+                      value={studentCollege}
+                      onChange={setStudentCollege}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingCollege}
+                    className="px-4 py-2 rounded-xl bg-cv-accent hover:bg-cv-accent-hover text-cv-on-accent text-xs font-semibold cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {savingCollege ? "Saving..." : "Save College"}
+                  </button>
+                </div>
+              </form>
             )}
 
             {/* Admin Authority Profile Editor */}

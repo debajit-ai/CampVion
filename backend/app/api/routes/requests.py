@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.agent.agent import AXORAAgent
+from app.core import timezone_utils
 from app.core.security import (
     auth_rate_limiter,
     is_admin_role,
@@ -22,22 +23,37 @@ from app.core.security import (
 )
 from app.db import models
 from app.db.database import get_db
-from app.services import leave_service, student_service
+from app.services import leave_service, pdf_service, student_service
 
 logger = logging.getLogger("campvion.requests")
 router = APIRouter()
 
 
 class CreateLeaveBody(BaseModel):
-    days: int = Field(..., ge=1, le=30, description="Number of leave days requested")
+    days: int = Field(default=1, ge=1, le=30, description="Number of leave days requested")
     start_date: Optional[str] = Field(default=None, max_length=64)
     category: str = Field(default="personal", max_length=40)
     reason: str = Field(..., min_length=3, max_length=500)
+    from_at: Optional[str] = Field(default=None, max_length=64)
+    to_at: Optional[str] = Field(default=None, max_length=64)
+    from_date: Optional[str] = Field(default=None, max_length=64)
+    from_time: Optional[str] = Field(default=None, max_length=32)
+    to_date: Optional[str] = Field(default=None, max_length=64)
+    to_time: Optional[str] = Field(default=None, max_length=32)
+    destination: Optional[str] = Field(default=None, max_length=200)
+    college: Optional[str] = Field(default=None, max_length=120)
+    idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
 class ApproveBody(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
     version: Optional[int] = Field(default=None, ge=1)
+    exit_gate: Optional[str] = Field(default=None, max_length=120)
+    entry_gate: Optional[str] = Field(default=None, max_length=120)
+    room_id: Optional[int] = Field(default=None, ge=1)
+    room_name: Optional[str] = Field(default=None, max_length=120)
+    hostel_block: Optional[str] = Field(default=None, max_length=60)
+    hostel_room: Optional[str] = Field(default=None, max_length=40)
 
 
 class RejectBody(BaseModel):
@@ -272,6 +288,24 @@ class CreateCampusRequestBody(BaseModel):
     days: int = Field(default=1, ge=1, le=60)
     reason: str = Field(..., min_length=3, max_length=600)
     details: Optional[Dict[str, Any]] = Field(default=None)
+    from_at: Optional[str] = Field(default=None, max_length=64)
+    to_at: Optional[str] = Field(default=None, max_length=64)
+    from_date: Optional[str] = Field(default=None, max_length=64)
+    from_time: Optional[str] = Field(default=None, max_length=32)
+    to_date: Optional[str] = Field(default=None, max_length=64)
+    to_time: Optional[str] = Field(default=None, max_length=32)
+    destination: Optional[str] = Field(default=None, max_length=200)
+    college: Optional[str] = Field(default=None, max_length=120)
+    room_id: Optional[int] = Field(default=None, ge=1)
+    room_name: Optional[str] = Field(default=None, max_length=120)
+    hostel_block: Optional[str] = Field(default=None, max_length=60)
+    hostel_room: Optional[str] = Field(default=None, max_length=40)
+    people: Optional[int] = Field(default=None, ge=1, le=20)
+    sub_type: Optional[str] = Field(default=None, max_length=40)
+    preferred_block: Optional[str] = Field(default=None, max_length=60)
+    sharing_type: Optional[str] = Field(default=None, max_length=32)
+    ac_type: Optional[str] = Field(default=None, max_length=20)
+    idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
 @router.post("/submit", status_code=status.HTTP_201_CREATED)
@@ -290,12 +324,22 @@ def submit_generic_campus_request(
 
     req_type = (payload.request_type or "").strip().lower()
     if req_type == "leave":
+        d = payload.details or {}
         return submit_leave_request(
             payload=CreateLeaveBody(
                 days=payload.days,
                 start_date=payload.start_date,
                 category=payload.category or "personal",
                 reason=payload.reason,
+                from_at=payload.from_at or d.get("from_at"),
+                to_at=payload.to_at or d.get("to_at"),
+                from_date=payload.from_date or d.get("from_date"),
+                from_time=payload.from_time or d.get("from_time"),
+                to_date=payload.to_date or d.get("to_date"),
+                to_time=payload.to_time or d.get("to_time"),
+                destination=payload.destination or d.get("destination"),
+                college=payload.college or d.get("college"),
+                idempotency_key=payload.idempotency_key,
             ),
             request=request,
             user=user,
@@ -312,16 +356,112 @@ def submit_generic_campus_request(
     if not student:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
 
+    det = dict(payload.details or {})
+    from_utc_val = None
+    to_utc_val = None
+    eff_title = payload.title
+
+    if req_type == "library_room":
+        r_id = payload.room_id or det.get("room_id")
+        r_code = det.get("room_code")
+        r_name = payload.room_name or det.get("room_name") or det.get("room")
+        d_date = payload.from_date or payload.start_date or det.get("date")
+        d_start = payload.from_time or det.get("start_time")
+        d_end = payload.to_time or det.get("end_time")
+        has_room_v2 = bool(r_id or r_code or payload.from_at or (d_date and d_start and d_end))
+        if has_room_v2:
+            from_utc_val = timezone_utils.parse_iso_or_parts_to_utc(
+                iso_value=payload.from_at or det.get("from_at"),
+                date_value=d_date,
+                time_value=d_start,
+            )
+            to_utc_val = timezone_utils.parse_iso_or_parts_to_utc(
+                iso_value=payload.to_at or det.get("to_at"),
+                date_value=payload.to_date or d_date,
+                time_value=d_end,
+            )
+            if not from_utc_val or not to_utc_val:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Please select valid date, start time, and end time for the discussion room.",
+                )
+            people_cnt = int(payload.people or det.get("people") or 2)
+            room_obj = leave_service.validate_library_booking_v2(
+                db,
+                student_id=student.student_id,
+                from_utc=from_utc_val,
+                to_utc=to_utc_val,
+                room_id=int(r_id) if r_id is not None else None,
+                room_code=str(r_code) if r_code else None,
+                room_name=str(r_name) if r_name else None,
+                people=people_cnt,
+            )
+            slot_label = (
+                f"{timezone_utils.format_campus_time_12h(from_utc_val)} - "
+                f"{timezone_utils.format_campus_time_12h(to_utc_val)}"
+            )
+            det.update(
+                {
+                    "room_id": room_obj.id,
+                    "room_code": room_obj.room_code,
+                    "room_name": room_obj.name,
+                    "room": room_obj.name,
+                    "floor": room_obj.floor,
+                    "capacity": room_obj.capacity,
+                    "amenities": room_obj.amenities or "",
+                    "people": people_cnt,
+                    "date": timezone_utils.to_campus(from_utc_val).date().isoformat(),
+                    "start_time": timezone_utils.to_campus(from_utc_val).strftime("%H:%M"),
+                    "end_time": timezone_utils.to_campus(to_utc_val).strftime("%H:%M"),
+                    "time_slot": slot_label,
+                    "purpose": payload.reason.strip(),
+                }
+            )
+            eff_title = payload.title or f"{room_obj.name} ({slot_label})"
+
+    elif req_type == "hostel_allocation":
+        hst_sub = (payload.sub_type or det.get("sub_type") or "").strip().lower()
+        pref_blk = (payload.preferred_block or det.get("preferred_block") or det.get("requested_block") or "").strip()
+        if hst_sub in {"room_change", "room_booking"} or pref_blk or payload.sharing_type:
+            resolved_sub = hst_sub if hst_sub in {"room_change", "room_booking"} else "room_booking"
+            leave_service.validate_hostel_request_v2(
+                db,
+                student=student,
+                sub_type=resolved_sub,
+                reason=payload.reason,
+            )
+            cur_blk = getattr(student, "hostel_block", None) or "Unassigned"
+            cur_rm = getattr(student, "hostel_room", None) or getattr(student, "room_number", None) or "Unassigned"
+            det.update(
+                {
+                    "sub_type": resolved_sub,
+                    "current_block": det.get("current_block") or cur_blk,
+                    "current_room": det.get("current_room") or cur_rm,
+                    "preferred_block": pref_blk or "Any Available Block",
+                    "requested_block": pref_blk or "Any Available Block",
+                    "sharing_type": (payload.sharing_type or det.get("sharing_type") or "double").lower(),
+                    "ac_type": payload.ac_type or det.get("ac_type") or "AC",
+                }
+            )
+            eff_title = payload.title or (
+                "Hostel Room Change Request"
+                if resolved_sub == "room_change"
+                else "Hostel Room Booking Request"
+            )
+
     created = leave_service.create_campus_request_at_gate(
         db,
         student=student,
         request_type=req_type,
-        title=payload.title,
+        title=eff_title,
         category=payload.category or req_type,
-        start_date_hint=payload.start_date,
+        start_date_hint=payload.start_date or det.get("date"),
         days_count=payload.days,
+        from_at=from_utc_val,
+        to_at=to_utc_val,
+        college_snapshot=payload.college or det.get("college"),
         reason=payload.reason.strip(),
-        details=payload.details or {},
+        details=det,
         actor_user=user,
         ip_address=_client_ip(request),
     )
@@ -347,9 +487,64 @@ def submit_leave_request(
     if not student:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
 
+    has_v2_window = any(
+        bool(v)
+        for v in (
+            payload.from_at,
+            payload.to_at,
+            payload.from_date,
+            payload.from_time,
+            payload.to_date,
+            payload.to_time,
+        )
+    )
+    leave_v2_fields: Dict[str, Any] = {}
+    effective_days = payload.days
     start_hint = payload.start_date or "tomorrow"
+
+    if has_v2_window:
+        from_utc = timezone_utils.parse_iso_or_parts_to_utc(
+            iso_value=payload.from_at,
+            date_value=payload.from_date,
+            time_value=payload.from_time,
+        )
+        to_utc = timezone_utils.parse_iso_or_parts_to_utc(
+            iso_value=payload.to_at,
+            date_value=payload.to_date or payload.from_date,
+            time_value=payload.to_time,
+        )
+        if not from_utc or not to_utc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please provide valid departure and return dates and times.",
+            )
+        leave_service.validate_leave_window_v2(
+            db,
+            student_id=student.student_id,
+            from_at=from_utc,
+            to_at=to_utc,
+            category=payload.category,
+            reason=payload.reason,
+            college=payload.college,
+        )
+        from_c = timezone_utils.to_campus(from_utc)
+        to_c = timezone_utils.to_campus(to_utc)
+        start_hint = from_c.date().isoformat()
+        effective_days = max(1, (to_c.date() - from_c.date()).days + 1)
+        leave_v2_fields = {
+            "from_at": from_utc,
+            "to_at": to_utc,
+            "destination": payload.destination,
+            "college_snapshot": payload.college or getattr(student, "college", None),
+        }
+    elif payload.college or payload.destination:
+        leave_v2_fields = {
+            "destination": payload.destination,
+            "college_snapshot": payload.college or getattr(student, "college", None),
+        }
+
     goal_text = (
-        f"Apply for {payload.category.strip()} leave for {payload.days} days "
+        f"Apply for {payload.category.strip()} leave for {effective_days} days "
         f"starting {start_hint} because {payload.reason.strip()}"
     )
 
@@ -360,6 +555,7 @@ def submit_leave_request(
         actor_user=user,
         enforce_overlap_check=True,
         ip_address=_client_ip(request),
+        leave_v2_fields=leave_v2_fields,
     )
     result = agent.start(student.student_id, goal_text)
     state = agent.get_state(result.request_id)
@@ -402,6 +598,12 @@ def approve_leave(
         actor_user=user,
         comment=payload.comment if payload else None,
         expected_version=payload.version if payload else None,
+        exit_gate=payload.exit_gate if payload else None,
+        entry_gate=payload.entry_gate if payload else None,
+        room_id=payload.room_id if payload else None,
+        room_name=payload.room_name if payload else None,
+        hostel_block=payload.hostel_block if payload else None,
+        hostel_room=payload.hostel_room if payload else None,
         ip_address=_client_ip(request) if request else None,
     )
     return {
@@ -452,3 +654,65 @@ def cancel_leave(
         ip_address=_client_ip(request) if request else None,
     )
     return {"request": leave_payload}
+
+
+@router.get("/{leave_id}/slip.pdf")
+def download_request_slip_pdf(
+    leave_id: int,
+    request: Request,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    leave = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+
+    is_admin = (user.role or "").lower() in leave_service.ADMIN_ROLES
+    if not is_admin:
+        student_service.ensure_student_for_user(db, user)
+        if leave.student_id != user.student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you can only download your own slips.",
+            )
+
+    status_norm = leave_service.normalize_leave_status(leave.status)
+    if status_norm != leave_service.STATUS_APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Official slip is only issued for approved requests.",
+        )
+
+    req_type = (getattr(leave, "request_type", None) or "leave").lower()
+    if req_type == "leave" and (not getattr(leave, "from_at", None) or not getattr(leave, "to_at", None)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Slip not available for older requests.",
+        )
+
+    slip_dirty = False
+    if not getattr(leave, "slip_no", None):
+        leave.slip_no = leave_service.generate_unique_slip_no(db)
+        slip_dirty = True
+    if not getattr(leave, "verify_code", None):
+        leave.verify_code = leave_service.generate_unique_verify_code(db)
+        slip_dirty = True
+    if slip_dirty:
+        db.commit()
+        db.refresh(leave)
+
+    serialized = leave_service.serialize_leave_request(db, leave, include_workflow=False)
+    verify_code = serialized.get("verify_code") or leave.verify_code
+    base_url = timezone_utils.resolve_public_base_url(request)
+    verify_url = f"{base_url}/verify/{verify_code}"
+
+    pdf_bytes = pdf_service.generate_leave_slip_pdf(leave_data=serialized, verify_url=verify_url)
+    safe_name = (serialized.get("slip_no") or serialized.get("leave_code") or f"slip-{leave.id}").replace("/", "-")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="CampVion-{safe_name}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )

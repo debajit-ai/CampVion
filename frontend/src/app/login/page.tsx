@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AuthShell } from "../../components/AuthShell";
 import { useAuth } from "../../context/AuthContext";
+import { toUserFacingError } from "../../lib/api";
 import {
   DEMO_ACCOUNTS,
   getWorkspaceRedirectPath,
@@ -78,11 +79,7 @@ export default function LoginPage() {
         router.push(destination);
       }, 320);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Invalid email or password.";
-      setError(msg);
+      setError(toUserFacingError(err, "Invalid email or password."));
       setSubmitting(false);
     }
   };

@@ -21,7 +21,9 @@ import {
   User,
 } from "lucide-react";
 import { AuthShell } from "../../components/AuthShell";
+import { CollegeSelect } from "../../components/CollegeSelect";
 import { useAuth } from "../../context/AuthContext";
+import { toUserFacingError } from "../../lib/api";
 import { getWorkspaceRedirectPath } from "../../lib/authRedirect";
 import { useAuthTheme } from "../../lib/landingThemeStore";
 
@@ -42,6 +44,7 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [studentIdInput, setStudentIdInput] = useState("");
+  const [collegeInput, setCollegeInput] = useState("Lovely Professional University");
   const [inviteCode, setInviteCode] = useState("");
   const [authorityTitle, setAuthorityTitle] = useState<"Warden" | "Dean" | "Registrar">("Warden");
   const [phone, setPhone] = useState("");
@@ -97,6 +100,10 @@ export default function SignupPage() {
       setError("Passwords do not match.");
       return;
     }
+    if (roleChoice === "student" && !collegeInput.trim()) {
+      setError("Please select or enter your college / university name.");
+      return;
+    }
     if (roleChoice === "administrator" && !inviteCode.trim()) {
       setError("Administrator registration requires a valid invite code.");
       return;
@@ -124,6 +131,12 @@ export default function SignupPage() {
         ...(roleChoice === "student" && studentIdInput.trim()
           ? { student_id: studentIdInput.trim().toUpperCase() }
           : {}),
+        ...(roleChoice === "student"
+          ? {
+              college: collegeInput.trim(),
+              display_name: displayNameInput.trim() || undefined,
+            }
+          : {}),
         ...(roleChoice === "administrator"
           ? {
               invite_code: inviteCode.trim(),
@@ -138,11 +151,9 @@ export default function SignupPage() {
         router.push(destination);
       }, 320);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Unable to create account. Please verify your details.";
-      setError(msg);
+      setError(
+        toUserFacingError(err, "Unable to create account. Please verify your details.")
+      );
       setSubmitting(false);
     }
   };
@@ -326,6 +337,24 @@ export default function SignupPage() {
                   className={`${inputClass} pr-3.5`}
                 />
               </div>
+            </div>
+
+            {/* College / University Selector (Required for students) */}
+            <div>
+              <label htmlFor="signup-college" className={labelClass}>
+                College / University <span className="text-rose-400">*</span>
+              </label>
+              <CollegeSelect
+                id="signup-college"
+                variant="auth"
+                isDark={isDark}
+                required
+                value={collegeInput}
+                onChange={(val) => {
+                  setCollegeInput(val);
+                  if (error) setError(null);
+                }}
+              />
             </div>
 
             {/* Preferred Display Name */}

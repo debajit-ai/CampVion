@@ -33,6 +33,9 @@ import {
   Task,
 } from "../types/api";
 import { HumanApprovalCenter } from "./HumanApprovalCenter";
+import { HostelServiceCard, HostelServicePrefill } from "./HostelServiceCard";
+import { LeaveDetailsCard, LeaveGuidedPrefill } from "./LeaveDetailsCard";
+import { RoomBookingCard, RoomBookingPrefill } from "./RoomBookingCard";
 import { RequestStatusCard } from "./RequestStatusCard";
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { useTheme } from "../context/ThemeContext";
@@ -472,16 +475,16 @@ export function ConversationFeed({
     }
     return [
       {
-        label: "Check my attendance",
-        prompt: "Check my overall attendance",
-      },
-      {
         label: "Apply for leave",
         prompt: "I want to apply for leave",
       },
       {
-        label: "Attendance policy",
-        prompt: "What happens if my attendance falls below 75%?",
+        label: "Book a discussion room",
+        prompt: "Book a discussion room",
+      },
+      {
+        label: "Check my attendance",
+        prompt: "Check my overall attendance",
       },
     ];
   }, [isAdmin]);
@@ -846,6 +849,34 @@ export function ConversationFeed({
                   isActive={isPendingProposal}
                   isLoading={isLoading}
                   onConfirmAction={onConfirmAction}
+                />
+              )}
+
+              {/* Guided Interactive Service Card (Leave Dates & Times / Discussion Room) */}
+              {isLastMessage && meta.guided_card?.type === "leave_details" && !isAdmin && (
+                <LeaveDetailsCard
+                  prefill={(meta.guided_card.prefill || {}) as LeaveGuidedPrefill}
+                  onSubmitted={(leave) => upsertLiveLeave(leave)}
+                />
+              )}
+              {isLastMessage && meta.guided_card?.type === "room_booking" && !isAdmin && (
+                <RoomBookingCard
+                  prefill={(meta.guided_card.prefill || {}) as RoomBookingPrefill}
+                  onSubmitted={(req) => upsertLiveLeave(req)}
+                />
+              )}
+              {isLastMessage && meta.guided_card?.type === "hostel_change" && !isAdmin && (
+                <HostelServiceCard
+                  mode="room_change"
+                  prefill={(meta.guided_card.prefill || {}) as HostelServicePrefill}
+                  onSubmitted={(req) => upsertLiveLeave(req)}
+                />
+              )}
+              {isLastMessage && meta.guided_card?.type === "hostel_booking" && !isAdmin && (
+                <HostelServiceCard
+                  mode="room_booking"
+                  prefill={(meta.guided_card.prefill || {}) as HostelServicePrefill}
+                  onSubmitted={(req) => upsertLiveLeave(req)}
                 />
               )}
 

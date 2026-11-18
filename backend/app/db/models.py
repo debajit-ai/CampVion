@@ -30,6 +30,8 @@ class Student(Base):
     residence_type = Column(String, nullable=True, default="hostel") # hostel, day_scholar
     hostel_block = Column(String, nullable=True, default="BH-1")
     room_number = Column(String, nullable=True, default="302")
+    hostel_room = Column(String, nullable=True)
+    college = Column(String, nullable=True, default="Lovely Professional University")
 
     # Relationships
     attendance_records = relationship("AttendanceRecord", back_populates="student")
@@ -200,6 +202,17 @@ class LeaveRequest(Base):
     request_type = Column(String, nullable=False, default="leave", index=True)
     title = Column(String, nullable=True)
     details_json = Column(Text, nullable=True)
+
+    # Services v2 additive Leave Slip & Exact DateTime Columns
+    from_at = Column(DateTime, nullable=True, index=True)
+    to_at = Column(DateTime, nullable=True)
+    college_snapshot = Column(String, nullable=True)
+    destination = Column(String, nullable=True)
+    exit_gate = Column(String, nullable=True)
+    entry_gate = Column(String, nullable=True)
+    slip_no = Column(String, unique=True, nullable=True, index=True)
+    verify_code = Column(String, unique=True, nullable=True, index=True)
+    approved_at = Column(DateTime, nullable=True)
 
     student = relationship("Student", back_populates="leave_requests")
 
@@ -543,6 +556,52 @@ class AuditLog(Base):
     details_json = Column(Text, nullable=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_utc_now, nullable=False, index=True)
+
+
+# =============================================================================
+# DOMAIN M: SERVICES V2 INFRASTRUCTURE (CAMPUS GATES)
+# =============================================================================
+
+class CampusGate(Base):
+    __tablename__ = "campus_gates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gate_code = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, unique=True, nullable=False)
+    location = Column(String, nullable=True)
+    is_default_hostel = Column(Integer, nullable=False, default=0)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+
+
+class DiscussionRoom(Base):
+    __tablename__ = "discussion_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, unique=True, nullable=False)
+    floor = Column(String, nullable=False)
+    capacity = Column(Integer, nullable=False)
+    amenities = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
+
+
+class HostelBlockRoom(Base):
+    __tablename__ = "hostel_block_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String, unique=True, nullable=False, index=True)
+    block = Column(String, nullable=False, index=True)
+    hostel_name = Column(String, nullable=False)
+    room_number = Column(String, nullable=False)
+    sharing_type = Column(String, nullable=False, default="double")  # single, double, triple
+    ac_type = Column(String, nullable=False, default="AC")  # AC, Non-AC
+    capacity = Column(Integer, nullable=False, default=2)
+    occupied = Column(Integer, nullable=False, default=0)
+    gender = Column(String, nullable=False, default="any")
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
 
 
 

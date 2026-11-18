@@ -4,6 +4,7 @@ import {
   AgentState,
   AttendanceRecord,
   AuthSessionResponse,
+  CollegeOption,
   CourseRecord,
   ForgotPasswordResponse,
   HealthResponse,
@@ -131,6 +132,95 @@ export class ApiError extends Error {
   }
 }
 
+export interface SafeParsedResponse<T = unknown> {
+  ok: boolean;
+  status: number;
+  data: T | null;
+  errorMessage: string;
+  requestId?: string;
+}
+
+const TECHNICAL_ERROR_REGEX =
+  /body stream already read|unexpected token|syntaxerror|json\.parse|<!doctype|<html|traceback|operationalerror|no such column/i;
+
+export function toUserFacingError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.message && !TECHNICAL_ERROR_REGEX.test(err.message)) {
+    return err.message;
+  }
+  if (err instanceof Error && err.message && !TECHNICAL_ERROR_REGEX.test(err.message)) {
+    return err.message;
+  }
+  return fallback;
+}
+
+function sanitizeServerMessage(rawText: string, status: number): string {
+  const cleaned = (rawText || "").trim();
+  if (!cleaned || TECHNICAL_ERROR_REGEX.test(cleaned) || cleaned.toLowerCase() === "internal server error") {
+    if (status >= 500) return "Something went wrong on our server. Please try again shortly.";
+    if (status === 429) return "Too many attempts. Please wait a moment and try again.";
+    if (status === 404) return "Requested service endpoint could not be reached.";
+    if (status === 401) return "Please sign in to continue.";
+    return `Unable to complete your request (${status || "network error"}).`;
+  }
+  return cleaned.length > 260 ? `${cleaned.slice(0, 257)}...` : cleaned;
+}
+
+export async function safeParseResponse<T = unknown>(
+  res: Response,
+  urlForLog?: string
+): Promise<SafeParsedResponse<T>> {
+  const raw = await res.text();
+  let parsed: unknown = null;
+  if (raw.trim().length > 0) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  let requestId: string | undefined = res.headers.get("x-request-id") || undefined;
+  let errorMessage = "";
+
+  if (!res.ok) {
+    if (typeof parsed === "object" && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      if ("detail" in obj && obj.detail !== undefined && obj.detail !== null) {
+        const detail = obj.detail;
+        if (typeof detail === "object" && !Array.isArray(detail) && "message" in detail) {
+          errorMessage = String((detail as { message: unknown }).message);
+          if ("request_id" in detail && (detail as { request_id?: unknown }).request_id) {
+            requestId = String((detail as { request_id?: unknown }).request_id);
+          }
+        } else if (Array.isArray(detail) && detail.length > 0) {
+          const first = detail[0] as { msg?: string; loc?: unknown[] };
+          const rawMsg = (first?.msg || "").replace(/^Value error,\s*/i, "").trim();
+          errorMessage = rawMsg || "Please check the highlighted form fields.";
+        } else {
+          errorMessage = String(detail);
+        }
+      } else if ("message" in obj && obj.message) {
+        errorMessage = String(obj.message);
+      }
+    }
+
+    errorMessage = sanitizeServerMessage(errorMessage || raw, res.status);
+    console.error("[CampVion API Error]", {
+      status: res.status,
+      url: urlForLog || res.url,
+      body: parsed ?? raw,
+    });
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    data: (parsed as T | null) ?? null,
+    errorMessage,
+    requestId,
+  };
+}
+
 async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const method = (options.method || "GET").toUpperCase();
@@ -170,37 +260,24 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
       // Remember the reachable base URL for subsequent requests
       _activeBaseUrl = base;
 
-      if (!res.ok) {
+      const parsed = await safeParseResponse<T>(res, url);
+      if (!parsed.ok) {
         if (res.status === 401 && normalizedEndpoint !== "/auth/login") {
           setSessionTokens(null, null);
         }
-        let errorBody: unknown;
-        try {
-          errorBody = await res.json();
-        } catch {
-          errorBody = await res.text();
-        }
-
-        let requestId: string | undefined = res.headers.get("x-request-id") || undefined;
-        let message = `API request failed: ${res.status} ${res.statusText}`;
-        if (typeof errorBody === "object" && errorBody !== null && "detail" in errorBody) {
-          const detail = (errorBody as { detail: unknown }).detail;
-          if (typeof detail === "object" && detail !== null && "message" in detail) {
-            message = String((detail as { message: unknown }).message);
-            if ("request_id" in detail && (detail as { request_id?: unknown }).request_id) {
-              requestId = String((detail as { request_id?: unknown }).request_id);
-            }
-          } else if (Array.isArray(detail) && detail.length > 0) {
-            const first = detail[0] as { msg?: string };
-            message = first?.msg || "Validation error in submitted fields.";
-          } else {
-            message = String(detail);
-          }
-        }
-        throw new ApiError(message, res.status, errorBody, requestId);
+        throw new ApiError(parsed.errorMessage, parsed.status, parsed.data, parsed.requestId);
       }
 
-      return (await res.json()) as T;
+      if (parsed.data === null) {
+        console.error("[CampVion API Error]", {
+          status: res.status,
+          url,
+          body: "Expected JSON response body",
+        });
+        throw new ApiError("Unexpected response from server. Please try again.", res.status);
+      }
+
+      return parsed.data;
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         throw err;
@@ -215,7 +292,9 @@ async function fetchJson<T>(endpoint: string, options: RequestInit = {}): Promis
       : "Network error or backend unreachable";
   const message =
     rawMsg === "Failed to fetch"
-      ? `Failed to fetch — Backend server is unreachable at ${DEFAULT_API_BASE_URL}. Ensure the FastAPI server is running.`
+      ? `Unable to reach CampVion backend at ${DEFAULT_API_BASE_URL}. Please ensure the server is running.`
+      : TECHNICAL_ERROR_REGEX.test(rawMsg)
+      ? "Unable to complete request right now. Please try again."
       : rawMsg;
   throw new ApiError(message, 0);
 }
@@ -227,6 +306,16 @@ export const apiClient = {
 
   async checkHealth(): Promise<HealthResponse> {
     return fetchJson<HealthResponse>("/health");
+  },
+
+  async listColleges(q?: string): Promise<{
+    items: CollegeOption[];
+    total: number;
+    default_college: string;
+    other_option: string;
+  }> {
+    const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return fetchJson(`/colleges${qs}`);
   },
 
   // Authentication & Session Management
@@ -478,6 +567,15 @@ export const apiClient = {
     start_date?: string;
     category?: string;
     reason: string;
+    from_at?: string;
+    to_at?: string;
+    from_date?: string;
+    from_time?: string;
+    to_date?: string;
+    to_time?: string;
+    destination?: string;
+    college?: string;
+    idempotency_key?: string;
   }): Promise<{ request: LeaveRequestItem; workflow: AgentResult }> {
     return fetchJson<{ request: LeaveRequestItem; workflow: AgentResult }>("/requests/leave", {
       method: "POST",
@@ -485,9 +583,96 @@ export const apiClient = {
     });
   },
 
+  async listCampusGates(): Promise<{ items: import("../types/api").CampusGateItem[] }> {
+    return fetchJson<{ items: import("../types/api").CampusGateItem[] }>("/gates");
+  },
+
+  async listAvailableRooms(params?: {
+    date?: string;
+    start_time?: string;
+    end_time?: string;
+    people?: number;
+  }): Promise<import("../types/api").AvailableRoomsResponse> {
+    const sp = new URLSearchParams();
+    if (params?.date) sp.set("date", params.date);
+    if (params?.start_time) sp.set("start_time", params.start_time);
+    if (params?.end_time) sp.set("end_time", params.end_time);
+    if (params?.people) sp.set("people", String(params.people));
+    const qs = sp.toString();
+    return fetchJson<import("../types/api").AvailableRoomsResponse>(
+      `/rooms/available${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  async submitCampusRequest(payload: {
+    request_type: "leave" | "library_room" | "hostel_allocation" | "certificate";
+    title?: string;
+    category?: string;
+    start_date?: string;
+    days?: number;
+    reason: string;
+    from_at?: string;
+    to_at?: string;
+    from_date?: string;
+    from_time?: string;
+    to_date?: string;
+    to_time?: string;
+    destination?: string;
+    college?: string;
+    room_id?: number;
+    room_name?: string;
+    people?: number;
+    sub_type?: "room_change" | "room_booking";
+    preferred_block?: string;
+    sharing_type?: string;
+    ac_type?: string;
+    details?: Record<string, unknown>;
+    idempotency_key?: string;
+  }): Promise<{ request: LeaveRequestItem; workflow?: AgentResult | null }> {
+    return fetchJson<{ request: LeaveRequestItem; workflow?: AgentResult | null }>(
+      "/requests/submit",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async listHostelRooms(params?: {
+    available_only?: boolean;
+    block?: string;
+    sharing_type?: string;
+    ac_type?: string;
+  }): Promise<import("../types/api").HostelRoomsResponse> {
+    const sp = new URLSearchParams();
+    if (params?.available_only) sp.set("available_only", "true");
+    if (params?.block) sp.set("block", params.block);
+    if (params?.sharing_type) sp.set("sharing_type", params.sharing_type);
+    if (params?.ac_type) sp.set("ac_type", params.ac_type);
+    const qs = sp.toString();
+    return fetchJson<import("../types/api").HostelRoomsResponse>(
+      `/hostel/rooms${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  async verifyLeaveSlip(verifyCode: string): Promise<import("../types/api").LeaveSlipVerifyResponse> {
+    return fetchJson<import("../types/api").LeaveSlipVerifyResponse>(
+      `/verify/${encodeURIComponent(verifyCode)}`
+    );
+  },
+
   async approveLeaveRequest(
     leaveId: number,
-    payload?: { comment?: string; version?: number }
+    payload?: {
+      comment?: string;
+      version?: number;
+      exit_gate?: string;
+      entry_gate?: string;
+      room_id?: number;
+      room_name?: string;
+      hostel_block?: string;
+      hostel_room?: string;
+    }
   ): Promise<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }> {
     return fetchJson<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }>(
       `/requests/${leaveId}/approve`,

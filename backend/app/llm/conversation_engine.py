@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.agent.agent import AXORAAgent
+from app.core import timezone_utils
 from app.db import models
 from app.llm.base import LLMMessage
 from app.llm.exceptions import (
@@ -1454,21 +1455,51 @@ class ConversationEngine:
         # CASE 1: LEAVE APPLICATION MULTI-TURN SLOT TRACKING
         # ---------------------------------------------------------------------
         if target_intent == "LEAVE_APPLICATION":
-            # Extract slots from current message
+            # Extract slots from current message (both legacy day/date hints and v2 natural-language date/time window)
             det_days = extract_days_from_text(user_text)
             det_date = extract_date_from_text(user_text)
             det_cat, det_reason = extract_leave_category_and_reason(user_text)
+            parsed_win = timezone_utils.parse_free_text_leave_window(user_text)
 
-            # Merge days
-            if det_days is not None:
+            student_college = (
+                (student_ctx.get("profile") or {}).get("college")
+                or collected_slots.get("college")
+                or "Lovely Professional University"
+            )
+            collected_slots["college"] = student_college
+
+            for k in ("from_date", "from_time", "to_date", "to_time"):
+                if parsed_win.get(k):
+                    collected_slots[k] = parsed_win[k]
+            if parsed_win.get("category") and "category" not in collected_slots:
+                collected_slots["category"] = parsed_win["category"]
+            if parsed_win.get("reason") and "reason" not in collected_slots:
+                collected_slots["reason"] = parsed_win["reason"]
+
+            if collected_slots.get("from_date") and collected_slots.get("from_time") and collected_slots.get("to_date") and collected_slots.get("to_time"):
+                from_utc_c = timezone_utils.combine_campus_to_utc(collected_slots["from_date"], collected_slots["from_time"])
+                to_utc_c = timezone_utils.combine_campus_to_utc(collected_slots["to_date"], collected_slots["to_time"])
+                if from_utc_c and to_utc_c and to_utc_c > from_utc_c:
+                    from_local = timezone_utils.to_campus(from_utc_c)
+                    to_local = timezone_utils.to_campus(to_utc_c)
+                    computed_days_v2 = max(1, (to_local.date() - from_local.date()).days + 1)
+                    collected_slots["days"] = computed_days_v2
+                    collected_slots["start_date"] = collected_slots["from_date"]
+                    collected_slots["from_at"] = timezone_utils.utc_iso(from_utc_c)
+                    collected_slots["to_at"] = timezone_utils.utc_iso(to_utc_c)
+                    collected_slots["from_display"] = timezone_utils.format_campus_dt(from_utc_c)
+                    collected_slots["to_display"] = timezone_utils.format_campus_dt(to_utc_c)
+
+            # Merge days (prefer explicit explicit det_days only if window didn't already compute span, or when user modifies days)
+            if det_days is not None and not (parsed_win.get("from_time") and parsed_win.get("to_time")):
                 collected_slots["days"] = det_days
-            elif llm_turn and llm_turn.days is not None and re.search(r"\d+|one|two|three|four|five|six|seven|week", lower):
+            elif llm_turn and llm_turn.days is not None and re.search(r"\d+|one|two|three|four|five|six|seven|week", lower) and not collected_slots.get("days"):
                 collected_slots["days"] = llm_turn.days
 
             # Merge start_date
-            if det_date is not None:
+            if det_date is not None and not collected_slots.get("start_date"):
                 collected_slots["start_date"] = det_date
-            elif llm_turn and llm_turn.start_date and any(
+            elif llm_turn and llm_turn.start_date and not collected_slots.get("start_date") and any(
                 w in lower for w in ["tomorrow", "today", "monday", "tuesday", "wednesday", "thursday", "friday", "nov", "dec", "202"]
             ):
                 collected_slots["start_date"] = resolve_human_date(llm_turn.start_date)
@@ -1505,14 +1536,17 @@ class ConversationEngine:
             session.collected_slots_json = json.dumps(collected_slots)
             session.missing_slots_json = json.dumps(new_missing)
 
-            # If slots are still missing, ask a natural follow-up question for the next missing slot
+            # If slots are still missing, ask a natural follow-up question for the next missing slot AND attach guided_card
             if new_missing:
                 session.status = "awaiting_clarification"
                 next_slot = new_missing[0]
 
                 if next_slot == "days":
                     cat_label = f" {collected_slots['category']}" if collected_slots.get("category") else ""
-                    question = f"Sure! How many days of{cat_label} leave do you need?"
+                    question = (
+                        f"Sure — let's fill out your{cat_label} leave details. "
+                        "How many days do you need, or choose your exact dates and times below?"
+                    )
                     quick_replies = ["1 day", "3 days", "5 days"]
                 elif next_slot == "start_date":
                     days_val = collected_slots.get("days", 1)
@@ -1531,12 +1565,27 @@ class ConversationEngine:
                     )
                     quick_replies = ["Medical reasons", "Personal reasons", "Family function"]
 
+                guided_prefill = {
+                    "from_date": collected_slots.get("from_date") or "",
+                    "from_time": collected_slots.get("from_time") or "",
+                    "to_date": collected_slots.get("to_date") or "",
+                    "to_time": collected_slots.get("to_time") or "",
+                    "category": collected_slots.get("category") or "personal",
+                    "reason": collected_slots.get("reason") or "",
+                    "college": student_college,
+                    "destination": collected_slots.get("destination") or "",
+                }
+
                 return question, {
                     "awaiting_clarification": True,
                     "active_intent": target_intent,
                     "collected_slots": collected_slots,
                     "missing_slots": new_missing,
                     "quick_replies": quick_replies,
+                    "guided_card": {
+                        "type": "leave_details",
+                        "prefill": guided_prefill,
+                    },
                 }
 
             # All slots collected! Prepare the Smart Confirmation Proposal Card (Section 7)
@@ -1547,31 +1596,54 @@ class ConversationEngine:
                 "Medical leave" if category_str == "medical" else "Personal leave"
             )
 
-            # Check if dates overlap with an existing PENDING_APPROVAL leave request
+            # Check if dates overlap with an existing PENDING_APPROVAL/APPROVED leave request
             from app.services import leave_service
-            start_iso, end_iso = leave_service.compute_date_range(start_date_str, days_count)
-            overlap = leave_service.find_overlapping_pending_leave(
-                self.db,
-                student_id=student_ctx["student_id"],
-                start_date=start_iso,
-                end_date=end_iso,
-            )
-            if overlap:
-                session.active_intent = None
-                session.collected_slots_json = "{}"
-                session.missing_slots_json = "[]"
-                session.pending_confirmation_json = None
-                session.status = "active"
-                overlap_reply = (
-                    f"You already have a pending leave request (**{overlap.leave_code}**) covering "
-                    f"**{overlap.start_date} to {overlap.end_date}** awaiting review by **{overlap.assigned_approver}**.\n\n"
-                    f"Please wait for that decision or withdraw **{overlap.leave_code}** in your Request History before submitting overlapping dates."
+            from fastapi import HTTPException as FastAPIHTTPException
+            if collected_slots.get("from_at") and collected_slots.get("to_at"):
+                try:
+                    leave_service.validate_leave_window_v2(
+                        self.db,
+                        student_id=student_ctx["student_id"],
+                        from_at=datetime.fromisoformat(str(collected_slots["from_at"]).replace("Z", "+00:00")),
+                        to_at=datetime.fromisoformat(str(collected_slots["to_at"]).replace("Z", "+00:00")),
+                        category=category_str,
+                        reason=reason_str,
+                        college=student_college,
+                    )
+                except FastAPIHTTPException as exc:
+                    session.active_intent = None
+                    session.collected_slots_json = "{}"
+                    session.missing_slots_json = "[]"
+                    session.pending_confirmation_json = None
+                    session.status = "active"
+                    return str(exc.detail), {
+                        "duplicate_blocked": exc.status_code == 409,
+                        "quick_replies": ["Check my leave status", "Check my overall attendance"],
+                    }
+            else:
+                start_iso, end_iso = leave_service.compute_date_range(start_date_str, days_count)
+                overlap = leave_service.find_overlapping_pending_leave(
+                    self.db,
+                    student_id=student_ctx["student_id"],
+                    start_date=start_iso,
+                    end_date=end_iso,
                 )
-                return overlap_reply, {
-                    "duplicate_blocked": True,
-                    "existing_leave_code": overlap.leave_code,
-                    "quick_replies": ["Check my leave status", "Check my overall attendance"],
-                }
+                if overlap:
+                    session.active_intent = None
+                    session.collected_slots_json = "{}"
+                    session.missing_slots_json = "[]"
+                    session.pending_confirmation_json = None
+                    session.status = "active"
+                    overlap_reply = (
+                        f"You already have a pending leave request (**{overlap.leave_code}**) covering "
+                        f"**{overlap.start_date} to {overlap.end_date}** awaiting review by **{overlap.assigned_approver}**.\n\n"
+                        f"Please wait for that decision or withdraw **{overlap.leave_code}** in your Request History before submitting overlapping dates."
+                    )
+                    return overlap_reply, {
+                        "duplicate_blocked": True,
+                        "existing_leave_code": overlap.leave_code,
+                        "quick_replies": ["Check my leave status", "Check my overall attendance"],
+                    }
 
             # Determine approver from live Warden profile
             _, approver_name, approver_title = leave_service.get_primary_warden(self.db)
@@ -1591,9 +1663,15 @@ class ConversationEngine:
                     "duration": f"{days_count} {'day' if days_count == 1 else 'days'}",
                     "days": days_count,
                     "start_date": start_date_str,
+                    "from_at": collected_slots.get("from_at"),
+                    "to_at": collected_slots.get("to_at"),
+                    "from_display": collected_slots.get("from_display"),
+                    "to_display": collected_slots.get("to_display"),
+                    "college": student_college,
+                    "destination": collected_slots.get("destination"),
                     "category": category_str.replace("_", " ").title(),
                     "reason": reason_str,
-                    "approver_gate": f"{approver} (Human-in-the-Loop Gate)",
+                    "approver_gate": f"{approver} (Institutional Gate)",
                     "policy_check": (
                         f"PASS ({student_ctx['overall_attendance_pct']}% >= 75% POL-LV-001)"
                         if student_ctx["is_eligible"]
@@ -1609,13 +1687,19 @@ class ConversationEngine:
             session.pending_confirmation_json = json.dumps(proposal)
             session.status = "awaiting_confirmation"
 
+            schedule_line = (
+                f"- **From**: {collected_slots['from_display']}\n- **To**: {collected_slots['to_display']}"
+                if collected_slots.get("from_display") and collected_slots.get("to_display")
+                else f"- **Start Date**: {start_date_str}"
+            )
             reply = (
                 f"I've prepared your **{days_count}-day {category_str.replace('_', ' ')} leave** request:\n\n"
                 f"- **Student**: {proposal['student_name']} (`{proposal['student_id']}`)\n"
                 f"- **Duration**: {days_count} {'day' if days_count == 1 else 'days'}\n"
-                f"- **Start Date**: {start_date_str}\n"
+                f"{schedule_line}\n"
+                f"- **College**: {student_college}\n"
                 f"- **Reason**: {reason_str} ({category_str.title()})\n"
-                f"- **Governance Gate**: {approver}\n\n"
+                f"- **Approver**: {approver}\n\n"
                 "Please review the details below. Would you like me to submit this request?"
             )
 
@@ -1652,6 +1736,66 @@ class ConversationEngine:
             user_text,
             re.IGNORECASE,
         )
+        if is_library and not time_match:
+            parsed_lib = timezone_utils.parse_free_text_leave_window(user_text)
+            ppl_m = re.search(r"\b(\d{1,2})\s*(?:people|persons|students|members)\b", lower)
+            session.status = "awaiting_clarification"
+            session.active_intent = "LIBRARY_ROOM_BOOKING"
+            prefill_room = {
+                "date": parsed_lib.get("from_date") or "",
+                "start_time": parsed_lib.get("from_time") or "",
+                "end_time": parsed_lib.get("to_time") or "",
+                "people": int(ppl_m.group(1)) if ppl_m else 2,
+                "purpose": parsed_lib.get("reason") or "",
+            }
+            return (
+                "Let's reserve a library discussion room. Choose your date, time slot (08:00–20:00 IST, max 2 hours), group size, and room below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "LIBRARY_ROOM_BOOKING",
+                    "guided_card": {
+                        "type": "room_booking",
+                        "prefill": prefill_room,
+                    },
+                    "quick_replies": ["Show available rooms", "Tomorrow 14:00 to 16:00"],
+                },
+            )
+        if is_hostel and req_type == "room_change":
+            prof = student_ctx.get("profile") or {}
+            session.status = "awaiting_clarification"
+            session.active_intent = "HOSTEL_SERVICE"
+            return (
+                "Let's submit your hostel room change request. Confirm your current room and preferences below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "HOSTEL_SERVICE",
+                    "guided_card": {
+                        "type": "hostel_change",
+                        "prefill": {
+                            "current_block": prof.get("hostel_block") or "BH-1",
+                            "current_room": prof.get("hostel_room") or prof.get("room_number") or "302",
+                        },
+                    },
+                    "quick_replies": ["Show hostel room availability", "Check my hostel status"],
+                },
+            )
+        if is_hostel and req_type != "night_out_pass" and any(
+            kw in lower for kw in ("book", "booking", "allot", "allotment", "new room", "apply for hostel")
+        ):
+            session.status = "awaiting_clarification"
+            session.active_intent = "HOSTEL_SERVICE"
+            return (
+                "Let's apply for a hostel room booking. Choose your preferred block, sharing type, and move-in date below:",
+                {
+                    "awaiting_clarification": True,
+                    "active_intent": "HOSTEL_SERVICE",
+                    "guided_card": {
+                        "type": "hostel_booking",
+                        "prefill": {},
+                    },
+                    "quick_replies": ["Check my hostel status"],
+                },
+            )
         fields_dict: Dict[str, Any] = {
             "service_type": (
                 "Library Room Booking"
@@ -1760,11 +1904,24 @@ class ConversationEngine:
 
             fields = proposal.get("fields", {})
             start_hint = fields.get("start_date") or proposal.get("raw_goal")
+            v2_fields: Dict[str, Any] = {}
+            if fields.get("from_at") and fields.get("to_at"):
+                try:
+                    v2_fields["from_at"] = datetime.fromisoformat(str(fields["from_at"]).replace("Z", "+00:00"))
+                    v2_fields["to_at"] = datetime.fromisoformat(str(fields["to_at"]).replace("Z", "+00:00"))
+                except ValueError:
+                    pass
+            if fields.get("college"):
+                v2_fields["college_snapshot"] = fields.get("college")
+            if fields.get("destination"):
+                v2_fields["destination"] = fields.get("destination")
+
             agent = AXORAAgent(
                 self.db,
                 auto_approve=False,
                 start_date_hint=str(start_hint) if start_hint else None,
                 enforce_overlap_check=True,
+                leave_v2_fields=v2_fields or None,
             )
             try:
                 result = agent.start(student_id, raw_goal)
