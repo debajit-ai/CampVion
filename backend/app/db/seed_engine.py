@@ -638,6 +638,9 @@ def seed_campus_database(profile: str = "small", seed: int = 42, reset: bool = F
         db.commit()
 
         # Print Seeding Summary Statistics
+        from app.services import leave_service
+        leave_service.seed_sample_multi_type_requests(db)
+
         student_count = db.query(models.Student).count()
         course_count = db.query(models.Course).count()
         dept_count = db.query(models.Department).count()

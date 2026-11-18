@@ -7,7 +7,8 @@ from app.db import models
 
 router = APIRouter()
 
-@router.get("/")
+@router.get("")
+@router.get("/", include_in_schema=False)
 def list_policies(category: Optional[str] = None, db: Session = Depends(get_db)):
     """
     List all university policies with category, provenance type, and version.

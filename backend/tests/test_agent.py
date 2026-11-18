@@ -3,7 +3,7 @@ from app.agent.normalizer import GoalNormalizer
 from app.agent.planner import Planner
 from app.agent.state import Task, AgentState
 
-def test_agent_success(client, db):
+def test_agent_success(client, admin_client, db):
     goal_prompt = "I want to apply for leave tomorrow because I have a family function."
     res = client.post("/api/agent/run", json={"student_id": "S001", "goal": goal_prompt})
     assert res.status_code == 200
@@ -19,7 +19,10 @@ def test_agent_success(client, db):
     assert len(plan) == 6
     assert plan[0]["task_id"] == "t1"
     
-    app_res = client.post(f"/api/agent/{request_id}/approve")
+    # Students must not approve their own requests
+    assert client.post(f"/api/agent/{request_id}/approve").status_code == 403
+
+    app_res = admin_client.post(f"/api/agent/{request_id}/approve")
     assert app_res.status_code == 200
     app_data = app_res.json()
     assert app_data["status"] == "COMPLETED"
@@ -64,21 +67,21 @@ def test_agent_recoverable_failure(client, db):
     assert "TOOL_FAILED" in events
     assert "REPLAN_TRIGGERED" in events
 
-def test_agent_human_rejection(client, db):
+def test_agent_human_rejection(client, admin_client, db):
     goal_prompt = "I want to apply for leave tomorrow."
     res = client.post("/api/agent/run", json={"student_id": "S001", "goal": goal_prompt})
     assert res.status_code == 200
     request_id = res.json()["request_id"]
     
-    app_res = client.post(f"/api/agent/{request_id}/reject")
+    app_res = admin_client.post(f"/api/agent/{request_id}/reject")
     assert app_res.status_code == 200
-    assert app_res.json()["status"] == "FAILED"
-    assert "Human rejected" in app_res.json()["final_message"]
+    assert app_res.json()["status"] == "ENDED_REJECTED"
+    assert "declined" in app_res.json()["final_message"].lower() or "rejected" in app_res.json()["final_message"].lower()
     
     trace_res = client.get(f"/api/agent/{request_id}/trace")
     events = [t["event_type"] for t in trace_res.json()]
     assert "HUMAN_REJECTED" in events
-    assert "WORKFLOW_FAILED" in events
+    assert "WORKFLOW_ENDED_REJECTED" in events
 
 def test_agent_non_recoverable_failure(client, db):
     goal_prompt = "FAILURE_MODE=unrecoverable"
@@ -159,15 +162,15 @@ def test_planner_topological_dependency_sorting():
     with pytest.raises(ValueError, match="Circular dependency"):
         planner.create_plan([t_cycle1, t_cycle2], state)
 
-def test_agent_api_error_handling(client):
+def test_agent_api_error_handling(admin_client):
     # 404 on non-existent state
-    res = client.get("/api/agent/99999")
+    res = admin_client.get("/api/agent/99999")
     assert res.status_code == 404
     
     # 404 on approve non-existent request
-    res = client.post("/api/agent/99999/approve")
+    res = admin_client.post("/api/agent/99999/approve")
     assert res.status_code == 404
     
     # 404 on reject non-existent request
-    res = client.post("/api/agent/99999/reject")
+    res = admin_client.post("/api/agent/99999/reject")
     assert res.status_code == 404

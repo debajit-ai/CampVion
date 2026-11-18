@@ -29,6 +29,18 @@ SALT_BYTES = 16
 VALID_ROLES = {"student", "faculty", "administrator", "system_administrator"}
 
 
+def normalize_role(role: Optional[str]) -> str:
+    val = (role or "").strip().lower()
+    if val in {"admin", "administrator", "system_administrator"}:
+        return "admin"
+    return val
+
+
+def is_admin_role(role: Optional[str]) -> bool:
+    """Case-insensitive check covering all administrative reviewer roles."""
+    return normalize_role(role) == "admin"
+
+
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """Normalize naive SQLite datetimes to UTC-aware datetimes."""
     if dt is None:
@@ -288,12 +300,15 @@ def require_authenticated_user(
 
 def require_roles(*allowed_roles: str):
     """
-    Modular role-based access control dependency for administrative or faculty routes.
+    Modular role-based access control dependency for administrative, faculty, or student routes.
+    Treats 'admin', 'administrator', and 'system_administrator' equivalently via normalize_role().
     """
-    allowed = {r.lower() for r in allowed_roles}
+    allowed = {normalize_role(r) for r in allowed_roles} | {r.lower() for r in allowed_roles}
 
     def _checker(user: models.UserAccount = Depends(require_authenticated_user)) -> models.UserAccount:
-        if (user.role or "").lower() not in allowed:
+        user_role_raw = (user.role or "").lower()
+        user_role_norm = normalize_role(user.role)
+        if user_role_raw not in allowed and user_role_norm not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Insufficient permissions. Required role: {', '.join(allowed_roles)}.",
@@ -301,4 +316,8 @@ def require_roles(*allowed_roles: str):
         return user
 
     return _checker
+
+
+require_admin = require_roles("admin")
+require_student = require_roles("student")
 

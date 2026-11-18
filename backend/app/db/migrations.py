@@ -52,7 +52,57 @@ def run_migrations():
                     conn.execute(text(f"ALTER TABLE courses ADD COLUMN {col_name} {col_def};"))
                     conn.commit()
 
-    # 3. Create all new relational tables
+        # 3. Check and migrate `user_accounts` table for administrative metadata
+        if "user_accounts" in existing_tables:
+            user_columns = [col["name"] for col in inspector.get_columns("user_accounts")]
+            new_user_columns = [
+                ("authority_title", "VARCHAR DEFAULT NULL"),
+                ("phone", "VARCHAR DEFAULT NULL"),
+                ("office", "VARCHAR DEFAULT NULL"),
+                ("office_hours", "VARCHAR DEFAULT NULL"),
+                ("contact_email", "VARCHAR DEFAULT NULL"),
+            ]
+            for col_name, col_def in new_user_columns:
+                if col_name not in user_columns:
+                    logger.info(f"Adding column '{col_name}' to 'user_accounts' table...")
+                    conn.execute(text(f"ALTER TABLE user_accounts ADD COLUMN {col_name} {col_def};"))
+                    conn.commit()
+
+        # 4. Check and migrate `leave_requests` table for workflow state, snapshots & optimistic locking
+        if "leave_requests" in existing_tables:
+            leave_columns = [col["name"] for col in inspector.get_columns("leave_requests")]
+            new_leave_columns = [
+                ("workflow_run_id", "INTEGER DEFAULT NULL"),
+                ("attendance_snapshot", "FLOAT DEFAULT NULL"),
+                ("policy_result", "TEXT DEFAULT NULL"),
+                ("routed_to_role", "VARCHAR NOT NULL DEFAULT 'Warden'"),
+                ("assigned_approver_user_id", "INTEGER DEFAULT NULL"),
+                ("decided_by", "INTEGER DEFAULT NULL"),
+                ("decided_by_name", "VARCHAR DEFAULT NULL"),
+                ("decision_comment", "TEXT DEFAULT NULL"),
+                ("rejection_reason", "TEXT DEFAULT NULL"),
+                ("created_at", "DATETIME DEFAULT NULL"),
+                ("updated_at", "DATETIME DEFAULT NULL"),
+                ("version", "INTEGER NOT NULL DEFAULT 1"),
+                ("request_type", "VARCHAR NOT NULL DEFAULT 'leave'"),
+                ("title", "VARCHAR DEFAULT NULL"),
+                ("details_json", "TEXT DEFAULT NULL"),
+            ]
+            for col_name, col_def in new_leave_columns:
+                if col_name not in leave_columns:
+                    logger.info(f"Adding column '{col_name}' to 'leave_requests' table...")
+                    conn.execute(text(f"ALTER TABLE leave_requests ADD COLUMN {col_name} {col_def};"))
+                    conn.commit()
+
+            # Backfill timestamps & normalize legacy lowercase status values idempotently
+            conn.execute(text("UPDATE leave_requests SET created_at = COALESCE(created_at, submitted_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, decided_at, submitted_at, CURRENT_TIMESTAMP), version = COALESCE(version, 1), request_type = COALESCE(request_type, 'leave');"))
+            conn.execute(text("UPDATE leave_requests SET status = 'PENDING_APPROVAL' WHERE LOWER(status) = 'pending';"))
+            conn.execute(text("UPDATE leave_requests SET status = 'APPROVED' WHERE LOWER(status) = 'approved';"))
+            conn.execute(text("UPDATE leave_requests SET status = 'REJECTED' WHERE LOWER(status) = 'rejected';"))
+            conn.execute(text("UPDATE leave_requests SET status = 'CANCELLED' WHERE LOWER(status) IN ('cancelled', 'canceled');"))
+            conn.commit()
+
+    # 5. Create all new relational tables (including `notifications` and `audit_log`)
     Base.metadata.create_all(bind=engine)
     logger.info("CampVion database migrations successfully verified and up-to-date.")
 

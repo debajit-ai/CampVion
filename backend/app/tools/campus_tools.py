@@ -420,11 +420,18 @@ class CreateLeaveApplicationTool(BaseTool):
         if not student:
             return {"error": "Student not found"}
 
+        # Check if a LeaveRequest already exists for this workflow run (created at HITL gate pause)
+        leave_record = None
+        if request_id is not None:
+            leave_record = db.query(models.LeaveRequest).filter(
+                models.LeaveRequest.workflow_run_id == request_id
+            ).first()
+
         # Determine approver from duration
-        effective_days = days or 1
+        effective_days = max(1, int(days or 1))
         if effective_days <= 3:
-            approver = getattr(student, "advisor_name", "Dr. Rajesh Rao") or "Faculty Advisor"
-            role = "Advisor"
+            approver = getattr(student, "advisor_name", "Dr. Rajesh Rao") or "Dr. Rajesh Rao"
+            role = "Warden"
         elif effective_days <= 7:
             approver = "Head of Department (HOD)"
             role = "HOD"
@@ -432,34 +439,54 @@ class CreateLeaveApplicationTool(BaseTool):
             approver = "Proctor / Dean Student Welfare"
             role = "Proctor"
 
-        # Unique sequential leave reference code
-        existing_count = db.query(models.LeaveRequest).count()
-        leave_code = f"LV-2026-{(existing_count + 1):04d}"
+        target_status = "APPROVED" if human_approved else "PENDING_APPROVAL"
 
-        start_date = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
-        end_date = (datetime.now(timezone.utc) + timedelta(days=effective_days)).strftime("%Y-%m-%d")
+        if leave_record is not None:
+            leave_record.status = target_status
+            if human_approved:
+                leave_record.decided_at = leave_record.decided_at or get_utc_now()
+                leave_record.decision_remarks = leave_record.decision_remarks or "Approved at Human Authorization Gate"
+            leave_record.updated_at = get_utc_now()
+        else:
+            year = datetime.now(timezone.utc).year
+            rows = db.query(models.LeaveRequest.leave_code).all()
+            max_seq = 0
+            for (code,) in rows:
+                if code and "-" in code:
+                    tail = code.rsplit("-", 1)[-1]
+                    if tail.isdigit():
+                        max_seq = max(max_seq, int(tail))
+            leave_code = f"LV-{year}-{(max_seq + 1):04d}"
 
-        # Persist real LeaveRequest record
-        leave_record = models.LeaveRequest(
-            leave_code=leave_code,
-            student_id=student.student_id,
-            category=category or "personal",
-            start_date=start_date,
-            end_date=end_date,
-            days_count=effective_days,
-            reason=reason or "Personal leave",
-            supporting_doc_url=None,
-            doc_required=1 if (category == "medical" and effective_days > 2) else 0,
-            status="approved" if human_approved else "pending",
-            assigned_approver=approver,
-            approver_role=role,
-            submitted_at=get_utc_now(),
-            decided_at=get_utc_now() if human_approved else None,
-            decision_remarks="Approved by Human Authorization Gate" if human_approved else None
-        )
+            start_date = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+            end_date = (datetime.now(timezone.utc) + timedelta(days=effective_days)).strftime("%Y-%m-%d")
+
+            # Persist real LeaveRequest record
+            leave_record = models.LeaveRequest(
+                leave_code=leave_code,
+                workflow_run_id=request_id,
+                student_id=student.student_id,
+                category=category or "personal",
+                start_date=start_date,
+                end_date=end_date,
+                days_count=effective_days,
+                reason=reason or "Personal leave",
+                supporting_doc_url=None,
+                doc_required=1 if (category == "medical" and effective_days > 2) else 0,
+                status=target_status,
+                routed_to_role=role,
+                assigned_approver=approver,
+                approver_role=role,
+                submitted_at=get_utc_now(),
+                decided_at=get_utc_now() if human_approved else None,
+                decision_remarks="Approved at Human Authorization Gate" if human_approved else None,
+                created_at=get_utc_now(),
+                updated_at=get_utc_now(),
+                version=1,
+            )
+            db.add(leave_record)
 
         try:
-            db.add(leave_record)
             db.commit()
             db.refresh(leave_record)
         except Exception as e:
@@ -467,15 +494,18 @@ class CreateLeaveApplicationTool(BaseTool):
             return {"error": f"Failed to persist leave application: {str(e)}"}
 
         return {
-            "status": "created",
+            "status": "approved" if human_approved else "created",
+            "leave_request_id": leave_record.id,
             "leave_code": leave_record.leave_code,
             "student_id": student.student_id,
             "category": leave_record.category,
             "days_count": leave_record.days_count,
+            "start_date": leave_record.start_date,
+            "end_date": leave_record.end_date,
             "assigned_approver": leave_record.assigned_approver,
             "approver_role": leave_record.approver_role,
             "approval_status": leave_record.status,
-            "message": "Leave application submitted and awaiting approval"
+            "message": "Leave application approved and recorded" if human_approved else "Leave application submitted and awaiting approval"
         }
 
 # =============================================================================

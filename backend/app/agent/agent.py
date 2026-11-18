@@ -11,15 +11,28 @@ from app.agent.observer import Observer, ObservationResult
 from app.agent.replanner import Replanner
 from app.agent.policies import PolicyEngine
 from app.agent.result import AgentResult
+from typing import Any, Optional
 from app.tools.registry import registry
 from app.services.trace_service import create_trace
 from app.schemas.trace import TraceCreate
 from app.db.models import AgentStateModel, CampusRequest
 
 class AXORAAgent:
-    def __init__(self, db: Session, auto_approve: bool = False):
+    def __init__(
+        self,
+        db: Session,
+        auto_approve: bool = False,
+        start_date_hint: Optional[str] = None,
+        actor_user: Optional[Any] = None,
+        enforce_overlap_check: bool = False,
+        ip_address: Optional[str] = None,
+    ):
         self.db = db
         self.auto_approve = auto_approve
+        self.start_date_hint = start_date_hint
+        self.actor_user = actor_user
+        self.enforce_overlap_check = enforce_overlap_check
+        self.ip_address = ip_address
         self.normalizer = GoalNormalizer()
         self.decomposer = GoalDecomposer()
         self.planner = Planner()
@@ -97,12 +110,16 @@ class AXORAAgent:
         if not state:
             raise ValueError(f"State not found for request_id {request_id}")
 
+        from fastapi import HTTPException
+
         try:
             if state.current_status == "IDLE":
                 state.current_status = "UNDERSTANDING"
                 
                 # 1. Deterministic Goal Normalization
                 goal = self.normalizer.normalize(state.student_id, state.original_goal)
+                if self.start_date_hint and "start_date" not in goal.parameters:
+                    goal.parameters["start_date"] = self.start_date_hint
                 state.normalized_goal = goal.model_dump()
                 state.current_step += 1
                 self._log_trace(state.request_id, state.current_step, "GOAL_NORMALIZED", "orchestrator", "normalize", "success", output_data=json.dumps(state.normalized_goal))
@@ -123,10 +140,13 @@ class AXORAAgent:
 
             while state.current_status == "EXECUTING" and state.pending_tasks:
                 if state.human_approval_status == "REJECTED":
-                    state.current_status = "FAILED"
-                    state.error = "Human rejected the workflow."
+                    state.current_status = "ENDED_REJECTED"
+                    state.error = state.decision_reason or "Request declined at institutional approval gate."
+                    state.final_result = (
+                        f"Leave request {state.leave_code or f'#{state.request_id}'} was declined: {state.error}"
+                    )
                     state.current_step += 1
-                    self._log_trace(state.request_id, state.current_step, "WORKFLOW_FAILED", "orchestrator", "terminate", "failure", error_message=state.error)
+                    self._log_trace(state.request_id, state.current_step, "WORKFLOW_ENDED_REJECTED", "orchestrator", "terminate", "rejected", error_message=state.error)
                     break
 
                 task_id = state.pending_tasks[0]
@@ -150,9 +170,37 @@ class AXORAAgent:
 
                 if is_consequential_task and state.human_approval_status != "APPROVED":
                     if not self.auto_approve:
+                        params = (state.normalized_goal or {}).get("parameters", {}) or {}
+                        failure_mode_active = bool(params.get("failure_mode")) or ("failure_mode=" in state.original_goal.lower())
+                        pause_message = "Pending Warden authorization at institutional approval gate."
+
+                        if "create_leave_application" in candidate_tools and not failure_mode_active:
+                            from app.services import leave_service
+
+                            leave_rec, _ = leave_service.submit_leave_at_gate(
+                                self.db,
+                                student_id=state.student_id,
+                                workflow_run_id=state.request_id,
+                                days_count=int(params.get("days", 1) or 1),
+                                category=str(params.get("category") or "personal"),
+                                reason=str(params.get("reason") or "Personal leave"),
+                                start_date_hint=params.get("start_date") or self.start_date_hint,
+                                actor_user=self.actor_user,
+                                ip_address=self.ip_address,
+                                enforce_overlap_check=self.enforce_overlap_check,
+                            )
+                            state.leave_request_id = leave_rec.id
+                            state.leave_code = leave_rec.leave_code
+                            state.routed_to = f"{leave_rec.assigned_approver} ({leave_rec.routed_to_role})"
+                            pause_message = (
+                                f"Leave request {leave_rec.leave_code} submitted and pending approval by "
+                                f"{leave_rec.assigned_approver} ({leave_rec.routed_to_role})."
+                            )
+
                         state.current_status = "WAITING_FOR_HUMAN"
                         state.human_approval_required = True
                         state.human_approval_status = "PENDING"
+                        state.final_result = pause_message
                         state.current_step += 1
                         self._log_trace(
                             state.request_id,
@@ -164,11 +212,13 @@ class AXORAAgent:
                             output_data=json.dumps({
                                 "task_id": task_id,
                                 "task_description": task.description,
-                                "message": "Paused at Institutional Gate: Awaiting Administrator / Warden authorization."
+                                "leave_code": state.leave_code,
+                                "routed_to": state.routed_to,
+                                "message": pause_message,
                             })
                         )
                         self._save_state(state)
-                        return self._build_result(state, "Waiting for human approval", start_time=start_time)
+                        return self._build_result(state, pause_message, start_time=start_time)
 
                 state.current_step += 1
                 tool_name = self.tool_selector.select_tool(task)
@@ -317,9 +367,17 @@ class AXORAAgent:
 
             if state.current_status == "EXECUTING" and not state.pending_tasks:
                 state.current_status = "COMPLETED"
-                state.final_result = "Goal achieved successfully."
+                if state.leave_code:
+                    state.final_result = f"Leave request {state.leave_code} approved and recorded."
+                else:
+                    state.final_result = "Request completed and recorded."
                 state.current_step += 1
                 self._log_trace(state.request_id, state.current_step, "WORKFLOW_COMPLETED", "orchestrator", "complete", "success")
+
+        except HTTPException:
+            state.current_status = "FAILED"
+            self._save_state(state)
+            raise
 
         except Exception as e:
             state.current_status = "FAILED"
@@ -335,7 +393,7 @@ class AXORAAgent:
             self._log_trace(state.request_id, state.current_step, "WORKFLOW_FAILED", "orchestrator", "terminate", "failure", error_message=str(e))
 
         self._save_state(state)
-        return self._build_result(state, state.final_result or state.error or "Workflow paused", start_time=start_time)
+        return self._build_result(state, state.final_result or state.error or "Pending approval", start_time=start_time)
 
     def _build_result(self, state: AgentState, message: str, start_time: float = None) -> AgentResult:
         exec_time = 0.0
@@ -344,7 +402,7 @@ class AXORAAgent:
 
         has_human_intervention = (
             state.human_approval_required
-            or state.human_approval_status in ["APPROVED", "REJECTED"]
+            or state.human_approval_status in ["APPROVED", "REJECTED", "CANCELLED"]
         )
         return AgentResult(
             request_id=state.request_id,
@@ -370,13 +428,41 @@ class AXORAAgent:
             return self.run(request_id)
         return None
         
-    def reject(self, request_id: int):
+    def reject(self, request_id: int, reason: Optional[str] = None):
         state = self.get_state(request_id)
         if state and state.human_approval_status == "PENDING":
             state.human_approval_status = "REJECTED"
+            state.decision_reason = reason or "Rejected by administrator at approval gate."
             state.current_status = "EXECUTING"
             state.current_step += 1
-            self._log_trace(state.request_id, state.current_step, "HUMAN_REJECTED", "orchestrator", "reject", "success")
+            self._log_trace(
+                state.request_id,
+                state.current_step,
+                "HUMAN_REJECTED",
+                "orchestrator",
+                "reject",
+                "success",
+                output_data=json.dumps({"reason": state.decision_reason}),
+            )
             self._save_state(state)
             return self.run(request_id)
+        return None
+
+    def cancel(self, request_id: int):
+        state = self.get_state(request_id)
+        if state and state.human_approval_status == "PENDING":
+            state.human_approval_status = "CANCELLED"
+            state.current_status = "CANCELLED"
+            state.final_result = "Withdrawn by student prior to approval decision."
+            state.current_step += 1
+            self._log_trace(
+                state.request_id,
+                state.current_step,
+                "WORKFLOW_CANCELLED",
+                "orchestrator",
+                "cancel",
+                "cancelled",
+            )
+            self._save_state(state)
+            return self._build_result(state, state.final_result)
         return None
