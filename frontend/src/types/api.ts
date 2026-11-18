@@ -82,10 +82,33 @@ export interface LeaveRequestItem {
   student_semester?: number | null;
   student_department?: string | null;
   student_college?: string | null;
+  college?: string | null;
+  student_residence_type?: string | null;
+  student_residence_label?: string | null;
+  student_hostel_block?: string | null;
+  student_room_number?: string | null;
   category: string;
   start_date: string;
   end_date: string;
   days_count: number;
+  from_at?: string | null;
+  to_at?: string | null;
+  from_at_campus?: string | null;
+  to_at_campus?: string | null;
+  from_display?: string | null;
+  to_display?: string | null;
+  from_day?: string | null;
+  to_day?: string | null;
+  campus_tz?: string | null;
+  destination?: string | null;
+  exit_gate?: string | null;
+  entry_gate?: string | null;
+  slip_no?: string | null;
+  verify_code?: string | null;
+  approved_at?: string | null;
+  approved_at_display?: string | null;
+  has_slip?: boolean;
+  can_cancel?: boolean;
   reason: string;
   doc_required?: boolean;
   status: LeaveRequestStatus;
@@ -114,6 +137,42 @@ export interface LeaveRequestItem {
     plan: Task[];
   } | null;
   traces?: LeaveTraceEvent[];
+}
+
+export interface CampusGateItem {
+  id: number;
+  gate_code: string;
+  name: string;
+  location?: string | null;
+  is_default_hostel?: boolean;
+}
+
+export interface LeaveSlipVerifyResponse {
+  status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
+  verification_status: "VALID" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
+  valid: boolean;
+  message: string;
+  slip_no?: string | null;
+  request_code?: string | null;
+  request_type?: string | null;
+  student_name?: string | null;
+  student_id?: string | null;
+  college?: string | null;
+  from_at?: string | null;
+  to_at?: string | null;
+  from_display?: string | null;
+  to_display?: string | null;
+  exit_gate?: string | null;
+  entry_gate?: string | null;
+  approved_by?: string | null;
+  approver_role?: string | null;
+  approved_at_display?: string | null;
+  campus_tz?: string | null;
+}
+
+export interface GuidedCardPayload {
+  type: "leave_details" | "room_booking" | "hostel_change" | "hostel_booking" | "email_authority";
+  prefill?: Record<string, unknown>;
 }
 
 export interface LeaveQueueStats {
@@ -428,6 +487,7 @@ export interface ConversationMessageMetadata {
   awaiting_clarification?: boolean;
   awaiting_confirmation?: boolean;
   confirmation_proposal?: ConfirmationProposal;
+  guided_card?: GuidedCardPayload | null;
   collected_slots?: Record<string, unknown>;
   missing_slots?: string[];
   workflow_executed?: boolean;

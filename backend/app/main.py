@@ -8,6 +8,7 @@ from app.db.database import engine, Base, SessionLocal
 from app.db.migrations import run_migrations
 from app.db.seed_engine import seed_campus_database
 from app.db.seed_users import seed_demo_users
+from app.db.seed_v2 import seed_services_v2_defaults
 from app.db import models
 from app.services import student_service, leave_service
 import app.tools  # Ensure all tools are registered in ToolRegistry
@@ -32,6 +33,9 @@ try:
 
     # Idempotently seed sample pending non-leave requests (library_room, hostel_allocation, certificate)
     leave_service.seed_sample_multi_type_requests(db_init)
+
+    # Idempotently seed Services v2 infrastructure (campus gates, etc.)
+    seed_services_v2_defaults(db_init)
 finally:
     db_init.close()
 

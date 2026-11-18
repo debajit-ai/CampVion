@@ -90,12 +90,27 @@ def run_migrations():
                 ("request_type", "VARCHAR NOT NULL DEFAULT 'leave'"),
                 ("title", "VARCHAR DEFAULT NULL"),
                 ("details_json", "TEXT DEFAULT NULL"),
+                ("from_at", "DATETIME DEFAULT NULL"),
+                ("to_at", "DATETIME DEFAULT NULL"),
+                ("college_snapshot", "VARCHAR DEFAULT NULL"),
+                ("destination", "VARCHAR DEFAULT NULL"),
+                ("exit_gate", "VARCHAR DEFAULT NULL"),
+                ("entry_gate", "VARCHAR DEFAULT NULL"),
+                ("slip_no", "VARCHAR DEFAULT NULL"),
+                ("verify_code", "VARCHAR DEFAULT NULL"),
+                ("approved_at", "DATETIME DEFAULT NULL"),
             ]
             for col_name, col_def in new_leave_columns:
                 if col_name not in leave_columns:
                     logger.info(f"Adding column '{col_name}' to 'leave_requests' table...")
                     conn.execute(text(f"ALTER TABLE leave_requests ADD COLUMN {col_name} {col_def};"))
                     conn.commit()
+
+            # Unique indexes for v2 slip numbers & verification codes (safe alongside existing NULLs)
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_leave_requests_slip_no ON leave_requests (slip_no);"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_leave_requests_verify_code ON leave_requests (verify_code);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leave_requests_from_at ON leave_requests (from_at);"))
+            conn.commit()
 
             # Backfill timestamps & normalize legacy lowercase status values idempotently
             conn.execute(text("UPDATE leave_requests SET created_at = COALESCE(created_at, submitted_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, decided_at, submitted_at, CURRENT_TIMESTAMP), version = COALESCE(version, 1), request_type = COALESCE(request_type, 'leave');"))

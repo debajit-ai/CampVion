@@ -6,6 +6,7 @@ Single source of truth for DRAFT -> PENDING_APPROVAL -> APPROVED | REJECTED | CA
 import json
 import logging
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,6 +14,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
+from app.core import timezone_utils
+from app.core.config import settings
 from app.core.security import is_admin_role
 from app.db import models
 from app.services import audit_service, events_service, student_service
@@ -51,7 +54,7 @@ STATUS_CANCELLED = "CANCELLED"
 ALLOWED_TRANSITIONS: Dict[str, set[str]] = {
     STATUS_DRAFT: {STATUS_PENDING_APPROVAL, STATUS_CANCELLED},
     STATUS_PENDING_APPROVAL: {STATUS_APPROVED, STATUS_REJECTED, STATUS_CANCELLED},
-    STATUS_APPROVED: set(),
+    STATUS_APPROVED: {STATUS_CANCELLED},  # Guarded by before-from_at check in cancel_leave_request
     STATUS_REJECTED: set(),
     STATUS_CANCELLED: set(),
 }
@@ -157,6 +160,119 @@ def generate_unique_leave_code(db: Session, request_type: str = "leave") -> str:
             if tail.isdigit():
                 max_seq = max(max_seq, int(tail))
     return f"{prefix}-{year}-{(max_seq + 1):04d}"
+
+
+def generate_unique_slip_no(db: Session) -> str:
+    year = timezone_utils.campus_now().year
+    rows = db.query(models.LeaveRequest.slip_no).all()
+    max_seq = 0
+    for (sno,) in rows:
+        if sno and "-" in sno:
+            tail = sno.rsplit("-", 1)[-1]
+            if tail.isdigit():
+                max_seq = max(max_seq, int(tail))
+    return f"LS-{year}-{(max_seq + 1):06d}"
+
+
+def generate_unique_verify_code(db: Session) -> str:
+    for _ in range(12):
+        cand = secrets.token_urlsafe(12)
+        exists = db.query(models.LeaveRequest.id).filter(models.LeaveRequest.verify_code == cand).first()
+        if not exists:
+            return cand
+    return secrets.token_urlsafe(16)
+
+
+def validate_leave_window_v2(
+    db: Session,
+    *,
+    student_id: str,
+    from_at: datetime,
+    to_at: datetime,
+    category: str,
+    reason: str,
+    college: Optional[str] = None,
+    exclude_workflow_run_id: Optional[int] = None,
+) -> None:
+    from_utc = timezone_utils.ensure_utc(from_at)
+    to_utc = timezone_utils.ensure_utc(to_at)
+    now_utc = datetime.now(timezone.utc)
+
+    if from_utc is None or to_utc is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Both departure (from) and return (to) date and time are required.",
+        )
+    if from_utc < now_utc - timedelta(minutes=2):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Leave start date and time cannot be in the past.",
+        )
+    if to_utc <= from_utc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Leave return date and time must be strictly after departure time.",
+        )
+    max_days = max(1, int(settings.LEAVE_MAX_DAYS or 30))
+    if (to_utc - from_utc) > timedelta(days=max_days):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Leave duration cannot exceed {max_days} days.",
+        )
+    if not (category or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please choose a leave type.",
+        )
+    if len((reason or "").strip()) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please enter a short reason for your leave (at least 3 characters).",
+        )
+    if college is not None and len(college.strip()) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please select or enter a valid college / institution.",
+        )
+
+    from_campus = timezone_utils.to_campus(from_utc)
+    to_campus = timezone_utils.to_campus(to_utc)
+    start_iso = from_campus.date().isoformat()
+    end_iso = to_campus.date().isoformat()
+
+    existing_rows = (
+        db.query(models.LeaveRequest)
+        .filter(models.LeaveRequest.student_id == student_id)
+        .all()
+    )
+    for row in existing_rows:
+        if (getattr(row, "request_type", None) or "leave").lower() != "leave":
+            continue
+        st = normalize_leave_status(row.status)
+        if st not in {STATUS_PENDING_APPROVAL, STATUS_APPROVED}:
+            continue
+        if exclude_workflow_run_id is not None and row.workflow_run_id == exclude_workflow_run_id:
+            continue
+        if row.from_at and row.to_at:
+            r_from = timezone_utils.ensure_utc(row.from_at)
+            r_to = timezone_utils.ensure_utc(row.to_at)
+            if r_from < to_utc and r_to > from_utc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"You already have a {st.replace('_', ' ').lower()} leave ({row.leave_code}) "
+                        f"covering {timezone_utils.format_campus_dt(r_from)} to {timezone_utils.format_campus_dt(r_to)}."
+                    ),
+                )
+        elif row.start_date and row.end_date:
+            if row.start_date <= end_iso and row.end_date >= start_iso:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"You already have a {st.replace('_', ' ').lower()} leave ({row.leave_code}) "
+                        f"covering {row.start_date} to {row.end_date}."
+                    ),
+                )
 
 
 def get_authority_contact(
@@ -375,6 +491,42 @@ def serialize_leave_request(db: Session, leave: models.LeaveRequest, include_wor
     status_norm = normalize_leave_status(leave.status)
     submitted_iso = (leave.submitted_at or leave.created_at).isoformat() if (leave.submitted_at or leave.created_at) else None
     decided_iso = leave.decided_at.isoformat() if leave.decided_at else None
+    from_at_val = getattr(leave, "from_at", None)
+    to_at_val = getattr(leave, "to_at", None)
+    approved_at_raw = getattr(leave, "approved_at", None) or (leave.decided_at if status_norm == STATUS_APPROVED else None)
+    college_val = (
+        getattr(leave, "college_snapshot", None)
+        or (getattr(student, "college", None) if student else None)
+        or "Lovely Professional University"
+    )
+    res_type = (getattr(student, "residence_type", None) or "").lower() if student else ""
+    h_block = getattr(student, "hostel_block", None) if student else None
+    h_room = (getattr(student, "hostel_room", None) or getattr(student, "room_number", None)) if student else None
+    if h_block and h_room:
+        residence_label = f"{h_block} • Room {h_room}"
+    elif res_type == "hosteller":
+        residence_label = "Hosteller"
+    elif res_type == "day_scholar":
+        residence_label = "Day Scholar"
+    else:
+        residence_label = "Registered Student"
+
+    has_slip = bool(
+        req_type == "leave"
+        and from_at_val is not None
+        and to_at_val is not None
+        and status_norm == STATUS_APPROVED
+        and getattr(leave, "slip_no", None)
+    )
+    now_utc = datetime.now(timezone.utc)
+    can_cancel = bool(
+        status_norm in {STATUS_PENDING_APPROVAL, STATUS_DRAFT}
+        or (
+            status_norm == STATUS_APPROVED
+            and from_at_val is not None
+            and timezone_utils.ensure_utc(from_at_val) > now_utc
+        )
+    )
 
     return {
         "id": leave.id,
@@ -391,11 +543,34 @@ def serialize_leave_request(db: Session, leave: models.LeaveRequest, include_wor
         "student_program": student.program if student else None,
         "student_semester": student.semester if student else None,
         "student_department": student.department if student else None,
-        "student_college": (getattr(student, "college", None) if student else None) or "Lovely Professional University",
+        "student_college": college_val,
+        "college": college_val,
+        "student_residence_type": res_type or None,
+        "student_residence_label": residence_label,
+        "student_hostel_block": h_block,
+        "student_room_number": h_room,
         "category": cat_val,
         "start_date": start_val,
         "end_date": end_val,
         "days_count": days_val,
+        "from_at": timezone_utils.utc_iso(from_at_val),
+        "to_at": timezone_utils.utc_iso(to_at_val),
+        "from_at_campus": timezone_utils.campus_iso(from_at_val),
+        "to_at_campus": timezone_utils.campus_iso(to_at_val),
+        "from_display": timezone_utils.format_campus_dt(from_at_val) if from_at_val else None,
+        "to_display": timezone_utils.format_campus_dt(to_at_val) if to_at_val else None,
+        "from_day": timezone_utils.format_day_name(from_at_val or start_val),
+        "to_day": timezone_utils.format_day_name(to_at_val or end_val),
+        "campus_tz": settings.CAMPUS_TZ,
+        "destination": getattr(leave, "destination", None),
+        "exit_gate": getattr(leave, "exit_gate", None),
+        "entry_gate": getattr(leave, "entry_gate", None),
+        "slip_no": getattr(leave, "slip_no", None),
+        "verify_code": getattr(leave, "verify_code", None),
+        "approved_at": timezone_utils.utc_iso(approved_at_raw),
+        "approved_at_display": timezone_utils.format_campus_dt(approved_at_raw) if approved_at_raw else None,
+        "has_slip": has_slip,
+        "can_cancel": can_cancel,
         "reason": reason_val,
         "doc_required": bool(leave.doc_required),
         "status": status_norm,
@@ -438,6 +613,10 @@ def submit_leave_at_gate(
     category: str,
     reason: str,
     start_date_hint: Optional[str] = None,
+    from_at: Optional[datetime] = None,
+    to_at: Optional[datetime] = None,
+    destination: Optional[str] = None,
+    college_snapshot: Optional[str] = None,
     actor_user: Optional[models.UserAccount] = None,
     ip_address: Optional[str] = None,
     enforce_overlap_check: bool = True,
@@ -455,27 +634,47 @@ def submit_leave_at_gate(
         if existing:
             return existing, serialize_leave_request(db, existing, include_workflow=False)
 
-    start_date, end_date = compute_date_range(start_date_hint, days_count)
+    from_utc = timezone_utils.ensure_utc(from_at) if from_at else None
+    to_utc = timezone_utils.ensure_utc(to_at) if to_at else None
 
-    if enforce_overlap_check:
-        overlap = find_overlapping_pending_leave(
+    if from_utc is not None and to_utc is not None:
+        validate_leave_window_v2(
             db,
             student_id=student_id,
-            start_date=start_date,
-            end_date=end_date,
+            from_at=from_utc,
+            to_at=to_utc,
+            category=category,
+            reason=reason,
+            college=college_snapshot,
             exclude_workflow_run_id=workflow_run_id,
         )
-        if overlap:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"You already have a pending leave request ({overlap.leave_code}) covering "
-                    f"{overlap.start_date} to {overlap.end_date}. Please wait for a decision or withdraw {overlap.leave_code} first."
-                ),
+        from_c = timezone_utils.to_campus(from_utc)
+        to_c = timezone_utils.to_campus(to_utc)
+        start_date = from_c.date().isoformat()
+        end_date = to_c.date().isoformat()
+        computed_days = max(1, (to_c.date() - from_c.date()).days + 1)
+    else:
+        start_date, end_date = compute_date_range(start_date_hint, days_count)
+        computed_days = max(1, int(days_count or 1))
+        if enforce_overlap_check:
+            overlap = find_overlapping_pending_leave(
+                db,
+                student_id=student_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_workflow_run_id=workflow_run_id,
             )
+            if overlap:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"You already have a pending leave request ({overlap.leave_code}) covering "
+                        f"{overlap.start_date} to {overlap.end_date}. Please wait for a decision or withdraw {overlap.leave_code} first."
+                    ),
+                )
 
     student, att_snapshot, policy_result = build_leave_snapshots(
-        db, student_id=student_id, days_count=days_count, category=category, reason=reason
+        db, student_id=student_id, days_count=computed_days, category=category, reason=reason
     )
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
@@ -484,6 +683,13 @@ def submit_leave_at_gate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=policy_result.get("reason") or "Student is not eligible for leave under institutional policy.",
         )
+
+    resolved_college = (
+        (college_snapshot or "").strip()
+        or (getattr(student, "college", None) or "").strip()
+        or "Lovely Professional University"
+    )
+    clean_dest = (destination or "").strip() or None
 
     admin_user, approver_name, approver_title = get_primary_warden(db)
     routed_role = approver_title or "Warden"
@@ -497,7 +703,11 @@ def submit_leave_at_gate(
         category=(category or "personal").lower(),
         start_date=start_date,
         end_date=end_date,
-        days_count=max(1, int(days_count or 1)),
+        days_count=computed_days,
+        from_at=from_utc,
+        to_at=to_utc,
+        college_snapshot=resolved_college,
+        destination=clean_dest,
         reason=reason or "Personal leave",
         supporting_doc_url=None,
         doc_required=1 if policy_result.get("requires_documentation") else 0,
@@ -607,6 +817,7 @@ def _apply_optimistic_decision(
     actor_user: Optional[models.UserAccount],
     decision_comment: Optional[str],
     rejection_reason: Optional[str],
+    extra_fields: Optional[Dict[str, Any]] = None,
 ) -> models.LeaveRequest:
     ensure_valid_transition(leave.status, target_status)
     version_to_match = expected_version if expected_version is not None else (leave.version or 1)
@@ -627,6 +838,8 @@ def _apply_optimistic_decision(
         update_values["rejection_reason"] = rejection_reason
         if not decision_comment:
             update_values["decision_remarks"] = rejection_reason
+    if extra_fields:
+        update_values.update(extra_fields)
 
     stmt = (
         update(models.LeaveRequest)
@@ -656,6 +869,8 @@ def approve_leave_request(
     actor_user: models.UserAccount,
     comment: Optional[str] = None,
     expected_version: Optional[int] = None,
+    exit_gate: Optional[str] = None,
+    entry_gate: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> Tuple[models.LeaveRequest, Dict[str, Any], Optional[Any]]:
     leave = None
@@ -677,6 +892,29 @@ def approve_leave_request(
             detail=f"Leave request {leave.leave_code} is already {normalize_leave_status(leave.status)}.",
         )
 
+    req_type_pre = (getattr(leave, "request_type", None) or "leave").lower()
+    student_obj = leave.student or student_service.get_student_by_id(db, leave.student_id)
+    now_utc = datetime.now(timezone.utc)
+    extra_fields: Dict[str, Any] = {"approved_at": now_utc}
+    audit_extra: Dict[str, Any] = {}
+
+    if req_type_pre == "leave":
+        is_hosteller = bool(
+            student_obj
+            and ((getattr(student_obj, "residence_type", "") or "").lower() == "hosteller" or getattr(student_obj, "hostel_block", None))
+        )
+        default_gate = "Gate 2 - Hostel Gate" if is_hosteller else "Gate 1 - Main Gate"
+        chosen_exit = (exit_gate or "").strip() or default_gate
+        chosen_entry = (entry_gate or "").strip() or chosen_exit
+        extra_fields["exit_gate"] = chosen_exit
+        extra_fields["entry_gate"] = chosen_entry
+        audit_extra["exit_gate"] = chosen_exit
+        audit_extra["entry_gate"] = chosen_entry
+        if getattr(leave, "from_at", None) and getattr(leave, "to_at", None):
+            extra_fields["slip_no"] = generate_unique_slip_no(db)
+            extra_fields["verify_code"] = generate_unique_verify_code(db)
+            audit_extra["slip_no"] = extra_fields["slip_no"]
+
     clean_comment = (comment or "").strip() or "Approved at Institutional Governance Gate."
     _apply_optimistic_decision(
         db,
@@ -686,6 +924,7 @@ def approve_leave_request(
         actor_user=actor_user,
         decision_comment=clean_comment,
         rejection_reason=None,
+        extra_fields=extra_fields,
     )
 
     audit_service.record_audit_event(
@@ -698,6 +937,7 @@ def approve_leave_request(
             "leave_code": leave.leave_code,
             "workflow_run_id": leave.workflow_run_id,
             "comment": clean_comment,
+            **audit_extra,
         },
         ip_address=ip_address,
     )
@@ -957,11 +1197,29 @@ def cancel_leave_request(
         )
 
     cur = normalize_leave_status(leave.status)
-    if cur not in {STATUS_PENDING_APPROVAL, STATUS_DRAFT}:
+    was_approved = cur == STATUS_APPROVED
+    if cur == STATUS_APPROVED:
+        if not getattr(leave, "from_at", None):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot withdraw leave request {leave.leave_code} because it is already {cur}.",
+            )
+        if datetime.now(timezone.utc) >= timezone_utils.ensure_utc(leave.from_at):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot cancel {leave.leave_code} because its scheduled start time has already begun.",
+            )
+    elif cur not in {STATUS_PENDING_APPROVAL, STATUS_DRAFT}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot withdraw leave request {leave.leave_code} because it is already {cur}.",
         )
+
+    cancel_note = (
+        "Cancelled by student prior to scheduled start time (gate slip revoked)."
+        if was_approved
+        else "Withdrawn by student prior to approval decision."
+    )
 
     _apply_optimistic_decision(
         db,
@@ -969,7 +1227,7 @@ def cancel_leave_request(
         target_status=STATUS_CANCELLED,
         expected_version=expected_version,
         actor_user=actor_user,
-        decision_comment="Withdrawn by student prior to approval decision.",
+        decision_comment=cancel_note,
         rejection_reason=None,
     )
 
@@ -1003,8 +1261,12 @@ def cancel_leave_request(
     leave_payload = serialize_leave_request(db, leave, include_workflow=True)
     now = datetime.now(timezone.utc)
     admins = _get_active_admins(db)
-    notif_title = f"Leave Request Withdrawn ({leave.leave_code})"
-    notif_body = f"Student {leave.student_id} withdrew pending leave request {leave.leave_code}."
+    if was_approved:
+        notif_title = f"Approved Leave Cancelled ({leave.leave_code})"
+        notif_body = f"Student {leave.student_id} cancelled previously approved request {leave.leave_code}; gate slip revoked."
+    else:
+        notif_title = f"Leave Request Withdrawn ({leave.leave_code})"
+        notif_body = f"Student {leave.student_id} withdrew pending leave request {leave.leave_code}."
     admin_notifs: List[models.Notification] = []
     for adm in admins:
         n = models.Notification(

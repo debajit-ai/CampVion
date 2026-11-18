@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.agent.agent import AXORAAgent
+from app.core import timezone_utils
 from app.core.security import (
     auth_rate_limiter,
     is_admin_role,
@@ -22,22 +23,33 @@ from app.core.security import (
 )
 from app.db import models
 from app.db.database import get_db
-from app.services import leave_service, student_service
+from app.services import leave_service, pdf_service, student_service
 
 logger = logging.getLogger("campvion.requests")
 router = APIRouter()
 
 
 class CreateLeaveBody(BaseModel):
-    days: int = Field(..., ge=1, le=30, description="Number of leave days requested")
+    days: int = Field(default=1, ge=1, le=30, description="Number of leave days requested")
     start_date: Optional[str] = Field(default=None, max_length=64)
     category: str = Field(default="personal", max_length=40)
     reason: str = Field(..., min_length=3, max_length=500)
+    from_at: Optional[str] = Field(default=None, max_length=64)
+    to_at: Optional[str] = Field(default=None, max_length=64)
+    from_date: Optional[str] = Field(default=None, max_length=64)
+    from_time: Optional[str] = Field(default=None, max_length=32)
+    to_date: Optional[str] = Field(default=None, max_length=64)
+    to_time: Optional[str] = Field(default=None, max_length=32)
+    destination: Optional[str] = Field(default=None, max_length=200)
+    college: Optional[str] = Field(default=None, max_length=120)
+    idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
 class ApproveBody(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
     version: Optional[int] = Field(default=None, ge=1)
+    exit_gate: Optional[str] = Field(default=None, max_length=120)
+    entry_gate: Optional[str] = Field(default=None, max_length=120)
 
 
 class RejectBody(BaseModel):
@@ -272,6 +284,15 @@ class CreateCampusRequestBody(BaseModel):
     days: int = Field(default=1, ge=1, le=60)
     reason: str = Field(..., min_length=3, max_length=600)
     details: Optional[Dict[str, Any]] = Field(default=None)
+    from_at: Optional[str] = Field(default=None, max_length=64)
+    to_at: Optional[str] = Field(default=None, max_length=64)
+    from_date: Optional[str] = Field(default=None, max_length=64)
+    from_time: Optional[str] = Field(default=None, max_length=32)
+    to_date: Optional[str] = Field(default=None, max_length=64)
+    to_time: Optional[str] = Field(default=None, max_length=32)
+    destination: Optional[str] = Field(default=None, max_length=200)
+    college: Optional[str] = Field(default=None, max_length=120)
+    idempotency_key: Optional[str] = Field(default=None, max_length=80)
 
 
 @router.post("/submit", status_code=status.HTTP_201_CREATED)
@@ -290,12 +311,22 @@ def submit_generic_campus_request(
 
     req_type = (payload.request_type or "").strip().lower()
     if req_type == "leave":
+        d = payload.details or {}
         return submit_leave_request(
             payload=CreateLeaveBody(
                 days=payload.days,
                 start_date=payload.start_date,
                 category=payload.category or "personal",
                 reason=payload.reason,
+                from_at=payload.from_at or d.get("from_at"),
+                to_at=payload.to_at or d.get("to_at"),
+                from_date=payload.from_date or d.get("from_date"),
+                from_time=payload.from_time or d.get("from_time"),
+                to_date=payload.to_date or d.get("to_date"),
+                to_time=payload.to_time or d.get("to_time"),
+                destination=payload.destination or d.get("destination"),
+                college=payload.college or d.get("college"),
+                idempotency_key=payload.idempotency_key,
             ),
             request=request,
             user=user,
@@ -347,9 +378,64 @@ def submit_leave_request(
     if not student:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student profile could not be resolved.")
 
+    has_v2_window = any(
+        bool(v)
+        for v in (
+            payload.from_at,
+            payload.to_at,
+            payload.from_date,
+            payload.from_time,
+            payload.to_date,
+            payload.to_time,
+        )
+    )
+    leave_v2_fields: Dict[str, Any] = {}
+    effective_days = payload.days
     start_hint = payload.start_date or "tomorrow"
+
+    if has_v2_window:
+        from_utc = timezone_utils.parse_iso_or_parts_to_utc(
+            iso_value=payload.from_at,
+            date_value=payload.from_date,
+            time_value=payload.from_time,
+        )
+        to_utc = timezone_utils.parse_iso_or_parts_to_utc(
+            iso_value=payload.to_at,
+            date_value=payload.to_date or payload.from_date,
+            time_value=payload.to_time,
+        )
+        if not from_utc or not to_utc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please provide valid departure and return dates and times.",
+            )
+        leave_service.validate_leave_window_v2(
+            db,
+            student_id=student.student_id,
+            from_at=from_utc,
+            to_at=to_utc,
+            category=payload.category,
+            reason=payload.reason,
+            college=payload.college,
+        )
+        from_c = timezone_utils.to_campus(from_utc)
+        to_c = timezone_utils.to_campus(to_utc)
+        start_hint = from_c.date().isoformat()
+        effective_days = max(1, (to_c.date() - from_c.date()).days + 1)
+        leave_v2_fields = {
+            "from_at": from_utc,
+            "to_at": to_utc,
+            "destination": payload.destination,
+            "college_snapshot": payload.college or getattr(student, "college", None),
+        }
+    elif payload.college or payload.destination:
+        leave_v2_fields = {
+            "destination": payload.destination,
+            "college_snapshot": payload.college or getattr(student, "college", None),
+        }
+
     goal_text = (
-        f"Apply for {payload.category.strip()} leave for {payload.days} days "
+        f"Apply for {payload.category.strip()} leave for {effective_days} days "
         f"starting {start_hint} because {payload.reason.strip()}"
     )
 
@@ -360,6 +446,7 @@ def submit_leave_request(
         actor_user=user,
         enforce_overlap_check=True,
         ip_address=_client_ip(request),
+        leave_v2_fields=leave_v2_fields,
     )
     result = agent.start(student.student_id, goal_text)
     state = agent.get_state(result.request_id)
@@ -402,6 +489,8 @@ def approve_leave(
         actor_user=user,
         comment=payload.comment if payload else None,
         expected_version=payload.version if payload else None,
+        exit_gate=payload.exit_gate if payload else None,
+        entry_gate=payload.entry_gate if payload else None,
         ip_address=_client_ip(request) if request else None,
     )
     return {
@@ -452,3 +541,65 @@ def cancel_leave(
         ip_address=_client_ip(request) if request else None,
     )
     return {"request": leave_payload}
+
+
+@router.get("/{leave_id}/slip.pdf")
+def download_request_slip_pdf(
+    leave_id: int,
+    request: Request,
+    user: models.UserAccount = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    leave = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+
+    is_admin = (user.role or "").lower() in leave_service.ADMIN_ROLES
+    if not is_admin:
+        student_service.ensure_student_for_user(db, user)
+        if leave.student_id != user.student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: you can only download your own slips.",
+            )
+
+    status_norm = leave_service.normalize_leave_status(leave.status)
+    if status_norm != leave_service.STATUS_APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Official slip is only issued for approved requests.",
+        )
+
+    req_type = (getattr(leave, "request_type", None) or "leave").lower()
+    if req_type == "leave" and (not getattr(leave, "from_at", None) or not getattr(leave, "to_at", None)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Slip not available for older requests.",
+        )
+
+    slip_dirty = False
+    if not getattr(leave, "slip_no", None):
+        leave.slip_no = leave_service.generate_unique_slip_no(db)
+        slip_dirty = True
+    if not getattr(leave, "verify_code", None):
+        leave.verify_code = leave_service.generate_unique_verify_code(db)
+        slip_dirty = True
+    if slip_dirty:
+        db.commit()
+        db.refresh(leave)
+
+    serialized = leave_service.serialize_leave_request(db, leave, include_workflow=False)
+    verify_code = serialized.get("verify_code") or leave.verify_code
+    base_url = timezone_utils.resolve_public_base_url(request)
+    verify_url = f"{base_url}/verify/{verify_code}"
+
+    pdf_bytes = pdf_service.generate_leave_slip_pdf(leave_data=serialized, verify_url=verify_url)
+    safe_name = (serialized.get("slip_no") or serialized.get("leave_code") or f"slip-{leave.id}").replace("/", "-")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="CampVion-{safe_name}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )

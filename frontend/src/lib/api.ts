@@ -489,6 +489,15 @@ export const apiClient = {
     start_date?: string;
     category?: string;
     reason: string;
+    from_at?: string;
+    to_at?: string;
+    from_date?: string;
+    from_time?: string;
+    to_date?: string;
+    to_time?: string;
+    destination?: string;
+    college?: string;
+    idempotency_key?: string;
   }): Promise<{ request: LeaveRequestItem; workflow: AgentResult }> {
     return fetchJson<{ request: LeaveRequestItem; workflow: AgentResult }>("/requests/leave", {
       method: "POST",
@@ -496,9 +505,19 @@ export const apiClient = {
     });
   },
 
+  async listCampusGates(): Promise<{ items: import("../types/api").CampusGateItem[] }> {
+    return fetchJson<{ items: import("../types/api").CampusGateItem[] }>("/gates");
+  },
+
+  async verifyLeaveSlip(verifyCode: string): Promise<import("../types/api").LeaveSlipVerifyResponse> {
+    return fetchJson<import("../types/api").LeaveSlipVerifyResponse>(
+      `/verify/${encodeURIComponent(verifyCode)}`
+    );
+  },
+
   async approveLeaveRequest(
     leaveId: number,
-    payload?: { comment?: string; version?: number }
+    payload?: { comment?: string; version?: number; exit_gate?: string; entry_gate?: string }
   ): Promise<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }> {
     return fetchJson<{ request: LeaveRequestItem; workflow_result?: AgentResult | null }>(
       `/requests/${leaveId}/approve`,

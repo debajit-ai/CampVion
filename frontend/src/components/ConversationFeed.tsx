@@ -33,6 +33,7 @@ import {
   Task,
 } from "../types/api";
 import { HumanApprovalCenter } from "./HumanApprovalCenter";
+import { LeaveDetailsCard, LeaveGuidedPrefill } from "./LeaveDetailsCard";
 import { RequestStatusCard } from "./RequestStatusCard";
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { useTheme } from "../context/ThemeContext";
@@ -846,6 +847,14 @@ export function ConversationFeed({
                   isActive={isPendingProposal}
                   isLoading={isLoading}
                   onConfirmAction={onConfirmAction}
+                />
+              )}
+
+              {/* Guided Interactive Service Card (Leave Dates & Times) */}
+              {isLastMessage && meta.guided_card?.type === "leave_details" && !isAdmin && (
+                <LeaveDetailsCard
+                  prefill={(meta.guided_card.prefill || {}) as LeaveGuidedPrefill}
+                  onSubmitted={(leave) => upsertLiveLeave(leave)}
                 />
               )}
 

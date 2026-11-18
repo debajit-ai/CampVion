@@ -202,6 +202,17 @@ class LeaveRequest(Base):
     title = Column(String, nullable=True)
     details_json = Column(Text, nullable=True)
 
+    # Services v2 additive Leave Slip & Exact DateTime Columns
+    from_at = Column(DateTime, nullable=True, index=True)
+    to_at = Column(DateTime, nullable=True)
+    college_snapshot = Column(String, nullable=True)
+    destination = Column(String, nullable=True)
+    exit_gate = Column(String, nullable=True)
+    entry_gate = Column(String, nullable=True)
+    slip_no = Column(String, unique=True, nullable=True, index=True)
+    verify_code = Column(String, unique=True, nullable=True, index=True)
+    approved_at = Column(DateTime, nullable=True)
+
     student = relationship("Student", back_populates="leave_requests")
 
 # =============================================================================
@@ -544,6 +555,22 @@ class AuditLog(Base):
     details_json = Column(Text, nullable=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_utc_now, nullable=False, index=True)
+
+
+# =============================================================================
+# DOMAIN M: SERVICES V2 INFRASTRUCTURE (CAMPUS GATES)
+# =============================================================================
+
+class CampusGate(Base):
+    __tablename__ = "campus_gates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gate_code = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, unique=True, nullable=False)
+    location = Column(String, nullable=True)
+    is_default_hostel = Column(Integer, nullable=False, default=0)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=get_utc_now, nullable=False)
 
 
 

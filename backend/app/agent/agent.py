@@ -26,6 +26,7 @@ class AXORAAgent:
         actor_user: Optional[Any] = None,
         enforce_overlap_check: bool = False,
         ip_address: Optional[str] = None,
+        leave_v2_fields: Optional[dict[str, Any]] = None,
     ):
         self.db = db
         self.auto_approve = auto_approve
@@ -33,6 +34,7 @@ class AXORAAgent:
         self.actor_user = actor_user
         self.enforce_overlap_check = enforce_overlap_check
         self.ip_address = ip_address
+        self.leave_v2_fields = leave_v2_fields or {}
         self.normalizer = GoalNormalizer()
         self.decomposer = GoalDecomposer()
         self.planner = Planner()
@@ -185,6 +187,10 @@ class AXORAAgent:
                                 category=str(params.get("category") or "personal"),
                                 reason=str(params.get("reason") or "Personal leave"),
                                 start_date_hint=params.get("start_date") or self.start_date_hint,
+                                from_at=self.leave_v2_fields.get("from_at"),
+                                to_at=self.leave_v2_fields.get("to_at"),
+                                destination=self.leave_v2_fields.get("destination"),
+                                college_snapshot=self.leave_v2_fields.get("college_snapshot"),
                                 actor_user=self.actor_user,
                                 ip_address=self.ip_address,
                                 enforce_overlap_check=self.enforce_overlap_check,

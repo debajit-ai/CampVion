@@ -296,7 +296,9 @@ export function RequestHistoryView({
                       <div className="text-[11px] text-cv-fg-2 flex items-center gap-1 mt-0.5">
                         <Calendar className="h-3 w-3 text-cv-accent-ink shrink-0" />
                         <span>
-                          {item.start_date === item.end_date
+                          {item.from_display && item.to_display
+                            ? `${item.from_display} \u2192 ${item.to_display}`
+                            : item.start_date === item.end_date
                             ? item.start_date
                             : `${item.start_date} \u2192 ${item.end_date}`}
                         </span>
