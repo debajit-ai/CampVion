@@ -205,7 +205,10 @@ export function toTitleCase(input?: string | null): string {
 }
 
 export function getFirstNameTitleCase(input?: string | null, fallback = "Student"): string {
-  const formatted = toTitleCase(input);
+  if (!input) return fallback;
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.includes("@")) return fallback;
+  const formatted = toTitleCase(trimmed);
   if (!formatted) return fallback;
   return formatted.split(/\s+/)[0] || fallback;
 }

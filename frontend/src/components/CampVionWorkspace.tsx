@@ -48,6 +48,7 @@ import {
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { ExperienceMode, useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useAssistantUi } from "../store/assistantUiStore";
 import { formatRoleLabel, getUserInitials, toTitleCase } from "../utils/language";
 
 interface CampVionWorkspaceProps {
@@ -57,7 +58,20 @@ interface CampVionWorkspaceProps {
 export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspaceProps) {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading, logout, preferredDisplayName } = useAuth();
-  const { theme, resolvedTheme, setTheme, experienceMode, setExperienceMode } = useTheme();
+  const {
+    theme,
+    resolvedTheme,
+    setTheme,
+    experienceMode,
+    setExperienceMode,
+    reducedMotion,
+  } = useTheme();
+  const {
+    firstMessageSent,
+    startFirstMessageScatter,
+    markConversationActive,
+    resetWelcome,
+  } = useAssistantUi();
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -430,6 +444,11 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
 
           if (fullConv) {
             setConversation(fullConv);
+            if (fullConv.messages.length > 0 || fullConv.active_workflow_request_id) {
+              markConversationActive();
+            } else {
+              resetWelcome();
+            }
             if (fullConv.active_workflow_request_id) {
               setActiveRequestId(fullConv.active_workflow_request_id);
               await fetchWorkflowDetails(fullConv.active_workflow_request_id).catch(
@@ -448,6 +467,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
 
         // No existing conversation for this student yet
         setConversation(null);
+        resetWelcome();
       } catch {
         // Ignore background session recovery errors
       }
@@ -455,7 +475,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, selectedStudentId, fetchWorkflowDetails]);
+  }, [isAuthenticated, selectedStudentId, fetchWorkflowDetails, markConversationActive, resetWelcome]);
 
   // Direct workflow execution (used by simulation fault-injection directives & evaluation suite)
   const handleLaunchAgent = async (studentId?: string, goal?: string) => {
@@ -463,6 +483,15 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     const gText = goal || goalText;
 
     if (!sId.trim() || !gText.trim() || isLoading) return;
+
+    const wasEmpty =
+      (conversation?.messages?.length ?? 0) === 0 &&
+      !agentState &&
+      !agentResult &&
+      !activeRequestId;
+    if (wasEmpty && !firstMessageSent) {
+      startFirstMessageScatter(reducedMotion);
+    }
 
     setIsLoading(true);
     setError(null);
@@ -474,6 +503,9 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       setActiveSection("chat");
       setGoalText("");
     } catch (err: unknown) {
+      if (wasEmpty) {
+        resetWelcome();
+      }
       const message =
         err instanceof Error ? err.message : "Failed to execute agent workflow";
       setError(message);
@@ -492,6 +524,15 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     if (trimmed.toUpperCase().includes("FAILURE_MODE=")) {
       await handleLaunchAgent(selectedStudentId, trimmed);
       return;
+    }
+
+    const wasEmpty =
+      (conversation?.messages?.length ?? 0) === 0 &&
+      !agentState &&
+      !agentResult &&
+      !activeRequestId;
+    if (wasEmpty && !firstMessageSent) {
+      startFirstMessageScatter(reducedMotion);
     }
 
     setIsLoading(true);
@@ -521,6 +562,9 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       }
       setActiveSection("chat");
     } catch (err: unknown) {
+      if (wasEmpty) {
+        resetWelcome();
+      }
       const message =
         err instanceof Error
           ? err.message
@@ -569,6 +613,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
 
   // Switch request ID or load historical workflow
   const handleSelectRequestId = async (requestId: number) => {
+    markConversationActive();
     setActiveRequestId(requestId);
     setIsLoading(true);
     setError(null);
@@ -640,6 +685,8 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     setTraces([]);
     setError(null);
     setGoalText("");
+    setConversation(null);
+    resetWelcome();
     setActiveSection("chat");
     try {
       const freshSession = await apiClient.createNewConversation(selectedStudentId);
@@ -1037,6 +1084,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
                   tasks={tasks}
                   activeRequestId={activeRequestId}
                   isLoading={isLoading}
+                  hasPreviousRequests={recentRequestIds.length > 0}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onSelectPreset={handleSelectPreset}

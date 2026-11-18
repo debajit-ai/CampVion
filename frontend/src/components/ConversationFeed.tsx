@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   BookOpen,
@@ -13,10 +15,7 @@ import {
   Edit3,
   FileCheck2,
   GitBranch,
-  Layers,
   Loader2,
-  MessageSquarePlus,
-  RotateCcw,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -37,12 +36,20 @@ import { HumanApprovalCenter } from "./HumanApprovalCenter";
 import { PRESET_GOALS } from "./NewRequestPanel";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useAssistantUi } from "../store/assistantUiStore";
+import type { Logo3DState } from "./brand/Logo3D";
 import {
   formatStudentFriendlyError,
+  getFirstNameTitleCase,
   getFriendlyTaskTitle,
   getFriendlyToolName,
   getFriendlyWorkflowStatus,
 } from "../utils/language";
+
+const WelcomeScene = dynamic(
+  () => import("./assistant/WelcomeScene").then((m) => m.WelcomeScene),
+  { ssr: false }
+);
 
 interface ConversationFeedProps {
   conversation?: ConversationSessionData | null;
@@ -51,6 +58,7 @@ interface ConversationFeedProps {
   tasks: Task[];
   activeRequestId: number | null;
   isLoading: boolean;
+  hasPreviousRequests?: boolean;
   onApprove: (requestId: number) => Promise<void>;
   onReject: (requestId: number) => Promise<void>;
   onSelectPreset: (preset: (typeof PRESET_GOALS)[0]) => void;
@@ -61,29 +69,6 @@ interface ConversationFeedProps {
   ) => Promise<void>;
   onInspectToolInTrace?: (toolName: string) => void;
 }
-
-const CONVERSATIONAL_STARTERS = [
-  {
-    title: "Check My Attendance",
-    prompt: "I need some help with my attendance.",
-    badge: "ATTENDANCE",
-  },
-  {
-    title: "Apply for Medical Leave",
-    prompt: "I want to apply for leave for 3 days starting tomorrow due to medical reasons.",
-    badge: "LEAVE WORKFLOW",
-  },
-  {
-    title: "University Attendance Policy",
-    prompt: "What happens if my attendance falls below 75%?",
-    badge: "POLICY QA",
-  },
-  {
-    title: "Explore Campus Assistant",
-    prompt: "Hey CampVion! What can you help me with?",
-    badge: "CONVERSATION",
-  },
-];
 
 function renderFormattedInline(text: string): React.ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
@@ -419,6 +404,7 @@ export function ConversationFeed({
   tasks,
   activeRequestId,
   isLoading,
+  hasPreviousRequests = false,
   onApprove,
   onReject,
   onSelectPreset,
@@ -426,200 +412,127 @@ export function ConversationFeed({
   onConfirmAction,
   onInspectToolInTrace,
 }: ConversationFeedProps) {
-  const { experienceMode } = useTheme();
+  const {
+    experienceMode,
+    resolvedTheme,
+    reducedMotion: contextReducedMotion,
+  } = useTheme();
+  const osReducedMotion = Boolean(useReducedMotion());
+  const disableMotion = contextReducedMotion || osReducedMotion;
   const { user, preferredDisplayName } = useAuth();
+  const {
+    firstMessageSent,
+    isScattering,
+    welcomeCycle,
+    completeScatter,
+  } = useAssistantUi();
+
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
   const messages: ConversationMessageItem[] = conversation?.messages || [];
   const hasMessages = messages.length > 0;
   const hasWorkflow = Boolean(state || result || tasks.length > 0 || activeRequestId);
+  const roleStr = (user?.role || "").toLowerCase();
+  const isAdmin =
+    roleStr === "administrator" ||
+    roleStr === "system_administrator" ||
+    roleStr === "faculty";
 
-  const bannerDisplayName =
-    preferredDisplayName?.trim() ||
-    (user?.full_name ? user.full_name.trim().split(" ")[0] : "Student");
+  const firstName = getFirstNameTitleCase(
+    preferredDisplayName?.trim() || user?.full_name,
+    isAdmin ? "Admin" : "Student"
+  );
+  const leadLine =
+    hasPreviousRequests || Boolean(user?.last_login_at)
+      ? "Welcome back,"
+      : "Welcome,";
 
-  // Auto-scroll to bottom when new messages arrive or loading state toggles
-  useEffect(() => {
-    if (hasMessages || hasWorkflow || isLoading) {
-      feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  const suggestions = useMemo(() => {
+    if (isAdmin) {
+      return [
+        {
+          label: "Pending approvals",
+          prompt: "Show me pending approvals and requests awaiting review.",
+        },
+        {
+          label: "Today's requests",
+          prompt: "Summarize today's student requests and their status.",
+        },
+        {
+          label: "Policy summary",
+          prompt: "Summarize the university leave and 75% attendance policy.",
+        },
+      ];
     }
-  }, [messages.length, hasWorkflow, isLoading, hasMessages]);
+    return [
+      {
+        label: "Check my attendance",
+        prompt: "Check my overall attendance",
+      },
+      {
+        label: "Apply for leave",
+        prompt: "I want to apply for leave",
+      },
+      {
+        label: "Attendance policy",
+        prompt: "What happens if my attendance falls below 75%?",
+      },
+    ];
+  }, [isAdmin]);
 
-  // Empty state when no conversation messages and no active workflow exist
-  if (!hasMessages && !hasWorkflow) {
+  const rawStatus = state?.current_status || result?.status || "IDLE";
+  const welcomeLogoState: Logo3DState = isLoading
+    ? "thinking"
+    : rawStatus === "WAITING_FOR_HUMAN"
+    ? "waiting_for_approval"
+    : rawStatus === "COMPLETED"
+    ? "completed"
+    : rawStatus === "FAILED"
+    ? "failed"
+    : "idle";
+
+  const showWelcome =
+    isScattering || (!hasMessages && !hasWorkflow && !firstMessageSent);
+
+  // Auto-scroll to bottom when messages appear outside the welcome state
+  useEffect(() => {
+    if (!showWelcome && (hasMessages || hasWorkflow || isLoading)) {
+      feedEndRef.current?.scrollIntoView({
+        behavior: disableMotion ? "auto" : "smooth",
+        block: "end",
+      });
+    }
+  }, [showWelcome, messages.length, hasWorkflow, isLoading, hasMessages, disableMotion]);
+
+  if (showWelcome) {
     return (
-      <div className="flex flex-col items-center p-4 sm:p-6 text-center max-w-3xl mx-auto select-none my-auto w-full">
-        {/* Dynamic Colorful Welcome Card with Electric Violet & Neon Gold Gradient Accents */}
-        <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 w-full bg-[#050505] border border-[#27272a] shadow-2xl transition-all duration-300">
-          {/* Ambient Glows */}
-          <div className="absolute -top-24 -left-20 w-72 h-72 bg-[#8B5CF6]/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-20 w-72 h-72 bg-[#EFFF00]/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#10B981]/10 rounded-full blur-3xl pointer-events-none" />
-
-          {/* Badge & Emblem */}
-          <div className="relative z-10 flex flex-col items-center">
-            {/* CampVion Brand Emblem with Neon Halo */}
-            <div className="relative mb-3">
-              <div className="h-16 w-16 rounded-2xl campvion-emblem-surface p-2.5 flex items-center justify-center mx-auto shadow-lg ring-1 ring-[#8B5CF6]/40 hover:ring-[#EFFF00]/60 transition-all duration-300">
-                <Image
-                  src="/brand/campvion-symbol.png"
-                  alt="CampVion Emblem"
-                  width={48}
-                  height={48}
-                  priority
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <span
-                className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-cv-success-solid border-2 border-[#050505]"
-                title="CampVion Intelligence Active"
-              />
-            </div>
-
-            {/* Dynamic Welcome Heading */}
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white mt-1">
-              Welcome back,{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#EFFF00] via-[#A3E635] to-[#8B5CF6]">
-                {bannerDisplayName}
-              </span>
-              ! ✨
-            </h1>
-
-            {/* Subtitle Copy */}
-            <p className="text-xs sm:text-sm text-zinc-300 max-w-lg mt-2 leading-relaxed">
-              CampVion is ready to assist you with university policies, attendance inquiries, and campus workflows.
-            </p>
-
-            {/* Quick-Action Pills */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
-              {[
-                {
-                  label: "Check my overall attendance",
-                  prompt: "Check my overall attendance",
-                  icon: Sparkles,
-                },
-                {
-                  label: "I want to apply for leave",
-                  prompt: "I want to apply for 3 days of medical leave starting tomorrow because of fever.",
-                  icon: Calendar,
-                },
-                {
-                  label: "University Attendance Policy (<75%)",
-                  prompt: "What happens if my attendance falls below 75%?",
-                  icon: BookOpen,
-                },
-                {
-                  label: "What can CampVion do?",
-                  prompt: "Hey CampVion! What can you help me with?",
-                  icon: Layers,
-                },
-              ].map((pill, pIdx) => {
-                const IconComp = pill.icon;
-                return (
-                  <button
-                    key={pIdx}
-                    type="button"
-                    onClick={() => {
-                      if (onSendMessage) {
-                        void onSendMessage(pill.prompt);
-                      }
-                    }}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[#121215] hover:bg-[#1f1f26] border border-[#27272a] hover:border-[#8B5CF6]/50 text-xs font-medium text-zinc-200 hover:text-white transition cursor-pointer shadow-xs group/pill"
-                  >
-                    <IconComp className="h-3 w-3 text-cv-accent-ink group-hover/pill:text-[#8B5CF6] transition-colors shrink-0" />
-                    <span>{pill.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Feature Highlights Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mt-7 text-left">
-          <div className="p-4 rounded-xl bg-cv-surface border border-cv-line shadow-xs">
-            <div className="p-2 rounded-lg bg-cv-accent-soft text-cv-accent-ink w-fit mb-2.5">
-              <Layers className="h-4 w-4" />
-            </div>
-            <h3 className="text-xs font-semibold text-cv-fg">
-              Multi-Turn Context
-            </h3>
-            <p className="text-[11px] text-cv-fg-2 mt-1 leading-relaxed">
-              Remembers dates, duration, and reasons across follow-up messages so you never repeat yourself.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-cv-surface border border-cv-line shadow-xs">
-            <div className="p-2 rounded-lg bg-cv-raised text-cv-fg w-fit mb-2.5">
-              <RotateCcw className="h-4 w-4" />
-            </div>
-            <h3 className="text-xs font-semibold text-cv-fg">
-              Verified Campus Data
-            </h3>
-            <p className="text-[11px] text-cv-fg-2 mt-1 leading-relaxed">
-              Queries real student attendance, schedules, and official university policy rules.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-cv-surface border border-cv-line shadow-xs">
-            <div className="p-2 rounded-lg bg-cv-warning-soft text-cv-warning w-fit mb-2.5">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <h3 className="text-xs font-semibold text-cv-fg">
-              Permission First
-            </h3>
-            <p className="text-[11px] text-cv-fg-2 mt-1 leading-relaxed">
-              Prepares consequential requests for your confirmation before executing governed workflows.
-            </p>
-          </div>
-        </div>
-
-        {/* Conversational Starters */}
-        <div className="w-full mt-7">
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-cv-fg-2 block mb-2.5 text-left">
-            Start a Conversation
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
-            {CONVERSATIONAL_STARTERS.map((starter, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  if (onSendMessage) {
-                    void onSendMessage(starter.prompt);
-                  } else {
-                    onSelectPreset({
-                      label: starter.title,
-                      studentId: "S001",
-                      goal: starter.prompt,
-                      description: starter.badge,
-                      type: "nominal",
-                      badge: starter.badge,
-                    });
-                  }
-                }}
-                className="p-3.5 rounded-xl bg-cv-surface hover:bg-cv-inset border border-cv-line hover:border-cv-accent-line/50 transition text-left cursor-pointer group flex items-center justify-between shadow-xs"
-              >
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center space-x-1.5">
-                    <MessageSquarePlus className="h-3.5 w-3.5 text-cv-accent-ink shrink-0" />
-                    <span className="text-xs font-semibold text-cv-fg group-hover:text-cv-accent-ink transition-colors truncate">
-                      {starter.title}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-cv-fg-2 truncate mt-1">
-                    &ldquo;{starter.prompt}&rdquo;
-                  </p>
-                </div>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cv-raised border border-cv-line text-cv-fg-2 shrink-0">
-                  {starter.badge}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <WelcomeScene
+        key={welcomeCycle}
+        leadLine={leadLine}
+        firstName={firstName}
+        subtitle="How can I help with your campus today?"
+        suggestions={suggestions}
+        assistantState={welcomeLogoState}
+        isDark={resolvedTheme === "dark"}
+        isScattering={isScattering}
+        onScatterComplete={completeScatter}
+        forceReducedMotion={disableMotion}
+        onSelectSuggestion={(prompt) => {
+          if (onSendMessage) {
+            void onSendMessage(prompt);
+          } else {
+            onSelectPreset({
+              label: prompt,
+              studentId: user?.student_id || "S001",
+              goal: prompt,
+              description: prompt,
+              type: "nominal",
+              badge: "REQUEST",
+            });
+          }
+        }}
+      />
     );
   }
 
@@ -676,7 +589,12 @@ export function ConversationFeed({
   };
 
   return (
-    <div className="px-3 sm:px-6 py-4 sm:py-6 pb-12 space-y-5 max-w-4xl mx-auto w-full">
+    <motion.div
+      initial={disableMotion ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: disableMotion ? 0 : 0.25, ease: "easeOut" }}
+      className="px-3 sm:px-6 py-4 sm:py-6 pb-12 space-y-5 max-w-4xl mx-auto w-full"
+    >
       {/* 1. Multi-Turn Conversation Message History */}
       {messages.map((msg, index) => {
         const isUser = msg.role === "user";
@@ -1292,6 +1210,6 @@ export function ConversationFeed({
       )}
 
       <div ref={feedEndRef} />
-    </div>
+    </motion.div>
   );
 }
