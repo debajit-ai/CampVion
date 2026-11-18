@@ -778,34 +778,29 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const userInitials = getUserInitials(user?.full_name, user?.email);
   const userRoleLabel = formatRoleLabel(user?.role);
 
+  const hasChatOrWorkflow = Boolean(
+    (conversation?.messages?.length ?? 0) > 0 ||
+      agentState ||
+      agentResult ||
+      tasks.length > 0 ||
+      activeRequestId
+  );
+
   return (
     <div
       data-theme={isDark ? "dark" : "light"}
       className="cv-app h-screen w-full flex flex-row overflow-hidden bg-cv-canvas text-cv-fg relative"
     >
-      {/* Subtle Ambient Background Layers (~6% radial glow + faint fading grid) */}
+      {/* Subtle Centered Ambient Radial Glow (<=5% opacity, fading fully before edges; zero grid) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 overflow-hidden z-0"
-      >
-        <div
-          className="absolute -top-40 right-[12%] w-[680px] h-[520px] rounded-full blur-3xl"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, rgba(34, 211, 238, 0.05) 45%, transparent 72%)"
-              : "radial-gradient(circle, rgba(79, 70, 229, 0.06) 0%, rgba(8, 145, 178, 0.04) 45%, transparent 72%)",
-          }}
-        />
-        <div
-          className="absolute -bottom-48 left-[18%] w-[560px] h-[440px] rounded-full blur-3xl"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, rgba(34, 211, 238, 0.05) 0%, transparent 70%)"
-              : "radial-gradient(circle, rgba(8, 145, 178, 0.045) 0%, transparent 70%)",
-          }}
-        />
-        <div className="absolute inset-0 cv-app-ambient-grid" />
-      </div>
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: isDark
+            ? "radial-gradient(ellipse 68% 58% at 56% 42%, rgba(99, 102, 241, 0.045) 0%, rgba(34, 211, 238, 0.025) 38%, transparent 72%)"
+            : "radial-gradient(ellipse 68% 58% at 56% 42%, rgba(79, 70, 229, 0.04) 0%, rgba(8, 145, 178, 0.025) 38%, transparent 72%)",
+        }}
+      />
 
       {/* 1. Unified Left Sidebar */}
       <Sidebar
@@ -834,13 +829,13 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
       />
 
       {/* 2. Central Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative z-10">
-        {/* Top Frosted Glass Header */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative z-10 bg-transparent">
+        {/* Top Header (Seamless surface + 1px border, blur only when scrolled) */}
         <header
-          className={`h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 border-b transition-all duration-200 z-20 shrink-0 ${
+          className={`h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 border-b border-cv-line transition-all duration-200 z-20 shrink-0 ${
             isMainScrolled
-              ? "border-cv-line bg-cv-surface/85 backdrop-blur-xl shadow-xs"
-              : "border-cv-line/70 bg-transparent backdrop-blur-md"
+              ? "bg-cv-canvas/85 backdrop-blur-xl"
+              : "bg-transparent"
           }`}
         >
           <div className="flex items-center space-x-3 min-w-0">
@@ -1075,8 +1070,8 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         >
           {/* VIEW: Conversational Assistant (Chat-First Workspace) */}
           {activeSection === "chat" && (
-            <div className="flex-1 flex flex-col min-h-full">
-              <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-full relative">
+              <div className="flex-1 flex flex-col justify-center">
                 <ConversationFeed
                   conversation={conversation}
                   state={agentState}
@@ -1095,7 +1090,13 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
               </div>
 
               {/* Floating Bottom Composer */}
-              <div className="sticky bottom-0 z-20 bg-gradient-to-t from-cv-canvas via-cv-canvas/95 to-transparent pt-3 sm:pt-4 pb-3 sm:pb-4 px-2 sm:px-6">
+              <div
+                className={`sticky bottom-0 z-20 pt-3 sm:pt-4 pb-3 sm:pb-4 px-2 sm:px-6 ${
+                  firstMessageSent && hasChatOrWorkflow
+                    ? "bg-gradient-to-t from-cv-canvas via-cv-canvas/90 to-transparent"
+                    : "bg-transparent"
+                }`}
+              >
                 <AdvancedComposer
                   students={students}
                   selectedStudentId={selectedStudentId}

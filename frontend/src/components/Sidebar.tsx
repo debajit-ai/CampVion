@@ -448,7 +448,7 @@ export function Sidebar({
       </div>
 
       {/* 5. Bottom Footer: Subtle System Status + Single User Card */}
-      <div className="border-t border-cv-line shrink-0 bg-cv-sidebar/95">
+      <div className="border-t border-cv-line shrink-0 bg-cv-sidebar">
         {/* Subtle System Status Line */}
         {!collapsed && (
           <div className="px-4 pt-2.5 pb-1 flex items-center justify-between gap-2">

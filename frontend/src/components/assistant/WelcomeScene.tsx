@@ -60,6 +60,7 @@ const DOT_VERTEX_SHADER = /* glsl */ `
   uniform float uIntroLead;
   uniform float uPixelRatio;
   uniform float uWorldPerPixel;
+  uniform float uRefCamZ;
   uniform float uScatterProgress;
   uniform float uPointerStrength;
   uniform vec2 uPointerWorld;
@@ -138,7 +139,7 @@ const DOT_VERTEX_SHADER = /* glsl */ `
     vec4 mvPosition = modelViewMatrix * vec4(basePos, 1.0);
     gl_Position = projectionMatrix * mvPosition;
 
-    float sizeAtten = 10.0 / max(-mvPosition.z, 1.0);
+    float sizeAtten = uRefCamZ / max(-mvPosition.z, 1.0);
     float scatterShrink = 1.0 - 0.72 * sp;
     float introScale = mix(0.6, 1.0, settle);
     gl_PointSize = clamp(aSize * uPixelRatio * sizeAtten * introScale * scatterShrink, 1.4, 9.5);
@@ -287,7 +288,6 @@ function buildDottedGreetingData(
     return rawPts;
   };
 
-  // Start at 3.5-4px equivalent on oversampled grid, adapt cleanly to guarantee target count
   let collected = collectGridSamples(isMobile ? 4 : 3);
   if (collected.length < targetMin) {
     collected = collectGridSamples(2);
@@ -326,8 +326,8 @@ function buildDottedGreetingData(
 
   for (let i = 0; i < count; i++) {
     const pt = collected[i];
-    const nx = pt.px / offW; // [0..1] left -> right
-    const ny = pt.py / offH; // [0..1] top -> bottom
+    const nx = pt.px / offW;
+    const ny = pt.py / offH;
 
     const wx = (nx - 0.5) * worldWidth;
     const wy = worldCenterY + (0.5 - ny) * worldHeight;
@@ -342,7 +342,6 @@ function buildDottedGreetingData(
     targets[i * 3 + 1] = wy;
     targets[i * 3 + 2] = wz;
 
-    // Wider initial scatter volume around the greeting
     const r1 = seededHash(i * 3.1 + 5);
     const r2 = seededHash(i * 7.7 + 11);
     const r3 = seededHash(i * 11.3 + 17);
@@ -406,10 +405,14 @@ function detectWebGLAvailable(): boolean {
 }
 
 class WelcomeCanvasErrorBoundary extends Component<
-  { fallback: React.ReactNode; children: React.ReactNode },
+  { fallback: React.ReactNode; onError?: () => void; children: React.ReactNode },
   { hasError: boolean }
 > {
-  constructor(props: { fallback: React.ReactNode; children: React.ReactNode }) {
+  constructor(props: {
+    fallback: React.ReactNode;
+    onError?: () => void;
+    children: React.ReactNode;
+  }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -418,10 +421,27 @@ class WelcomeCanvasErrorBoundary extends Component<
     return { hasError: true };
   }
 
+  componentDidCatch() {
+    this.props.onError?.();
+  }
+
   render() {
     if (this.state.hasError) return this.props.fallback;
     return this.props.children;
   }
+}
+
+const FOV_DEG = 38;
+const REF_CAM_Z = 10;
+const REF_WORLD_H = 2 * REF_CAM_Z * Math.tan((FOV_DEG * Math.PI) / 360);
+
+interface PointerTrack {
+  worldX: number;
+  worldY: number;
+  ndcX: number;
+  ndcY: number;
+  active: boolean;
+  hoveringLogo: boolean;
 }
 
 interface InnerSceneProps {
@@ -433,7 +453,8 @@ interface InnerSceneProps {
   inView: boolean;
   isScattering: boolean;
   onScatterComplete?: () => void;
-  pointerNdcRef: React.RefObject<{ x: number; y: number; active: boolean }>;
+  anchorSpacerRef: React.RefObject<HTMLDivElement | null>;
+  pointerTrackRef: React.RefObject<PointerTrack>;
 }
 
 function WelcomeCanvasContent({
@@ -445,15 +466,17 @@ function WelcomeCanvasContent({
   inView,
   isScattering,
   onScatterComplete,
-  pointerNdcRef,
+  anchorSpacerRef,
+  pointerTrackRef,
 }: InnerSceneProps) {
-  const { viewport, size, gl } = useThree();
+  const { size, gl } = useThree();
   const [fontsReady, setFontsReady] = useState(
     () => typeof document === "undefined" || !document.fonts?.ready
   );
   const [sampled, setSampled] = useState<SampledTextDots | null>(null);
-  const [isLogoHovered, setIsLogoHovered] = useState(false);
+  const [anchorPxWidth, setAnchorPxWidth] = useState<number>(isMobile ? 350 : 760);
 
+  const sceneGroupRef = useRef<THREE.Group>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const elapsedRef = useRef(0);
   const scatterProgressRef = useRef(0);
@@ -461,6 +484,11 @@ function WelcomeCanvasContent({
   const pointerWorldRef = useRef(new THREE.Vector2(999, 999));
   const pointerStrengthRef = useRef(0);
   const logoPointerRef = useRef({ x: 0, y: 0 });
+  const logoHoveredRef = useRef(false);
+  const [isLogoHovered, setIsLogoHovered] = useState(false);
+
+  const refStageHeight = isMobile ? 295 : 365;
+  const worldPerPx = REF_WORLD_H / refStageHeight;
 
   useEffect(() => {
     if (fontsReady) return;
@@ -477,10 +505,24 @@ function WelcomeCanvasContent({
     };
   }, [fontsReady]);
 
-  // Re-sample greeting dots cleanly whenever name, fonts, theme, or viewport width settles (debounced)
-  const sampleWorldWidth = Math.min(viewport.width * 0.92, isMobile ? 6.8 : 8.8);
+  useEffect(() => {
+    const el = anchorSpacerRef.current;
+    if (!el) return;
+    const updateWidth = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setAnchorPxWidth(w);
+    };
+    updateWidth();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(updateWidth);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+  }, [anchorSpacerRef]);
+
+  const sampleWorldWidth = Math.min(anchorPxWidth * worldPerPx * 0.92, isMobile ? 6.8 : 8.8);
   const logoBaseY = isMobile ? 1.56 : 1.44;
-  const logoTargetWidth = isMobile ? 2.42 : 2.75; // ~148px mobile, ~195-200px tall on desktop
+  const logoTargetWidth = isMobile ? 2.42 : 2.75; // ~150px mobile, ~200px tall on desktop
   const textWorldCenterY = isMobile ? -1.72 : -1.78;
 
   useEffect(() => {
@@ -532,8 +574,11 @@ function WelcomeCanvasContent({
       uniforms: {
         uTime: { value: 0 },
         uIntroLead: { value: 0.35 },
-        uPixelRatio: { value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.75) : 1 },
-        uWorldPerPixel: { value: 0.018 },
+        uPixelRatio: {
+          value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.75) : 1,
+        },
+        uWorldPerPixel: { value: worldPerPx },
+        uRefCamZ: { value: REF_CAM_Z },
         uScatterProgress: { value: 0 },
         uPointerStrength: { value: 0 },
         uPointerWorld: { value: new THREE.Vector2(999, 999) },
@@ -557,7 +602,7 @@ function WelcomeCanvasContent({
     };
   }, [pointsMaterial]);
 
-  // Cleanly dispose WebGL resources when WelcomeScene unmounts after scatter
+  // Dispose WebGL render lists when WelcomeScene unmounts after scatter
   useEffect(() => {
     return () => {
       try {
@@ -573,31 +618,58 @@ function WelcomeCanvasContent({
     const dt = Math.min(delta, 0.05);
     elapsedRef.current += dt;
 
-    // Update GPU pointer coordinates smoothly in world units
-    const ptr = pointerNdcRef.current;
-    const active = ptr?.active ?? false;
-    const ndcX = ptr ? ptr.x : state.pointer.x;
-    const ndcY = ptr ? ptr.y : state.pointer.y;
+    // Keep camera Z calibrated so worldPerPx inside full-page canvas matches H_ref stage pixel-for-pixel
+    const camZ = Math.max(4, size.height > 0 ? REF_CAM_Z * (size.height / refStageHeight) : REF_CAM_Z);
+    state.camera.position.z = camZ;
 
-    logoPointerRef.current.x = ndcX;
-    logoPointerRef.current.y = ndcY;
-
-    if (active) {
-      pointerWorldRef.current.set(ndcX * (viewport.width * 0.5), ndcY * (viewport.height * 0.5));
-      pointerStrengthRef.current = THREE.MathUtils.lerp(
-        pointerStrengthRef.current,
-        1.0,
-        1 - Math.exp(-16 * dt)
-      );
-    } else {
-      pointerStrengthRef.current = THREE.MathUtils.lerp(
-        pointerStrengthRef.current,
-        0.0,
-        1 - Math.exp(-9 * dt)
+    // Align sceneGroup seamlessly with the centered DOM anchor spacer
+    const canvasRect = gl.domElement.getBoundingClientRect();
+    const anchorRect = anchorSpacerRef.current?.getBoundingClientRect();
+    if (
+      sceneGroupRef.current &&
+      canvasRect.width > 0 &&
+      canvasRect.height > 0 &&
+      anchorRect &&
+      anchorRect.width > 0
+    ) {
+      const stageCX = canvasRect.left + canvasRect.width * 0.5;
+      const stageCY = canvasRect.top + canvasRect.height * 0.5;
+      const anchorCX = anchorRect.left + anchorRect.width * 0.5;
+      const anchorCY = anchorRect.top + anchorRect.height * 0.5;
+      sceneGroupRef.current.position.set(
+        (anchorCX - stageCX) * worldPerPx,
+        -(anchorCY - stageCY) * worldPerPx,
+        0
       );
     }
 
-    // Advance 1.1s scatter sequence smoothly on first message send
+    // Read pointer tracking relative to anchor spacer
+    const ptr = pointerTrackRef.current;
+    if (ptr) {
+      logoPointerRef.current.x = ptr.ndcX;
+      logoPointerRef.current.y = ptr.ndcY;
+      if (ptr.hoveringLogo !== logoHoveredRef.current) {
+        logoHoveredRef.current = ptr.hoveringLogo;
+        setIsLogoHovered(ptr.hoveringLogo);
+      }
+
+      if (ptr.active) {
+        pointerWorldRef.current.set(ptr.worldX, ptr.worldY);
+        pointerStrengthRef.current = THREE.MathUtils.lerp(
+          pointerStrengthRef.current,
+          1.0,
+          1 - Math.exp(-16 * dt)
+        );
+      } else {
+        pointerStrengthRef.current = THREE.MathUtils.lerp(
+          pointerStrengthRef.current,
+          0.0,
+          1 - Math.exp(-9 * dt)
+        );
+      }
+    }
+
+    // Advance ~1.05s scatter sequence smoothly on first message send
     if (isScattering) {
       scatterProgressRef.current = Math.min(1, scatterProgressRef.current + dt / 1.05);
       if (scatterProgressRef.current >= 1 && !scatterNotifiedRef.current) {
@@ -611,8 +683,8 @@ function WelcomeCanvasContent({
       mat.uniforms.uTime.value = elapsedRef.current;
       mat.uniforms.uPixelRatio.value =
         state.viewport.dpr || Math.min(window.devicePixelRatio || 1, 1.75);
-      mat.uniforms.uWorldPerPixel.value =
-        size.height > 0 ? viewport.height / size.height : 0.018;
+      mat.uniforms.uWorldPerPixel.value = worldPerPx;
+      mat.uniforms.uRefCamZ.value = camZ;
       mat.uniforms.uIsDark.value = isDark ? 1 : 0;
       (mat.uniforms.uPointerWorld.value as THREE.Vector2).copy(pointerWorldRef.current);
       mat.uniforms.uPointerStrength.value = pointerStrengthRef.current;
@@ -628,7 +700,7 @@ function WelcomeCanvasContent({
   });
 
   return (
-    <>
+    <group ref={sceneGroupRef}>
       <ambientLight intensity={isDark ? 0.55 : 0.72} />
       <hemisphereLight
         args={[isDark ? "#7DD3FC" : "#FFFFFF", isDark ? "#05070F" : "#CBD5E1", isDark ? 0.65 : 0.9]}
@@ -647,7 +719,6 @@ function WelcomeCanvasContent({
         floatAmplitude={0.07}
         castShadow={false}
         isHovered={isLogoHovered}
-        onHoverChange={setIsLogoHovered}
         visibilityPhase={isScattering ? "exit" : "enter"}
         pointerOverrideRef={logoPointerRef}
       />
@@ -660,11 +731,11 @@ function WelcomeCanvasContent({
           frustumCulled={false}
         />
       )}
-    </>
+    </group>
   );
 }
 
-function WelcomeWebGLStage({
+function WelcomeFullAreaCanvas({
   leadLine,
   firstName,
   assistantState,
@@ -672,6 +743,7 @@ function WelcomeWebGLStage({
   isMobile,
   isScattering,
   onScatterComplete,
+  anchorSpacerRef,
 }: {
   leadLine: string;
   firstName: string;
@@ -680,22 +752,30 @@ function WelcomeWebGLStage({
   isMobile: boolean;
   isScattering: boolean;
   onScatterComplete?: () => void;
+  anchorSpacerRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const pointerNdcRef = useRef({ x: 0, y: 0, active: false });
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const pointerTrackRef = useRef<PointerTrack>({
+    worldX: 999,
+    worldY: 999,
+    ndcX: 0,
+    ndcY: 0,
+    active: false,
+    hoveringLogo: false,
+  });
   const touchDecayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [inView, setInView] = useState(true);
   const [tabVisible, setTabVisible] = useState(true);
 
   useEffect(() => {
-    const el = stageRef.current;
+    const el = overlayRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0]) setInView(entries[0].isIntersecting);
       },
-      { threshold: 0.05 }
+      { threshold: 0.01 }
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -710,51 +790,99 @@ function WelcomeWebGLStage({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
+  // Track pointer across window without capturing pointer events away from UI controls
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refStageH = isMobile ? 295 : 365;
+    const worldPerPx = REF_WORLD_H / refStageH;
+
+    const handleMove = (e: PointerEvent) => {
+      const stageEl = overlayRef.current;
+      const anchorEl = anchorSpacerRef.current;
+      if (!stageEl || !anchorEl) return;
+
+      const stageRect = stageEl.getBoundingClientRect();
+      const insideStage =
+        e.clientX >= stageRect.left &&
+        e.clientX <= stageRect.right &&
+        e.clientY >= stageRect.top &&
+        e.clientY <= stageRect.bottom;
+
+      if (!insideStage) {
+        pointerTrackRef.current.active = false;
+        pointerTrackRef.current.hoveringLogo = false;
+        return;
+      }
+
+      const anchorRect = anchorEl.getBoundingClientRect();
+      if (anchorRect.width <= 0 || anchorRect.height <= 0) return;
+
+      const localPxX = e.clientX - (anchorRect.left + anchorRect.width * 0.5);
+      const localPxY = -(e.clientY - (anchorRect.top + anchorRect.height * 0.5));
+      const hoverBandW = isMobile ? 76 : 98;
+      const hoveringLogo =
+        Math.abs(localPxX) <= hoverBandW &&
+        e.clientY >= anchorRect.top &&
+        e.clientY <= anchorRect.top + anchorRect.height * 0.58;
+
+      pointerTrackRef.current = {
+        worldX: localPxX * worldPerPx,
+        worldY: localPxY * worldPerPx,
+        ndcX: THREE.MathUtils.clamp(localPxX / (anchorRect.width * 0.5), -1, 1),
+        ndcY: THREE.MathUtils.clamp(localPxY / (anchorRect.height * 0.5), -1, 1),
+        active: true,
+        hoveringLogo,
+      };
+
+      if (e.pointerType === "touch") {
+        if (touchDecayTimerRef.current) clearTimeout(touchDecayTimerRef.current);
+        touchDecayTimerRef.current = setTimeout(() => {
+          pointerTrackRef.current.active = false;
+        }, 420);
+      }
+    };
+
+    const handleLeave = () => {
+      pointerTrackRef.current.active = false;
+      pointerTrackRef.current.hoveringLogo = false;
+    };
+
+    window.addEventListener("pointermove", handleMove, { passive: true });
+    window.addEventListener("pointerdown", handleMove, { passive: true });
+    document.addEventListener("pointerleave", handleLeave);
     return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerdown", handleMove);
+      document.removeEventListener("pointerleave", handleLeave);
       if (touchDecayTimerRef.current) clearTimeout(touchDecayTimerRef.current);
     };
-  }, []);
-
-  const updatePointerFromClient = (clientX: number, clientY: number, isTouchTap = false) => {
-    const el = stageRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-
-    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
-    const ny = -(((clientY - rect.top) / rect.height) * 2 - 1);
-    pointerNdcRef.current = { x: nx, y: ny, active: true };
-
-    if (isTouchTap) {
-      if (touchDecayTimerRef.current) clearTimeout(touchDecayTimerRef.current);
-      touchDecayTimerRef.current = setTimeout(() => {
-        pointerNdcRef.current.active = false;
-      }, 420);
-    }
-  };
+  }, [anchorSpacerRef, isMobile]);
 
   const activeLoop = inView && tabVisible;
 
   return (
     <div
-      ref={stageRef}
+      ref={overlayRef}
       aria-hidden="true"
-      onPointerMove={(e) => updatePointerFromClient(e.clientX, e.clientY, false)}
-      onPointerDown={(e) =>
-        updatePointerFromClient(e.clientX, e.clientY, e.pointerType === "touch")
-      }
-      onPointerLeave={() => {
-        pointerNdcRef.current.active = false;
-      }}
-      className="w-full max-w-[760px] h-[295px] sm:h-[365px] mx-auto relative select-none"
+      className="pointer-events-none absolute inset-0 z-0 overflow-visible bg-transparent border-0 shadow-none"
     >
       <Canvas
         dpr={[1, 1.75]}
-        camera={{ position: [0, 0, 10], fov: 38 }}
-        gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+        camera={{ position: [0, 0, REF_CAM_Z], fov: FOV_DEG, near: 0.1, far: 140 }}
+        gl={{
+          alpha: true,
+          antialias: true,
+          premultipliedAlpha: true,
+          powerPreference: "high-performance",
+        }}
+        onCreated={({ gl, scene }) => {
+          gl.setClearColor(0x000000, 0);
+          gl.clear();
+          scene.background = null;
+          scene.fog = null;
+        }}
         frameloop={activeLoop ? "always" : "never"}
-        style={{ background: "transparent", width: "100%", height: "100%" }}
+        style={{ background: "transparent", width: "100%", height: "100%", display: "block" }}
       >
         <Suspense fallback={null}>
           <WelcomeCanvasContent
@@ -766,7 +894,8 @@ function WelcomeWebGLStage({
             inView={activeLoop}
             isScattering={isScattering}
             onScatterComplete={onScatterComplete}
-            pointerNdcRef={pointerNdcRef}
+            anchorSpacerRef={anchorSpacerRef}
+            pointerTrackRef={pointerTrackRef}
           />
         </Suspense>
       </Canvas>
@@ -788,6 +917,8 @@ export function WelcomeScene({
 }: WelcomeSceneProps) {
   const osReducedMotion = Boolean(useReducedMotion());
   const prefersReducedMotion = osReducedMotion || forceReducedMotion;
+  const anchorSpacerRef = useRef<HTMLDivElement | null>(null);
+  const [webglError, setWebglError] = useState(false);
 
   const mounted = useSyncExternalStore(
     emptySubscribe,
@@ -810,7 +941,8 @@ export function WelcomeScene({
     () => false
   );
 
-  const showStaticFallback = prefersReducedMotion || !canUseWebGL || isLowPower || !mounted;
+  const showStaticFallback =
+    prefersReducedMotion || !canUseWebGL || isLowPower || !mounted || webglError;
 
   // Trigger scatter callback cleanly if static fallback is shown when sending first message
   useEffect(() => {
@@ -849,18 +981,11 @@ export function WelcomeScene({
   );
 
   return (
-    <div className="flex flex-col items-center justify-center text-center w-full max-w-3xl mx-auto px-4 my-auto">
-      {/* Screen-reader accessible real heading */}
-      <h1 className="sr-only">
-        {leadLine} {firstName}
-      </h1>
-
-      {/* Centered 3D Logo + Dotted Greeting Stage (Transparent, Unboxed) */}
-      {showStaticFallback ? (
-        staticFallbackView
-      ) : (
-        <WelcomeCanvasErrorBoundary fallback={staticFallbackView}>
-          <WelcomeWebGLStage
+    <>
+      {/* Full-Main-Area Seamless Transparent Canvas Layer */}
+      {!showStaticFallback && (
+        <WelcomeCanvasErrorBoundary fallback={null} onError={() => setWebglError(true)}>
+          <WelcomeFullAreaCanvas
             leadLine={leadLine}
             firstName={firstName}
             assistantState={assistantState}
@@ -868,43 +993,62 @@ export function WelcomeScene({
             isMobile={isMobile}
             isScattering={isScattering}
             onScatterComplete={onScatterComplete}
+            anchorSpacerRef={anchorSpacerRef}
           />
         </WelcomeCanvasErrorBoundary>
       )}
 
-      {/* One Muted Subtitle Line + 3 Slim Role-Aware Suggestion Pills */}
-      <motion.div
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
-        animate={
-          isScattering
-            ? { opacity: 0, y: -8 }
-            : { opacity: 1, y: 0 }
-        }
-        transition={{
-          duration: prefersReducedMotion ? 0 : isScattering ? 0.35 : 0.45,
-          delay: isScattering || prefersReducedMotion ? 0 : 0.25,
-          ease: "easeOut",
-        }}
-        className="flex flex-col items-center space-y-4 mt-1 max-w-xl"
-      >
-        <p className="text-xs sm:text-sm text-cv-fg-2 font-normal">
-          {subtitle}
-        </p>
+      {/* Centered Foreground Stack (Transparent, Unboxed, Clickable Pills) */}
+      <div className="relative z-10 flex flex-col items-center justify-center text-center w-full max-w-3xl mx-auto px-4 my-auto pointer-events-none bg-transparent border-0 shadow-none">
+        {/* Screen-reader accessible real heading */}
+        <h1 className="sr-only">
+          {leadLine} {firstName}
+        </h1>
 
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {suggestions.slice(0, 3).map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              disabled={isScattering}
-              onClick={() => onSelectSuggestion(item.prompt)}
-              className="px-3.5 py-1.5 rounded-full text-xs font-medium glass-panel hover:border-cv-accent-line hover:text-cv-accent-ink text-cv-fg transition-all duration-150 cursor-pointer hover:-translate-y-0.5 disabled:opacity-50"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </motion.div>
-    </div>
+        {showStaticFallback ? (
+          staticFallbackView
+        ) : (
+          <div
+            ref={anchorSpacerRef}
+            aria-hidden="true"
+            className="w-full max-w-[760px] h-[295px] sm:h-[365px] mx-auto pointer-events-none shrink-0 bg-transparent border-0 shadow-none"
+          />
+        )}
+
+        {/* One Muted Subtitle Line + 3 Slim Role-Aware Suggestion Pills */}
+        <motion.div
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+          animate={
+            isScattering
+              ? { opacity: 0, y: -8 }
+              : { opacity: 1, y: 0 }
+          }
+          transition={{
+            duration: prefersReducedMotion ? 0 : isScattering ? 0.35 : 0.45,
+            delay: isScattering || prefersReducedMotion ? 0 : 0.25,
+            ease: "easeOut",
+          }}
+          className="flex flex-col items-center space-y-4 mt-1 max-w-xl pointer-events-auto"
+        >
+          <p className="text-xs sm:text-sm text-cv-fg-2 font-normal">
+            {subtitle}
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {suggestions.slice(0, 3).map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                disabled={isScattering}
+                onClick={() => onSelectSuggestion(item.prompt)}
+                className="px-3.5 py-1.5 rounded-full text-xs font-medium glass-panel hover:border-cv-accent-line hover:text-cv-accent-ink text-cv-fg transition-all duration-150 cursor-pointer hover:-translate-y-0.5 disabled:opacity-50"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </>
   );
 }
