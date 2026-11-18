@@ -7,7 +7,6 @@ import React, {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { apiClient } from "../lib/api";
 import { LoginPayload, SignupPayload, UserProfile } from "../types/api";
@@ -17,7 +16,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   preferredDisplayName: string;
-  setPreferredDisplayName: (name: string) => void;
+  setPreferredDisplayName: (name: string, targetEmail?: string) => void;
   login: (payload: LoginPayload) => Promise<UserProfile>;
   signup: (payload: SignupPayload) => Promise<UserProfile>;
   logout: () => Promise<void>;
@@ -25,24 +24,29 @@ export interface AuthContextType {
   updateLocalUser: (profile: UserProfile) => void;
 }
 
-const DISPLAY_NAME_STORAGE_KEY = "campvion_user_display_name";
+const LEGACY_DISPLAY_NAME_STORAGE_KEY = "campvion_user_display_name";
+const SCOPED_DISPLAY_NAME_PREFIX = "campvion_display_name_";
 const DISPLAY_NAME_EVENT = "campvion_display_name_change";
 
-function subscribeDisplayName(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const handler = () => onStoreChange();
-  window.addEventListener("storage", handler);
-  window.addEventListener(DISPLAY_NAME_EVENT, handler);
-  return () => {
-    window.removeEventListener("storage", handler);
-    window.removeEventListener(DISPLAY_NAME_EVENT, handler);
-  };
+function purgeLegacyDisplayName(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LEGACY_DISPLAY_NAME_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
 }
 
-function getDisplayNameSnapshot(): string {
+function getScopedDisplayName(email?: string | null): string {
   if (typeof window === "undefined") return "";
+  purgeLegacyDisplayName();
+  if (!email || !email.trim()) return "";
   try {
-    return (window.localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || "").trim();
+    return (
+      window.localStorage.getItem(
+        `${SCOPED_DISPLAY_NAME_PREFIX}${email.trim().toLowerCase()}`
+      ) || ""
+    ).trim();
   } catch {
     return "";
   }
@@ -53,27 +57,51 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const preferredDisplayName = useSyncExternalStore(
-    subscribeDisplayName,
-    getDisplayNameSnapshot,
-    () => ""
-  );
+  const [displayNameTick, setDisplayNameTick] = useState(0);
 
-  const setPreferredDisplayName = useCallback((name: string) => {
-    const trimmed = name.trim();
-    if (typeof window !== "undefined") {
-      try {
-        if (trimmed) {
-          window.localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, trimmed);
-        } else {
-          window.localStorage.removeItem(DISPLAY_NAME_STORAGE_KEY);
-        }
-        window.dispatchEvent(new Event(DISPLAY_NAME_EVENT));
-      } catch {
-        // Ignore storage errors
-      }
-    }
+  useEffect(() => {
+    purgeLegacyDisplayName();
+    const handler = () => setDisplayNameTick((t) => t + 1);
+    window.addEventListener("storage", handler);
+    window.addEventListener(DISPLAY_NAME_EVENT, handler);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener(DISPLAY_NAME_EVENT, handler);
+    };
   }, []);
+
+  const preferredDisplayName = useMemo(() => {
+    void displayNameTick;
+    return getScopedDisplayName(user?.email);
+  }, [user?.email, displayNameTick]);
+
+  const setPreferredDisplayName = useCallback(
+    (name: string, targetEmail?: string) => {
+      const trimmed = name.trim();
+      const emailKey = (targetEmail || user?.email || "").trim().toLowerCase();
+      if (typeof window !== "undefined") {
+        purgeLegacyDisplayName();
+        try {
+          if (emailKey) {
+            if (trimmed) {
+              window.localStorage.setItem(
+                `${SCOPED_DISPLAY_NAME_PREFIX}${emailKey}`,
+                trimmed
+              );
+            } else {
+              window.localStorage.removeItem(
+                `${SCOPED_DISPLAY_NAME_PREFIX}${emailKey}`
+              );
+            }
+          }
+          window.dispatchEvent(new Event(DISPLAY_NAME_EVENT));
+        } catch {
+          // Ignore storage errors
+        }
+      }
+    },
+    [user?.email]
+  );
 
   const refreshSession = useCallback(async (): Promise<UserProfile | null> => {
     try {
@@ -106,18 +134,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (payload: LoginPayload): Promise<UserProfile> => {
+    purgeLegacyDisplayName();
     const res = await apiClient.login(payload);
     setUser(res.user);
     return res.user;
   }, []);
 
   const signup = useCallback(async (payload: SignupPayload): Promise<UserProfile> => {
+    purgeLegacyDisplayName();
     const res = await apiClient.signup(payload);
     setUser(res.user);
     return res.user;
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
+    purgeLegacyDisplayName();
     await apiClient.logout();
     setUser(null);
   }, []);

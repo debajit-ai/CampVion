@@ -60,9 +60,20 @@ export interface LeaveTraceEvent {
   timestamp?: string | null;
 }
 
+export type CampusRequestType =
+  | "leave"
+  | "library_room"
+  | "hostel_allocation"
+  | "certificate";
+
 export interface LeaveRequestItem {
   id: number;
   leave_code: string;
+  request_code?: string;
+  request_type?: CampusRequestType | string;
+  request_type_label?: string;
+  title?: string | null;
+  details?: Record<string, unknown> | null;
   workflow_run_id?: number | null;
   student_id: string;
   student_name: string;

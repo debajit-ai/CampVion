@@ -261,7 +261,29 @@ export function RequestHistoryView({
                     className="hover:bg-cv-inset/70 transition cursor-pointer"
                   >
                     <td className="py-3 px-4 font-mono font-semibold text-cv-fg whitespace-nowrap">
-                      {item.leave_code}
+                      <div className="flex items-center gap-2">
+                        <span>{item.leave_code}</span>
+                        <span
+                          className={`text-[10px] font-sans font-semibold px-2 py-0.5 rounded-full border ${
+                            item.request_type === "library_room"
+                              ? "bg-sky-500/10 border-sky-500/30 text-sky-400"
+                              : item.request_type === "hostel_allocation"
+                              ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                              : item.request_type === "certificate"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink"
+                          }`}
+                        >
+                          {item.request_type_label ||
+                            (item.request_type === "library_room"
+                              ? "Library Room"
+                              : item.request_type === "hostel_allocation"
+                              ? "Hostel Allocation"
+                              : item.request_type === "certificate"
+                              ? "Certificate"
+                              : "Leave")}
+                        </span>
+                      </div>
                     </td>
                     {isAdmin && (
                       <td className="py-3 px-4 whitespace-nowrap">

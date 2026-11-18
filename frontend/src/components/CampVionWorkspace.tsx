@@ -211,9 +211,16 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     }
   }, [authLoading, isAuthenticated, router]);
 
+  // Security & Role Routing: students must never stay on /app/approvals
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && !canUseAdvanced && activeSection === "approvals") {
+      router.replace("/app");
+    }
+  }, [authLoading, isAuthenticated, canUseAdvanced, activeSection, router]);
+
   // Global pending approvals fetcher for administrators
   const fetchPendingApprovals = useCallback(async () => {
-    if (!user) return;
+    if (!canUseAdvanced || !user) return;
     const role = (user.role || "").toLowerCase();
     if (role === "administrator" || role === "system_administrator") {
       try {
@@ -230,10 +237,10 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         console.error("Failed to load pending approvals:", err);
       }
     }
-  }, [user]);
+  }, [user, canUseAdvanced]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!isAuthenticated || !canUseAdvanced || !user) return;
     const role = (user.role || "").toLowerCase();
     if (role !== "administrator" && role !== "system_administrator") return;
 
@@ -257,7 +264,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
     return () => {
       active = false;
     };
-  }, [user, lastEventTick]);
+  }, [isAuthenticated, canUseAdvanced, user, lastEventTick]);
 
   // Load initial backend dependencies, student attendance/courses, and tool schemas
   const loadInitialData = useCallback(async () => {
@@ -792,7 +799,11 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
   const livePendingFromEvents = Object.values(liveLeaveById).filter(
     (item) => item.status === "PENDING_APPROVAL"
   ).length;
-  const effectivePendingCount = Math.max(livePendingFromEvents, pendingApprovals.length);
+  const isAdminUser = canUseAdvanced;
+  const effectivePendingCount = Math.max(
+    livePendingFromEvents,
+    isAdminUser ? pendingApprovals.length : 0
+  );
 
   const orderedSessionSummaries = recentRequestIds
     .map((id) => sessionSummaries[id])
@@ -871,6 +882,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
         onRefreshHealth={loadInitialData}
         user={user}
         onLogout={handleLogout}
+        unreadNotificationsCount={unreadCount}
         pendingApprovalsCount={effectivePendingCount}
         effectiveMode={effectiveMode}
       />
@@ -1376,7 +1388,7 @@ export function CampVionWorkspace({ initialSection = "chat" }: CampVionWorkspace
               )}
 
               {/* VIEW: Dedicated Admin Approval Queue (/app/approvals & Approvals tab) */}
-              {activeSection === "approvals" && (
+              {activeSection === "approvals" && isAdminUser && (
                 <section className="w-full">
                   <AdminApprovalsDashboard
                     focusLeaveId={focusedLeaveId}

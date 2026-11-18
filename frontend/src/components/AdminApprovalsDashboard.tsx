@@ -57,6 +57,7 @@ export function AdminApprovalsDashboard({
   const { lastEventTick, upsertLiveLeave } = useEvents();
 
   const [tab, setTab] = useState<string>("PENDING_APPROVAL");
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [sortOrder, setSortOrder] = useState<"oldest" | "newest">("oldest");
   const [search, setSearch] = useState<string>("");
   const [items, setItems] = useState<LeaveRequestItem[]>([]);
@@ -91,23 +92,26 @@ export function AdminApprovalsDashboard({
       const effectiveSort = tab === "PENDING_APPROVAL" ? sortOrder : "newest";
       const res = await apiClient.listLeaveRequests({
         status: tab,
+        request_type: typeFilter === "ALL" ? undefined : typeFilter,
         q: search.trim() || undefined,
         sort: effectiveSort,
       });
       setItems(res.items);
       setStats(res.stats);
+      setBanner((prev) => (prev?.type === "error" ? null : prev));
       for (const req of res.items) {
         upsertLiveLeave(req);
       }
     } catch (err: unknown) {
+      console.error("[AdminApprovalsDashboard] Failed to load approval queue:", err);
       setBanner({
         type: "error",
-        text: err instanceof Error ? err.message : "Failed to load approval queue.",
+        text: "Unable to load approval queue right now. Please retry.",
       });
     } finally {
       setLoading(false);
     }
-  }, [tab, sortOrder, search, upsertLiveLeave]);
+  }, [tab, typeFilter, sortOrder, search, upsertLiveLeave]);
 
   useEffect(() => {
     let active = true;
@@ -316,13 +320,28 @@ export function AdminApprovalsDashboard({
           }`}
         >
           <span>{banner.text}</span>
-          <button
-            type="button"
-            onClick={() => setBanner(null)}
-            className="opacity-70 hover:opacity-100 cursor-pointer"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {banner.type === "error" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBanner(null);
+                  setLoading(true);
+                  void fetchQueue();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-cv-surface border border-cv-error-line text-[11px] font-semibold text-cv-fg hover:bg-cv-raised cursor-pointer"
+              >
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setBanner(null)}
+              className="opacity-70 hover:opacity-100 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -345,6 +364,33 @@ export function AdminApprovalsDashboard({
             <div className="text-[11px] text-cv-fg-3">{card.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Request Type Filter Chips */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {[
+          { id: "ALL", label: "All Types" },
+          { id: "leave", label: "Leave" },
+          { id: "library_room", label: "Library Room" },
+          { id: "hostel_allocation", label: "Hostel Allocation" },
+          { id: "certificate", label: "Certificate" },
+        ].map((rt) => {
+          const activeType = typeFilter === rt.id;
+          return (
+            <button
+              key={rt.id}
+              type="button"
+              onClick={() => setTypeFilter(rt.id)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition cursor-pointer ${
+                activeType
+                  ? "bg-cv-raised border-cv-accent-line text-cv-fg"
+                  : "bg-cv-surface border-cv-line text-cv-fg-2 hover:text-cv-fg"
+              }`}
+            >
+              {rt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tabs + Search + Sort */}
@@ -485,20 +531,62 @@ export function AdminApprovalsDashboard({
                       )}
                     </div>
 
-                    <p className="text-xs text-cv-fg">{item.reason}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                          item.request_type === "library_room"
+                            ? "bg-sky-500/10 border-sky-500/30 text-sky-400"
+                            : item.request_type === "hostel_allocation"
+                            ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                            : item.request_type === "certificate"
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                            : "bg-cv-accent-soft border-cv-accent-soft-line text-cv-accent-ink"
+                        }`}
+                      >
+                        {item.request_type_label ||
+                          (item.request_type === "library_room"
+                            ? "Library Room"
+                            : item.request_type === "hostel_allocation"
+                            ? "Hostel Allocation"
+                            : item.request_type === "certificate"
+                            ? "Certificate"
+                            : "Leave")}
+                      </span>
+                      {item.title && (
+                        <span className="text-xs font-semibold text-cv-fg">
+                          {item.title}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-cv-fg-2">{item.reason}</p>
 
                     <div className="flex flex-wrap items-center gap-3 text-[11px] text-cv-fg-2">
                       <span className="inline-flex items-center gap-1">
                         <Calendar className="h-3 w-3 text-cv-accent-ink" />
-                        {item.start_date === item.end_date
-                          ? item.start_date
-                          : `${item.start_date} \u2192 ${item.end_date}`}
+                        {(item.details && typeof item.details.time_slot === "string" && item.details.time_slot) ||
+                          (item.details && typeof item.details.requested_block === "string" && item.details.requested_block) ||
+                          (item.details && typeof item.details.certificate_type === "string" && item.details.certificate_type) ||
+                          (item.start_date === item.end_date
+                            ? item.start_date
+                            : `${item.start_date} \u2192 ${item.end_date}`)}
                       </span>
-                      <span>
-                        &bull; {item.days_count} {item.days_count === 1 ? "day" : "days"}
-                      </span>
+                      {(!item.request_type || item.request_type === "leave") && (
+                        <span>
+                          &bull; {item.days_count} {item.days_count === 1 ? "day" : "days"}
+                        </span>
+                      )}
+                      {item.details && typeof item.details.room === "string" && (
+                        <span>&bull; {item.details.room}</span>
+                      )}
+                      {item.details && typeof item.details.current_room === "string" && (
+                        <span>&bull; From {item.details.current_room}</span>
+                      )}
+                      {item.details && typeof item.details.purpose === "string" && (
+                        <span>&bull; {item.details.purpose}</span>
+                      )}
                       <span className="capitalize">
-                        &bull; {item.category.replace("_", " ")}
+                        &bull; {item.routed_to_role || item.approver_role || "Warden"}
                       </span>
                     </div>
                   </div>
@@ -567,7 +655,7 @@ export function AdminApprovalsDashboard({
             <div className="flex items-center justify-between pb-3 border-b border-cv-line">
               <div>
                 <h3 className="text-base font-semibold text-cv-fg">
-                  {drawerItem ? `${drawerItem.leave_code} — Leave Review` : "Loading Request..."}
+                  {drawerItem ? `${drawerItem.leave_code} — ${drawerItem.request_type_label || "Request"} Review` : "Loading Request..."}
                 </h3>
                 <p className="text-xs text-cv-fg-2">
                   Verify student eligibility, policy rules, and approval action
